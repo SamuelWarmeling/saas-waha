@@ -22,8 +22,8 @@ class CampaignCreate(BaseModel):
     message: str
     session_id: Optional[int] = None
     contact_ids: Optional[List[int]] = None  # None = todos os contatos
-    delay_min: Optional[int] = 5
-    delay_max: Optional[int] = 15
+    delay_min: Optional[int] = 3
+    delay_max: Optional[int] = 8
     media_url: Optional[str] = None
 
 
@@ -114,10 +114,14 @@ async def send_campaign(campaign_id: int, user_id: int):
                     phone = f"{phone}@c.us"
 
                 try:
+                    # Personaliza {nome} com o nome do contato
+                    text = campaign.message.replace(
+                        "{nome}", contact.name or "Cliente"
+                    )
                     payload = {
                         "session": session.session_id,
                         "chatId": phone,
-                        "text": campaign.message,
+                        "text": text,
                     }
 
                     if campaign.media_url:
@@ -151,7 +155,10 @@ async def send_campaign(campaign_id: int, user_id: int):
                 session.messages_sent_today += 1
                 db.commit()
 
-                delay = random.uniform(session.delay_min, session.delay_max)
+                delay = random.uniform(
+                    campaign.delay_min or session.delay_min,
+                    campaign.delay_max or session.delay_max,
+                )
                 await asyncio.sleep(delay)
 
         # Finaliza
@@ -280,6 +287,47 @@ def get_campaign_progress(
     )
 
 
+def _resolve_session(campaign: models.Campaign, user_id: int, db: Session) -> models.Campaign:
+    """Auto-selects a connected session if the campaign doesn't have one set."""
+    if not campaign.session_id:
+        connected = db.query(models.WhatsAppSession).filter(
+            models.WhatsAppSession.user_id == user_id,
+            models.WhatsAppSession.status == models.SessionStatus.connected,
+            models.WhatsAppSession.is_active == True,
+        ).first()
+        if not connected:
+            raise HTTPException(
+                status_code=400,
+                detail="Nenhuma sessão WhatsApp conectada. Conecte uma sessão primeiro."
+            )
+        campaign.session_id = connected.id
+        db.commit()
+    return campaign
+
+
+@router.post("/{campaign_id}/disparar")
+async def fire_campaign(
+    campaign_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_active_plan),
+):
+    """Inicia o disparo em massa. Auto-seleciona sessão conectada se necessário."""
+    campaign = db.query(models.Campaign).filter(
+        models.Campaign.id == campaign_id,
+        models.Campaign.user_id == current_user.id,
+    ).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campanha não encontrada")
+
+    if campaign.status not in (models.CampaignStatus.draft, models.CampaignStatus.paused):
+        raise HTTPException(status_code=400, detail=f"Campanha não pode ser disparada (status: {campaign.status})")
+
+    campaign = _resolve_session(campaign, current_user.id, db)
+    background_tasks.add_task(send_campaign, campaign_id, current_user.id)
+    return {"message": "Disparo iniciado", "campaign_id": campaign_id}
+
+
 @router.post("/{campaign_id}/iniciar")
 async def start_campaign(
     campaign_id: int,
@@ -297,24 +345,7 @@ async def start_campaign(
     if campaign.status not in (models.CampaignStatus.draft, models.CampaignStatus.paused):
         raise HTTPException(status_code=400, detail=f"Campanha não pode ser iniciada (status: {campaign.status})")
 
-    if not campaign.session_id:
-        raise HTTPException(status_code=400, detail="Campanha sem sessão configurada")
-
-    # Verifica limite diário do plano
-    plan_info = PLANS.get(current_user.plan.value, {})
-    max_daily = plan_info.get("max_daily_messages", 200)
-
-    today_sent = (
-        db.query(func.sum(models.CampaignContact.campaign_id))
-        .join(models.Campaign)
-        .filter(
-            models.Campaign.user_id == current_user.id,
-            models.CampaignContact.status == models.ContactStatus.sent,
-            func.date(models.CampaignContact.sent_at) == func.current_date(),
-        )
-        .scalar() or 0
-    )
-
+    campaign = _resolve_session(campaign, current_user.id, db)
     background_tasks.add_task(send_campaign, campaign_id, current_user.id)
     return {"message": "Campanha iniciada", "campaign_id": campaign_id}
 

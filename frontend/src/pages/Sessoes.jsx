@@ -16,7 +16,7 @@ export default function Sessoes() {
   const [sessions, setSessions] = useState([])
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [qrSession, setQrSession] = useState(null) // { id, qr_code, name }
+  const [qrSession, setQrSession] = useState(null) // { id, name, qr, status }
   const [form, setForm] = useState({ name: '', delay_min: 5, delay_max: 15 })
 
   const load = useCallback(async () => {
@@ -81,14 +81,32 @@ export default function Sessoes() {
 
   async function connect(sess) {
     try {
-      const { data } = await api.post(`/sessoes/${sess.id}/conectar`)
-      setQrSession({ id: sess.id, name: sess.name, qr_code: data.qr_code })
-      toast.success('Escaneie o QR Code')
+      await api.post(`/sessoes/${sess.id}/conectar`)
+      setQrSession({ id: sess.id, name: sess.name, qr: null, status: 'connecting' })
+      toast.success('Aguardando QR Code…')
       load()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao conectar')
     }
   }
+
+  // Auto-refresh QR a cada 5s até conectar
+  useEffect(() => {
+    if (!qrSession) return
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/sessoes/${qrSession.id}/qrcode`)
+        if (data.status === 'connected') {
+          setQrSession(null)
+          toast.success(`Sessão "${qrSession.name}" conectada!`)
+          load()
+          return
+        }
+        setQrSession(prev => ({ ...prev, qr: data.qr, status: data.status }))
+      } catch { /* ignora */ }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [qrSession, load])
 
   async function disconnect(id) {
     if (!confirm('Desconectar sessão?')) return
@@ -233,24 +251,37 @@ export default function Sessoes() {
       {qrSession && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="card w-full max-w-sm text-center">
-            <h2 className="text-lg font-bold text-white mb-2">Conectar Sessão</h2>
-            <p className="text-sm text-gray-400 mb-6">
+            <h2 className="text-lg font-bold text-white mb-2">
+              Conectar — {qrSession.name}
+            </h2>
+            <p className="text-sm text-gray-400 mb-4">
               Abra o WhatsApp → Dispositivos vinculados → Vincular dispositivo
             </p>
-            {qrSession.qr_code ? (
+
+            {qrSession.status === 'connected' ? (
+              <div className="w-[250px] h-[250px] mx-auto bg-green-900/30 rounded-xl flex flex-col items-center justify-center gap-3">
+                <MdCheckCircle className="text-5xl text-green-400" />
+                <p className="text-green-300 font-medium">Conectado!</p>
+              </div>
+            ) : qrSession.qr ? (
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrSession.qr_code)}&size=250x250&bgcolor=111827&color=ffffff`}
+                key={qrSession.qr}
+                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrSession.qr)}&size=250x250&bgcolor=111827&color=22c55e`}
                 alt="QR Code"
-                className="mx-auto rounded-xl"
+                className="mx-auto rounded-xl border border-gray-700"
                 width={250}
                 height={250}
               />
             ) : (
-              <div className="w-[250px] h-[250px] mx-auto bg-gray-800 rounded-xl flex items-center justify-center">
-                <p className="text-gray-500 text-sm">QR Code não disponível</p>
+              <div className="w-[250px] h-[250px] mx-auto bg-gray-800 rounded-xl flex flex-col items-center justify-center gap-3">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-500" />
+                <p className="text-gray-500 text-sm">Aguardando QR…</p>
               </div>
             )}
-            <p className="text-xs text-gray-600 mt-4 animate-pulse">Aguardando leitura…</p>
+
+            <p className="text-xs text-gray-600 mt-4 animate-pulse">
+              Atualiza automaticamente a cada 5 segundos
+            </p>
             <button
               onClick={() => { setQrSession(null); load() }}
               className="btn-secondary w-full mt-4"

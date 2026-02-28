@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # Waha API
     WAHA_API_URL: str = "https://waha-waha.xeramr.easypanel.host"
-    WAHA_API_KEY: str = ""
+    WAHA_API_KEY: str = "wARM31Ngadmin"
 
     # Mercado Pago
     MP_ACCESS_TOKEN: str = ""

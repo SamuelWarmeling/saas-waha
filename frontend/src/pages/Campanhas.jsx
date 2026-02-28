@@ -30,7 +30,7 @@ export default function Campanhas() {
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
-    name: '', message: '', session_id: '', delay_min: 5, delay_max: 15,
+    name: '', message: '', session_id: '', delay_min: 3, delay_max: 8,
   })
 
   const load = useCallback(async () => {
@@ -83,7 +83,7 @@ export default function Campanhas() {
       })
       toast.success('Campanha criada!')
       setShowModal(false)
-      setForm({ name: '', message: '', session_id: '', delay_min: 5, delay_max: 15 })
+      setForm({ name: '', message: '', session_id: '', delay_min: 3, delay_max: 8 })
       load()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao criar campanha')
@@ -180,9 +180,9 @@ export default function Campanhas() {
                       <div className="flex items-center gap-1">
                         {c.status === 'draft' || c.status === 'paused' ? (
                           <button
-                            onClick={() => action(c.id, 'iniciar', 'Campanha iniciada!')}
+                            onClick={() => action(c.id, 'disparar', 'Disparo iniciado!')}
                             className="p-1.5 rounded hover:bg-green-900/40 text-green-400 transition-colors"
-                            title="Iniciar"
+                            title="Disparar"
                           >
                             <MdPlayArrow />
                           </button>

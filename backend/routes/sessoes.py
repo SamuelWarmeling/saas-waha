@@ -66,6 +66,35 @@ def get_webhook_url(
     return {"webhook_url": f"{base}/api/webhook/waha"}
 
 
+@router.get("/{session_id}/qrcode")
+async def get_qrcode(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Busca QR Code diretamente da WAHA API em tempo real."""
+    session = db.query(models.WhatsAppSession).filter(
+        models.WhatsAppSession.id == session_id,
+        models.WhatsAppSession.user_id == current_user.id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    if session.status == models.SessionStatus.connected:
+        return {"status": "connected", "qr": None}
+
+    try:
+        data = await waha_request("GET", f"/api/sessions/{session.session_id}/auth/qr")
+        qr_str = data.get("qr") or data.get("data") or ""
+        return {"status": session.status.value, "qr": qr_str}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return {"status": session.status.value, "qr": None}
+        raise HTTPException(status_code=502, detail="Erro ao buscar QR da WAHA")
+    except Exception:
+        return {"status": session.status.value, "qr": session.qr_code}
+
+
 @router.get("", response_model=List[SessionOut])
 def list_sessions(
     db: Session = Depends(get_db),

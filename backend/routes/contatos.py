@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 import io
+import csv
 import openpyxl
 from openpyxl import Workbook
 
@@ -161,6 +162,75 @@ def delete_contact(
         raise HTTPException(status_code=404, detail="Contato não encontrado")
     db.delete(contact)
     db.commit()
+
+
+@router.post("/upload")
+async def upload_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Importa contatos via CSV com colunas: nome,telefone (ou telefone,nome)."""
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Arquivo deve ser .csv")
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")  # suporta BOM
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    # Normaliza nomes de colunas: lowercase + strip
+    fieldnames = [f.strip().lower() for f in (reader.fieldnames or [])]
+
+    # Aceita "nome,telefone" ou "telefone,nome" ou "name,phone"
+    col_phone = next((f for f in fieldnames if f in ("telefone", "phone", "numero", "número")), None)
+    col_name  = next((f for f in fieldnames if f in ("nome", "name")), None)
+
+    if col_phone is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV deve ter coluna 'telefone' ou 'phone'. Colunas encontradas: {fieldnames}"
+        )
+
+    imported = skipped = 0
+    errors = []
+
+    for row_idx, raw_row in enumerate(reader, start=2):
+        # Remap com nomes normalizados
+        row = {k.strip().lower(): v for k, v in raw_row.items()}
+        phone_raw = (row.get(col_phone) or "").strip()
+        name = (row.get(col_name) or "").strip() or None
+
+        if not phone_raw:
+            skipped += 1
+            continue
+
+        try:
+            phone = normalize_phone(phone_raw)
+            if len(phone) < 10:
+                errors.append(f"Linha {row_idx}: número inválido ({phone_raw})")
+                skipped += 1
+                continue
+
+            existing = db.query(models.Contact).filter(
+                models.Contact.user_id == current_user.id,
+                models.Contact.phone == phone,
+            ).first()
+
+            if existing:
+                skipped += 1
+                continue
+
+            db.add(models.Contact(user_id=current_user.id, phone=phone, name=name))
+            imported += 1
+        except Exception as e:
+            errors.append(f"Linha {row_idx}: {e}")
+            skipped += 1
+
+    db.commit()
+    return {"imported": imported, "skipped": skipped, "errors": errors[:20]}
 
 
 @router.post("/importar")

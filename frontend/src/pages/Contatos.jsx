@@ -14,6 +14,7 @@ export default function Contatos() {
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [importingCsv, setImportingCsv] = useState(false)
   const [form, setForm] = useState({ phone: '', name: '' })
 
   const PAGE_SIZE = 20
@@ -71,6 +72,25 @@ export default function Contatos() {
     }
   }
 
+  async function handleCsvUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportingCsv(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const { data } = await api.post('/contatos/upload', fd)
+      toast.success(`CSV: ${data.imported} importados | ${data.skipped} ignorados`)
+      if (data.errors?.length) toast.error(`Erros: ${data.errors[0]}`, { duration: 6000 })
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao importar CSV')
+    } finally {
+      setImportingCsv(false)
+      e.target.value = ''
+    }
+  }
+
   async function handleExport() {
     try {
       const resp = await api.get('/contatos/exportar/xlsx', { responseType: 'blob' })
@@ -116,6 +136,10 @@ export default function Contatos() {
           <p className="text-sm text-gray-500">{total.toLocaleString('pt-BR')} contatos cadastrados</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <label className={`btn-secondary flex items-center gap-2 cursor-pointer ${importingCsv ? 'opacity-50' : ''}`}>
+            <MdUpload /> {importingCsv ? 'Importando...' : 'Upload CSV'}
+            <input type="file" accept=".csv" onChange={handleCsvUpload} className="hidden" disabled={importingCsv} />
+          </label>
           <label className={`btn-secondary flex items-center gap-2 cursor-pointer ${importing ? 'opacity-50' : ''}`}>
             <MdUpload /> {importing ? 'Importando...' : 'Importar XLSX'}
             <input type="file" accept=".xlsx,.xls" onChange={handleImport} className="hidden" disabled={importing} />

@@ -1,9 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { MdAdd, MdRefresh, MdQrCode, MdDelete, MdCheckCircle, MdError, MdInfo, MdContentCopy } from 'react-icons/md'
+import { MdAdd, MdRefresh, MdQrCode, MdDelete, MdCheckCircle, MdError } from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
-
-const WEBHOOK_URL = `${window.location.origin.replace(':5173', ':8000')}/api/webhook/waha`
 
 const STATUS_CONFIG = {
   connected:    { label: 'Conectado',    cls: 'badge-green'  },
@@ -144,25 +142,6 @@ export default function Sessoes() {
           <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
             <MdAdd /> Nova Sessão
           </button>
-        </div>
-      </div>
-
-      {/* Webhook info */}
-      <div className="flex items-start gap-3 bg-blue-900/20 border border-blue-800/40 rounded-xl p-4">
-        <MdInfo className="text-blue-400 text-xl mt-0.5 flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-blue-300 font-medium">Configure o Webhook no WAHA</p>
-          <div className="flex items-center gap-2 mt-1">
-            <code className="text-xs text-blue-200 bg-blue-900/40 px-2 py-1 rounded truncate flex-1">
-              {WEBHOOK_URL}
-            </code>
-            <button
-              onClick={() => { navigator.clipboard.writeText(WEBHOOK_URL); toast.success('URL copiada!') }}
-              className="flex-shrink-0 p-1.5 rounded hover:bg-blue-800/40 text-blue-400 transition-colors"
-            >
-              <MdContentCopy className="text-sm" />
-            </button>
-          </div>
         </div>
       </div>
 

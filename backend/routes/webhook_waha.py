@@ -9,12 +9,29 @@ router = APIRouter(tags=["webhook"])
 def normalize_phone(raw: str) -> str:
     """Remove @c.us/@g.us suffix and ensure 55 country code."""
     phone = raw.split("@")[0].strip()
-    # Remove non-digits
     phone = "".join(c for c in phone if c.isdigit())
-    # Add Brazil country code if needed
     if phone and not phone.startswith("55"):
         phone = "55" + phone
     return phone
+
+
+def upsert_contact(db: Session, user_id: int, phone: str, name: str | None):
+    """Insere ou atualiza contato. Sempre atualiza nome se tiver novo valor."""
+    existing = (
+        db.query(models.Contact)
+        .filter(
+            models.Contact.user_id == user_id,
+            models.Contact.phone == phone,
+        )
+        .first()
+    )
+    if existing:
+        if name and name != existing.name:
+            existing.name = name
+            db.commit()
+    else:
+        db.add(models.Contact(user_id=user_id, phone=phone, name=name))
+        db.commit()
 
 
 @router.post("/waha")
@@ -28,7 +45,7 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
     session_waha_id = body.get("session", "")
     payload = body.get("payload", {})
 
-    # Find the WhatsApp session in DB
+    # Find the session in DB
     sess = (
         db.query(models.WhatsAppSession)
         .filter(models.WhatsAppSession.session_id == session_waha_id)
@@ -40,16 +57,15 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
         status_raw = payload.get("status", "")
         status_map = {
             "CONNECTED": models.SessionStatus.connected,
-            "WORKING": models.SessionStatus.connected,
+            "WORKING":   models.SessionStatus.connected,
             "SCAN_QR_CODE": models.SessionStatus.connecting,
-            "STOPPED": models.SessionStatus.disconnected,
-            "FAILED": models.SessionStatus.error,
+            "STOPPED":   models.SessionStatus.disconnected,
+            "FAILED":    models.SessionStatus.error,
         }
         new_status = status_map.get(status_raw)
         if sess and new_status:
             sess.status = new_status
             if new_status == models.SessionStatus.connected:
-                # Extract phone number from payload if present
                 me = payload.get("me", {}) or {}
                 raw_phone = me.get("id", "") or payload.get("id", "")
                 if raw_phone:
@@ -60,38 +76,28 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
     # ── message ───────────────────────────────────────────────────────────────
     elif event == "message" and sess:
         from_field = payload.get("from", "")
-        # Only process group messages (ending in @g.us)
+
         if from_field.endswith("@g.us"):
-            # Sender within the group
-            participant = payload.get("participant", "") or payload.get("author", "")
-            if not participant:
-                return {"ok": True}
+            # Mensagem de grupo — remetente é o participant
+            raw_sender = payload.get("participant") or payload.get("author") or ""
+        else:
+            # Mensagem direta — remetente é o from
+            raw_sender = from_field
 
-            phone = normalize_phone(participant)
-            if not phone:
-                return {"ok": True}
+        if not raw_sender:
+            return {"ok": True}
 
-            name = payload.get("notifyName") or payload.get("pushName") or None
+        phone = normalize_phone(raw_sender)
+        if len(phone) < 10:
+            return {"ok": True}
 
-            # Upsert contact for the session owner
-            existing = (
-                db.query(models.Contact)
-                .filter(
-                    models.Contact.user_id == sess.user_id,
-                    models.Contact.phone == phone,
-                )
-                .first()
-            )
-            if not existing:
-                contact = models.Contact(
-                    user_id=sess.user_id,
-                    phone=phone,
-                    name=name,
-                )
-                db.add(contact)
-                db.commit()
-            elif name and not existing.name:
-                existing.name = name
-                db.commit()
+        name = (
+            payload.get("notifyName")
+            or payload.get("pushName")
+            or payload.get("_data", {}).get("notifyName")
+            or None
+        )
+
+        upsert_contact(db, sess.user_id, phone, name)
 
     return {"ok": True}

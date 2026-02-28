@@ -109,7 +109,7 @@ def list_sessions(
 
 
 @router.post("", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
-def create_session(
+async def create_session(
     data: SessionCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_active_plan),
@@ -139,6 +139,7 @@ def create_session(
     session_id = f"u{current_user.id}_{total_count + 1:02d}"
     max_daily = data.max_daily_messages or plan_info.get("max_daily_messages", 200)
 
+    # Salva no DB
     session = models.WhatsAppSession(
         user_id=current_user.id,
         name=data.name,
@@ -151,6 +152,27 @@ def create_session(
     db.add(session)
     db.commit()
     db.refresh(session)
+
+    # Cria sessão no WAHA automaticamente
+    try:
+        await waha_request("POST", "/api/sessions", json={
+            "name": session_id,
+            "config": {},
+        })
+    except Exception:
+        pass  # sessão já pode existir no WAHA; não bloqueia o usuário
+
+    # Configura webhook automaticamente no WAHA
+    try:
+        await waha_request("PUT", f"/api/sessions/{session_id}", json={
+            "webhook": {
+                "url": settings.WAHA_WEBHOOK_URL,
+                "events": ["message", "session.status"],
+            }
+        })
+    except Exception:
+        pass  # falha silenciosa; webhook pode ser reconfigurado depois
+
     return session
 
 
@@ -198,7 +220,7 @@ def update_session(
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_session(
+async def delete_session(
     session_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -209,6 +231,12 @@ def delete_session(
     ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    # Remove sessão do WAHA antes de deletar do DB
+    try:
+        await waha_request("DELETE", f"/api/sessions/{session.session_id}")
+    except Exception:
+        pass  # ignora se não existir no WAHA
 
     db.delete(session)
     db.commit()

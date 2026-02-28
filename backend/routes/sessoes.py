@@ -159,8 +159,11 @@ async def create_session(
             "name": session_id,
             "config": {},
         })
-    except Exception:
-        pass  # sessão já pode existir no WAHA; não bloqueia o usuário
+        print(f"[WAHA] Sessão {session_id} criada com sucesso")
+    except httpx.HTTPStatusError as e:
+        print(f"[WAHA] Erro HTTP ao criar sessão {session_id}: {e.response.status_code} - {e.response.text}")
+    except Exception as e:
+        print(f"[WAHA] Erro ao criar sessão {session_id}: {type(e).__name__}: {e}")
 
     # Configura webhook automaticamente no WAHA
     try:
@@ -170,8 +173,11 @@ async def create_session(
                 "events": ["message", "session.status"],
             }
         })
-    except Exception:
-        pass  # falha silenciosa; webhook pode ser reconfigurado depois
+        print(f"[WAHA] Webhook configurado para sessão {session_id}: {settings.WAHA_WEBHOOK_URL}")
+    except httpx.HTTPStatusError as e:
+        print(f"[WAHA] Erro HTTP ao configurar webhook {session_id}: {e.response.status_code} - {e.response.text}")
+    except Exception as e:
+        print(f"[WAHA] Erro ao configurar webhook {session_id}: {type(e).__name__}: {e}")
 
     return session
 

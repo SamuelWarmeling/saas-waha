@@ -34,7 +34,9 @@
       "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && pip install -r requirements.txt 2>&1)",
       "Bash(python --version && pip install fastapi \"uvicorn[standard]\" sqlalchemy psycopg2-binary alembic \"python-jose[cryptography]\" bcrypt \"pydantic[email]\" pydantic-settings python-multipart httpx openpyxl mercadopago python-dotenv 2>&1)",
       "Bash(cd \"/c/Users/samue/OneDrive/Desktop/saas-waha\" && gh repo create saas-waha --public --source=. --remote=origin --push 2>&1)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd:*)"
     ]
   }
 }

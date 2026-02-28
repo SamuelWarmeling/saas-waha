@@ -262,17 +262,29 @@ async def connect_session(
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
     try:
-        # Criar sessão no Waha
-        await waha_request("POST", f"/api/sessions/{session.session_id}/start")
+        # Garante que a sessão existe no WAHA (POST /api/sessions com name no body)
+        # Ignora 409 Conflict (sessão já existe) e outros erros não-críticos
+        try:
+            await waha_request("POST", "/api/sessions", json={
+                "name": session.session_id,
+                "config": {},
+            })
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code not in (409, 422):
+                raise
+
         session.status = models.SessionStatus.connecting
         db.commit()
 
-        # Obter QR Code
-        qr_data = await waha_request("GET", f"/api/sessions/{session.session_id}/auth/qr")
-        session.qr_code = qr_data.get("qr", "")
-        db.commit()
-        db.refresh(session)
+        # Obtém QR Code diretamente
+        try:
+            qr_data = await waha_request("GET", f"/api/sessions/{session.session_id}/auth/qr")
+            session.qr_code = qr_data.get("qr", "")
+            db.commit()
+        except Exception:
+            pass  # QR pode ainda não estar disponível; frontend fará polling
 
+        db.refresh(session)
         return {"qr_code": session.qr_code, "status": session.status}
     except httpx.HTTPError as e:
         session.status = models.SessionStatus.error
@@ -294,9 +306,9 @@ async def disconnect_session(
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
     try:
-        await waha_request("POST", f"/api/sessions/{session.session_id}/stop")
+        await waha_request("DELETE", f"/api/sessions/{session.session_id}")
     except Exception:
-        pass  # ignora erro se já estiver desconectada
+        pass  # ignora erro se já estiver desconectada/não existir
 
     session.status = models.SessionStatus.disconnected
     session.qr_code = None

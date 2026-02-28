@@ -1,0 +1,195 @@
+from sqlalchemy import (
+    Column, Integer, String, Boolean, Float, DateTime, ForeignKey,
+    Text, Enum as SAEnum, BigInteger, Index
+)
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+import enum
+from database import Base
+
+
+class PlanType(str, enum.Enum):
+    starter = "starter"
+    pro = "pro"
+    business = "business"
+
+
+class SessionStatus(str, enum.Enum):
+    disconnected = "disconnected"
+    connecting = "connecting"
+    connected = "connected"
+    error = "error"
+
+
+class CampaignStatus(str, enum.Enum):
+    draft = "draft"
+    running = "running"
+    paused = "paused"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
+class ContactStatus(str, enum.Enum):
+    pending = "pending"
+    sent = "sent"
+    failed = "failed"
+    skipped = "skipped"
+
+
+class PaymentStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+    cancelled = "cancelled"
+    refunded = "refunded"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=False)
+    plan = Column(SAEnum(PlanType), default=PlanType.starter, nullable=False)
+    plan_expires_at = Column(DateTime(timezone=True), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    sessions = relationship("WhatsAppSession", back_populates="user", cascade="all, delete-orphan")
+    contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")
+    campaigns = relationship("Campaign", back_populates="user", cascade="all, delete-orphan")
+    payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
+    daily_stats = relationship("DailyStat", back_populates="user", cascade="all, delete-orphan")
+
+
+class WhatsAppSession(Base):
+    __tablename__ = "whatsapp_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    session_id = Column(String(100), unique=True, nullable=False)
+    phone_number = Column(String(20), nullable=True)
+    status = Column(SAEnum(SessionStatus), default=SessionStatus.disconnected)
+    qr_code = Column(Text, nullable=True)
+    max_daily_messages = Column(Integer, default=200)
+    messages_sent_today = Column(Integer, default=0)
+    delay_min = Column(Integer, default=5)   # segundos
+    delay_max = Column(Integer, default=15)  # segundos
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="sessions")
+
+    __table_args__ = (
+        Index("ix_sessions_user_id", "user_id"),
+    )
+
+
+class Contact(Base):
+    __tablename__ = "contacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    phone = Column(String(20), nullable=False)
+    name = Column(String(255), nullable=True)
+    is_blacklisted = Column(Boolean, default=False)
+    tags = Column(String(500), nullable=True)  # CSV de tags
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="contacts")
+    campaign_contacts = relationship("CampaignContact", back_populates="contact")
+
+    __table_args__ = (
+        Index("ix_contacts_user_phone", "user_id", "phone"),
+    )
+
+
+class Campaign(Base):
+    __tablename__ = "campaigns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    media_url = Column(String(500), nullable=True)  # imagem/arquivo opcional
+    status = Column(SAEnum(CampaignStatus), default=CampaignStatus.draft)
+    total_contacts = Column(Integer, default=0)
+    sent_count = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    fail_count = Column(Integer, default=0)
+    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id"), nullable=True)
+    delay_min = Column(Integer, default=5)
+    delay_max = Column(Integer, default=15)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="campaigns")
+    session = relationship("WhatsAppSession")
+    campaign_contacts = relationship("CampaignContact", back_populates="campaign", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_campaigns_user_id", "user_id"),
+    )
+
+
+class CampaignContact(Base):
+    __tablename__ = "campaign_contacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False)
+    status = Column(SAEnum(ContactStatus), default=ContactStatus.pending)
+    error_message = Column(Text, nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    campaign = relationship("Campaign", back_populates="campaign_contacts")
+    contact = relationship("Contact", back_populates="campaign_contacts")
+
+    __table_args__ = (
+        Index("ix_cc_campaign_id", "campaign_id"),
+        Index("ix_cc_status", "status"),
+    )
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    plan = Column(SAEnum(PlanType), nullable=False)
+    amount = Column(Float, nullable=False)
+    status = Column(SAEnum(PaymentStatus), default=PaymentStatus.pending)
+    mp_payment_id = Column(String(100), nullable=True, index=True)
+    mp_subscription_id = Column(String(100), nullable=True)
+    mp_preference_id = Column(String(100), nullable=True)
+    description = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="payments")
+
+
+class DailyStat(Base):
+    __tablename__ = "daily_stats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    date = Column(DateTime(timezone=True), nullable=False)
+    messages_sent = Column(Integer, default=0)
+    messages_success = Column(Integer, default=0)
+    messages_failed = Column(Integer, default=0)
+
+    user = relationship("User", back_populates="daily_stats")
+
+    __table_args__ = (
+        Index("ix_daily_stats_user_date", "user_id", "date"),
+    )

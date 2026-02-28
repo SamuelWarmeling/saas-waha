@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tail:*)",
+      "Bash(docker compose version 2>&1 && docker version --format '{{.Server.Version}}' 2>&1)",
+      "Bash(powershell.exe:*)",
+      "Bash(python:*)",
+      "Bash(export:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\" && cd /c/Users/samue/OneDrive/Desktop/saas-waha/frontend && npm install 2>&1)",
+      "Bash(export PATH=\"/c/Program Files/PostgreSQL/17/bin:$PATH\" && pg_isready 2>&1 && psql --version 2>&1)",
+      "Bash(export PATH=\"/c/Program Files/PostgreSQL/17/bin:$PATH\" && PGPASSWORD=postgres psql -U postgres -c \"CREATE DATABASE saas_waha;\" 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && python -c \"from config import settings; print\\('config OK'\\)\" 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && python -c \"\nimport models\nfrom database import Base, engine\nBase.metadata.create_all\\(bind=engine\\)\nprint\\('Tabelas criadas com sucesso'\\)\n\" 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && python -c \"\nfrom main import app\nprint\\('FastAPI app importou OK'\\)\nprint\\('Rotas registradas:'\\)\nfor route in app.routes:\n    if hasattr\\(route, 'path'\\):\n        print\\(f'  {route.path}'\\)\n\" 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && pip install \"pydantic[email]\" email-validator -q 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && python -c \"from main import app; print\\('OK'\\)\" 2>&1)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\" && cd /c/Users/samue/OneDrive/Desktop/saas-waha/frontend && npm run build 2>&1)",
+      "Bash(head:*)",
+      "Bash(grep:*)",
+      "Bash(pg_isready:*)",
+      "Bash(grep 5432:*)",
+      "Bash(grep :8000:*)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && python -c \"from config import settings; from database import engine; from sqlalchemy import text; conn = engine.connect\\(\\); conn.execute\\(text\\('SELECT 1'\\)\\); print\\('DB OK'\\)\" 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && python -c \"import main\" 2>&1)",
+      "Bash(curl:*)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && python -c \"\nfrom database import get_db, engine, Base\nimport models\nBase.metadata.create_all\\(bind=engine\\)\nprint\\('Tabelas criadas'\\)\n# Lista as tabelas\nfrom sqlalchemy import inspect\ninspector = inspect\\(engine\\)\nprint\\('Tabelas existentes:', inspector.get_table_names\\(\\)\\)\n\" 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && python -c \"\nfrom fastapi.testclient import TestClient\nfrom main import app\nclient = TestClient\\(app\\)\nresp = client.post\\('/api/usuarios/registro', json={'name':'Teste','email':'test@test.com','password':'senha123'}\\)\nprint\\('Status:', resp.status_code\\)\nprint\\('Body:', resp.text\\)\n\" 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && source venv/Scripts/activate && pip show bcrypt passlib 2>&1)",
+      "Bash(pkill:*)",
+      "Bash(netstat -ano)",
+      "Bash(xargs -I{} taskkill //PID {} //F)",
+      "Bash(docker --version 2>&1 && docker compose version 2>&1)",
+      "Bash(cd:*)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/backend && pip install -r requirements.txt 2>&1)",
+      "Bash(python --version && pip install fastapi \"uvicorn[standard]\" sqlalchemy psycopg2-binary alembic \"python-jose[cryptography]\" bcrypt \"pydantic[email]\" pydantic-settings python-multipart httpx openpyxl mercadopago python-dotenv 2>&1)"
+    ]
+  }
+}

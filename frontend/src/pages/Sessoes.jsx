@@ -79,8 +79,8 @@ export default function Sessoes() {
 
   async function connect(sess) {
     try {
-      await api.post(`/sessoes/${sess.id}/conectar`)
-      setQrSession({ id: sess.id, name: sess.name, qr: null, status: 'connecting' })
+      const { data } = await api.post(`/sessoes/${sess.id}/conectar`)
+      setQrSession({ id: sess.id, name: sess.name, qr: data.qr_code || null, status: 'connecting' })
       toast.success('Aguardando QR Code…')
       load()
     } catch (err) {
@@ -245,9 +245,9 @@ export default function Sessoes() {
             ) : qrSession.qr ? (
               <img
                 key={qrSession.qr}
-                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrSession.qr)}&size=250x250&bgcolor=111827&color=22c55e`}
+                src={qrSession.qr}
                 alt="QR Code"
-                className="mx-auto rounded-xl border border-gray-700"
+                className="mx-auto rounded-xl border border-gray-700 bg-white p-2"
                 width={250}
                 height={250}
               />

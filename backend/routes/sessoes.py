@@ -45,10 +45,12 @@ class SessionOut(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-async def waha_request(method: str, path: str, **kwargs):
+async def waha_request(method: str, path: str, accept_json: bool = True, **kwargs):
     headers = {}
     if settings.WAHA_API_KEY:
         headers["X-Api-Key"] = settings.WAHA_API_KEY
+    if accept_json:
+        headers["Accept"] = "application/json"
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         url = f"{settings.WAHA_API_URL}{path}"
@@ -84,14 +86,22 @@ async def get_qrcode(
         return {"status": "connected", "qr": None}
 
     try:
-        data = await waha_request("GET", f"/api/sessions/{session.session_id}/auth/qr")
-        qr_str = data.get("qr") or data.get("data") or ""
-        return {"status": session.status.value, "qr": qr_str}
+        # Correct path: /api/{session}/auth/qr (NOT /api/sessions/{session}/auth/qr)
+        data = await waha_request("GET", f"/api/{session.session_id}/auth/qr")
+        # Returns {"mimetype": "image/png", "data": "base64..."}
+        b64 = data.get("data", "")
+        qr_str = f"data:image/png;base64,{b64}" if b64 else ""
+        if qr_str:
+            session.qr_code = qr_str
+            db.commit()
+        return {"status": session.status.value, "qr": qr_str or session.qr_code}
     except httpx.HTTPStatusError as e:
+        print(f"[QR] HTTPStatusError {e.response.status_code}: {e.response.text[:200]}")
         if e.response.status_code == 404:
-            return {"status": session.status.value, "qr": None}
+            return {"status": session.status.value, "qr": session.qr_code}
         raise HTTPException(status_code=502, detail="Erro ao buscar QR da WAHA")
-    except Exception:
+    except Exception as exc:
+        print(f"[QR] Exception: {type(exc).__name__}: {exc}")
         return {"status": session.status.value, "qr": session.qr_code}
 
 
@@ -153,31 +163,24 @@ async def create_session(
     db.commit()
     db.refresh(session)
 
-    # Cria sessão no WAHA automaticamente
+    # Cria sessão no WAHA com webhook embutido no config
     try:
         await waha_request("POST", "/api/sessions", json={
             "name": session_id,
-            "config": {},
+            "config": {
+                "webhooks": [
+                    {
+                        "url": settings.WAHA_WEBHOOK_URL,
+                        "events": ["message", "session.status"],
+                    }
+                ]
+            },
         })
-        print(f"[WAHA] Sessão {session_id} criada com sucesso")
+        print(f"[WAHA] Sessão {session_id} criada com webhook {settings.WAHA_WEBHOOK_URL}")
     except httpx.HTTPStatusError as e:
         print(f"[WAHA] Erro HTTP ao criar sessão {session_id}: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         print(f"[WAHA] Erro ao criar sessão {session_id}: {type(e).__name__}: {e}")
-
-    # Configura webhook automaticamente no WAHA
-    try:
-        await waha_request("PUT", f"/api/sessions/{session_id}", json={
-            "webhook": {
-                "url": settings.WAHA_WEBHOOK_URL,
-                "events": ["message", "session.status"],
-            }
-        })
-        print(f"[WAHA] Webhook configurado para sessão {session_id}: {settings.WAHA_WEBHOOK_URL}")
-    except httpx.HTTPStatusError as e:
-        print(f"[WAHA] Erro HTTP ao configurar webhook {session_id}: {e.response.status_code} - {e.response.text}")
-    except Exception as e:
-        print(f"[WAHA] Erro ao configurar webhook {session_id}: {type(e).__name__}: {e}")
 
     return session
 
@@ -261,31 +264,63 @@ async def connect_session(
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
+    webhook_config = {
+        "webhooks": [
+            {
+                "url": settings.WAHA_WEBHOOK_URL,
+                "events": ["message", "session.status"],
+            }
+        ]
+    }
+
     try:
-        # Garante que a sessão existe no WAHA (POST /api/sessions com name no body)
-        # Ignora 409 Conflict (sessão já existe) e outros erros não-críticos
+        # 1. Garante que a sessão existe no WAHA (cria ou atualiza config)
         try:
             await waha_request("POST", "/api/sessions", json={
                 "name": session.session_id,
-                "config": {},
+                "config": webhook_config,
             })
+            print(f"[WAHA] Sessão {session.session_id} criada no WAHA")
         except httpx.HTTPStatusError as e:
+            if e.response.status_code in (409, 422):
+                # Sessão já existe → atualiza config com webhook
+                try:
+                    await waha_request("PUT", f"/api/sessions/{session.session_id}",
+                                       json={"config": webhook_config})
+                    print(f"[WAHA] Config atualizado para {session.session_id}")
+                except Exception as pe:
+                    print(f"[WAHA] Erro ao atualizar config: {pe}")
+            else:
+                raise
+
+        # 2. Inicia a sessão (STOPPED → STARTING → SCAN_QR_CODE)
+        try:
+            await waha_request("POST", f"/api/sessions/{session.session_id}/start")
+            print(f"[WAHA] Start enviado para {session.session_id}")
+        except httpx.HTTPStatusError as e:
+            # Ignora se já estiver iniciando/conectada
+            print(f"[WAHA] Start retornou {e.response.status_code}: {e.response.text[:100]}")
             if e.response.status_code not in (409, 422):
                 raise
 
         session.status = models.SessionStatus.connecting
         db.commit()
 
-        # Obtém QR Code diretamente
+        # 3. Aguarda WAHA processar e tenta buscar QR
+        import asyncio
+        await asyncio.sleep(3)
         try:
-            qr_data = await waha_request("GET", f"/api/sessions/{session.session_id}/auth/qr")
-            session.qr_code = qr_data.get("qr", "")
-            db.commit()
-        except Exception:
-            pass  # QR pode ainda não estar disponível; frontend fará polling
+            qr_data = await waha_request("GET", f"/api/{session.session_id}/auth/qr")
+            b64 = qr_data.get("data", "")
+            if b64:
+                session.qr_code = f"data:image/png;base64,{b64}"
+                db.commit()
+                print(f"[WAHA] QR obtido para {session.session_id}")
+        except Exception as exc:
+            print(f"[WAHA] QR ainda não disponível: {type(exc).__name__}: {exc}")
 
         db.refresh(session)
-        return {"qr_code": session.qr_code, "status": session.status}
+        return {"qr_code": session.qr_code, "status": session.status.value}
     except httpx.HTTPError as e:
         session.status = models.SessionStatus.error
         db.commit()

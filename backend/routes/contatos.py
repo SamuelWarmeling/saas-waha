@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime
 import io
 import csv
 import openpyxl
@@ -34,6 +35,7 @@ class ContactOut(BaseModel):
     name: Optional[str]
     is_blacklisted: bool
     tags: Optional[str]
+    created_at: Optional[datetime]
 
     class Config:
         from_attributes = True

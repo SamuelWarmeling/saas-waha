@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
-  MdContacts, MdSend, MdCheckCircle, MdPhoneAndroid, MdCampaign,
+  MdContacts, MdSend, MdPhoneAndroid, MdCampaign, MdHistory,
 } from 'react-icons/md'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -8,10 +8,30 @@ import {
 import Stats from '../components/Stats'
 import api from '../api'
 
+const tipoIcon = {
+  contato_extraido: '📱',
+  campanha_enviada: '📤',
+  sessao_conectada: '🟢',
+}
+
+function formatRelativo(isoString) {
+  const diff = Math.floor((Date.now() - new Date(isoString)) / 1000)
+  if (diff < 60) return `${diff}s atrás`
+  if (diff < 3600) return `${Math.floor(diff / 60)}min atrás`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h atrás`
+  return `${Math.floor(diff / 86400)}d atrás`
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null)
   const [campaigns, setCampaigns] = useState([])
   const [sessions, setSessions] = useState([])
+  const [atividades, setAtividades] = useState([])
+  const intervalRef = useRef(null)
+
+  function loadAtividades() {
+    api.get('/atividades').then(r => setAtividades(r.data)).catch(() => {})
+  }
 
   useEffect(() => {
     Promise.all([
@@ -23,6 +43,9 @@ export default function Dashboard() {
       setCampaigns(Array.isArray(camps.data) ? camps.data : [])
       setSessions(Array.isArray(sess.data) ? sess.data : [])
     })
+    loadAtividades()
+    intervalRef.current = setInterval(loadAtividades, 10000)
+    return () => clearInterval(intervalRef.current)
   }, [])
 
   const connectedSessions = sessions.filter(s => s.status === 'connected').length
@@ -113,6 +136,29 @@ export default function Dashboard() {
             <Area type="monotone" dataKey="enviados" stroke="#22c55e" fill="url(#colorEnv)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Atividade Recente */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-2">
+            <MdHistory className="text-base" /> Atividade Recente
+          </h2>
+          <span className="text-xs text-gray-600">atualiza a cada 10s</span>
+        </div>
+        {atividades.length === 0 ? (
+          <p className="text-gray-600 text-sm text-center py-4">Nenhuma atividade registrada ainda.</p>
+        ) : (
+          <ul className="space-y-2">
+            {atividades.map(a => (
+              <li key={a.id} className="flex items-start gap-3 text-sm">
+                <span className="text-base leading-none mt-0.5">{tipoIcon[a.tipo] || '🔔'}</span>
+                <span className="text-gray-300 flex-1">{a.descricao}</span>
+                <span className="text-gray-600 text-xs whitespace-nowrap">{formatRelativo(a.criado_em)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Recent campaigns */}

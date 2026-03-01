@@ -17,6 +17,7 @@ export default function Contatos() {
   const [form, setForm] = useState({ phone: '', name: '' })
 
   const PAGE_SIZE = 20
+  const isNew = (createdAt) => createdAt && (Date.now() - new Date(createdAt)) < 86400000
 
   const load = useCallback(async () => {
     try {
@@ -183,7 +184,12 @@ export default function Contatos() {
                 </tr>
               ) : contacts.map(c => (
                 <tr key={c.id}>
-                  <td className="py-3 pr-4 text-gray-200 font-mono">{c.phone}</td>
+                  <td className="py-3 pr-4 text-gray-200 font-mono">
+                    {c.phone}
+                    {isNew(c.created_at) && (
+                      <span className="ml-2 text-xs bg-green-900/50 text-green-400 border border-green-700/50 rounded px-1.5 py-0.5">Novo</span>
+                    )}
+                  </td>
                   <td className="py-3 pr-4 text-gray-300">{c.name || '–'}</td>
                   <td className="py-3 pr-4">
                     {c.is_blacklisted

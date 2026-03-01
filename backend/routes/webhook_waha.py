@@ -18,8 +18,8 @@ def is_valid_phone(phone: str) -> bool:
     return 10 <= len(phone) <= 15
 
 
-def upsert_contact(db: Session, user_id: int, phone: str, name: str | None):
-    """Insere ou atualiza contato. Sempre atualiza nome se tiver novo valor."""
+def upsert_contact(db: Session, user_id: int, phone: str, name: str | None) -> bool:
+    """Insere ou atualiza contato. Retorna True se o contato foi criado agora."""
     existing = (
         db.query(models.Contact)
         .filter(
@@ -32,9 +32,11 @@ def upsert_contact(db: Session, user_id: int, phone: str, name: str | None):
         if name and name != existing.name:
             existing.name = name
             db.commit()
+        return False
     else:
         db.add(models.Contact(user_id=user_id, phone=phone, name=name))
         db.commit()
+        return True
 
 
 @router.post("/waha")
@@ -109,6 +111,15 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
             or None
         )
 
-        upsert_contact(db, sess.user_id, phone, name)
+        is_new = upsert_contact(db, sess.user_id, phone, name)
+        if is_new:
+            label = name or phone
+            descricao = f"Contato extraído: {label} via sessão {session_waha_id}"
+            db.add(models.AtividadeLog(
+                user_id=sess.user_id,
+                tipo="contato_extraido",
+                descricao=descricao,
+            ))
+            db.commit()
 
     return {"ok": True}

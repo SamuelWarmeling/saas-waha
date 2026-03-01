@@ -64,6 +64,7 @@ class User(Base):
     campaigns = relationship("Campaign", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
     daily_stats = relationship("DailyStat", back_populates="user", cascade="all, delete-orphan")
+    atividade_logs = relationship("AtividadeLog", back_populates="user", cascade="all, delete-orphan")
 
 
 class WhatsAppSession(Base):
@@ -192,4 +193,20 @@ class DailyStat(Base):
 
     __table_args__ = (
         Index("ix_daily_stats_user_date", "user_id", "date"),
+    )
+
+
+class AtividadeLog(Base):
+    __tablename__ = "atividade_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    tipo = Column(String(50), nullable=False)  # contato_extraido, campanha_enviada, sessao_conectada
+    descricao = Column(String(500), nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="atividade_logs")
+
+    __table_args__ = (
+        Index("ix_atividade_logs_user_id", "user_id"),
     )

@@ -1,3 +1,7 @@
+import logging
+import time
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -10,8 +14,45 @@ from routes.admin import router as admin_router
 from routes.debug import router as debug_router
 from config import settings
 
-# Cria tabelas no banco
-Base.metadata.create_all(bind=engine)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def wait_for_db(retries: int = 5, delay: int = 3) -> bool:
+    """Tenta conectar ao banco com retry. Retorna True se conseguiu, False caso contrário."""
+    for attempt in range(1, retries + 1):
+        try:
+            logger.info(f"[DB] Tentativa {attempt}/{retries} de conexão com o banco...")
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info("[DB] Conexão com o banco estabelecida com sucesso.")
+            return True
+        except Exception as e:
+            logger.error(f"[DB] Tentativa {attempt}/{retries} falhou: {e}")
+            if attempt < retries:
+                logger.info(f"[DB] Aguardando {delay}s antes da próxima tentativa...")
+                time.sleep(delay)
+    logger.warning("[DB] Não foi possível conectar ao banco após todas as tentativas. O servidor continuará, mas pode estar instável.")
+    return False
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("[STARTUP] Iniciando aplicação...")
+    db_ok = wait_for_db(retries=5, delay=3)
+    if db_ok:
+        try:
+            logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
+            Base.metadata.create_all(bind=engine)
+            logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
+        except Exception as e:
+            logger.error(f"[STARTUP] Erro ao criar tabelas: {e}")
+    else:
+        logger.warning("[STARTUP] Pulando create_all — banco indisponível no momento do startup.")
+    logger.info("[STARTUP] Aplicação pronta para receber requisições.")
+    yield
+    logger.info("[SHUTDOWN] Encerrando aplicação.")
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -19,6 +60,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # CORS

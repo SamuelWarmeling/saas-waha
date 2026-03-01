@@ -50,6 +50,8 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
     session_waha_id = body.get("session", "")
     payload = body.get("payload", {})
 
+    print(f"=== WEBHOOK === Evento: {event!r} | Sessão: {session_waha_id!r}")
+
     # Find the session in DB
     sess = (
         db.query(models.WhatsAppSession)
@@ -80,28 +82,41 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
 
     # ── message ───────────────────────────────────────────────────────────────
     elif event == "message" and sess:
-        print("WEBHOOK PAYLOAD:", payload)
-
         from_field = payload.get("from", "")
+        participant_field = (
+            payload.get("participant")
+            or (payload.get("key") or {}).get("participant")
+            or payload.get("author")
+            or ""
+        )
+        is_group = from_field.endswith("@g.us")
 
-        if from_field.endswith("@g.us"):
-            # Mensagem de grupo — remetente é o participant (não o grupo)
-            # WAHA pode enviar em payload.key.participant ou payload.participant
-            raw_sender = (
-                payload.get("participant")
-                or (payload.get("key") or {}).get("participant")
-                or payload.get("author")
-                or ""
-            )
+        print("=== WEBHOOK ===")
+        print(f"Evento:      message")
+        print(f"Sessão:      {session_waha_id}")
+        print(f"De:          {from_field or '(vazio)'} ({'GRUPO' if is_group else 'DIRETO'})")
+        print(f"Participante:{participant_field or '(vazio)'}")
+        print(f"Payload completo: {payload}")
+
+        if is_group:
+            raw_sender = participant_field
         else:
-            # Mensagem direta — remetente é o from
             raw_sender = from_field
 
+        print(f"raw_sender:  {raw_sender or '(vazio)'}")
+
         if not raw_sender:
+            print(">>> IGNORADO: raw_sender vazio")
+            print("===============")
             return {"ok": True}
 
+        phone_dirty = raw_sender
         phone = normalize_phone(raw_sender)
+        print(f"Telefone:    {phone_dirty!r} → {phone!r}")
+
         if not is_valid_phone(phone):
+            print(f">>> IGNORADO: telefone inválido (len={len(phone)})")
+            print("===============")
             return {"ok": True}
 
         name = (
@@ -112,6 +127,9 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
         )
 
         is_new = upsert_contact(db, sess.user_id, phone, name)
+        print(f"Contato:     {'NOVO' if is_new else 'EXISTENTE'} | nome={name!r}")
+        print("===============")
+
         if is_new:
             label = name or phone
             descricao = f"Contato extraído: {label} via sessão {session_waha_id}"

@@ -7,12 +7,15 @@ router = APIRouter(tags=["webhook"])
 
 
 def normalize_phone(raw: str) -> str:
-    """Remove @c.us/@g.us suffix and ensure 55 country code."""
+    """Remove @c.us/@g.us/@s.whatsapp.net suffix, mantém só dígitos."""
     phone = raw.split("@")[0].strip()
     phone = "".join(c for c in phone if c.isdigit())
-    if phone and not phone.startswith("55"):
-        phone = "55" + phone
     return phone
+
+
+def is_valid_phone(phone: str) -> bool:
+    """Valida que o número tem entre 10 e 15 dígitos."""
+    return 10 <= len(phone) <= 15
 
 
 def upsert_contact(db: Session, user_id: int, phone: str, name: str | None):
@@ -75,11 +78,19 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
 
     # ── message ───────────────────────────────────────────────────────────────
     elif event == "message" and sess:
+        print("WEBHOOK PAYLOAD:", payload)
+
         from_field = payload.get("from", "")
 
         if from_field.endswith("@g.us"):
-            # Mensagem de grupo — remetente é o participant
-            raw_sender = payload.get("participant") or payload.get("author") or ""
+            # Mensagem de grupo — remetente é o participant (não o grupo)
+            # WAHA pode enviar em payload.key.participant ou payload.participant
+            raw_sender = (
+                payload.get("participant")
+                or (payload.get("key") or {}).get("participant")
+                or payload.get("author")
+                or ""
+            )
         else:
             # Mensagem direta — remetente é o from
             raw_sender = from_field
@@ -88,7 +99,7 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
             return {"ok": True}
 
         phone = normalize_phone(raw_sender)
-        if len(phone) < 10:
+        if not is_valid_phone(phone):
             return {"ok": True}
 
         name = (

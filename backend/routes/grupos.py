@@ -1,17 +1,16 @@
 """
 Rotas para gerenciar grupos e extrair membros
 """
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
-import asyncio
 
 import models
 import auth
 from database import get_db
-from grupo_extraction import extract_groups_task
+from grupo_extraction import fetch_groups_from_waha, extract_selected_groups
 
 router = APIRouter(prefix="/api/grupos", tags=["Grupos"])
 
@@ -52,7 +51,104 @@ class GroupListOut(BaseModel):
     items: List[GroupOut]
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+class ExtractSelectedBody(BaseModel):
+    group_ids: List[str]
+
+
+# ── Endpoints de sessão (devem vir ANTES de /{group_id} para evitar conflito) ─
+@router.get("/session/{session_id}/waha-list")
+async def list_waha_groups(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Retorna a lista de grupos diretamente do WAHA sem salvar no banco.
+    Usado para exibir checkboxes na UI antes da extração.
+    Marca quais grupos já foram extraídos anteriormente.
+    """
+    session = db.query(models.WhatsAppSession).filter(
+        models.WhatsAppSession.id == session_id,
+        models.WhatsAppSession.user_id == current_user.id,
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    if session.status != models.SessionStatus.connected:
+        raise HTTPException(status_code=400, detail="Sessão não está conectada")
+
+    try:
+        groups = await fetch_groups_from_waha(session.session_id)
+
+        # Marcar os que já foram extraídos para esta sessão
+        extracted_ids = {
+            row.group_id_waha
+            for row in db.query(models.Group.group_id_waha).filter(
+                models.Group.user_id == current_user.id,
+                models.Group.session_id == session_id,
+            ).all()
+        }
+
+        for g in groups:
+            g["already_extracted"] = g["id"] in extracted_ids
+
+        return {"total": len(groups), "groups": groups}
+
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao buscar grupos do WAHA: {str(e)}")
+
+
+@router.post("/session/{session_id}/extract-selected")
+async def extract_selected(
+    session_id: int,
+    body: ExtractSelectedBody,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Extrai membros dos grupos selecionados aplicando filtros:
+    - Ignora admins do grupo
+    - Apenas números brasileiros (55...)
+    - Apenas 12 ou 13 dígitos
+    Retorna os contadores de extração imediatamente (síncrono).
+    """
+    session = db.query(models.WhatsAppSession).filter(
+        models.WhatsAppSession.id == session_id,
+        models.WhatsAppSession.user_id == current_user.id,
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    if session.status != models.SessionStatus.connected:
+        raise HTTPException(status_code=400, detail="Sessão não está conectada")
+
+    if not body.group_ids:
+        raise HTTPException(status_code=400, detail="Nenhum grupo selecionado")
+
+    try:
+        result = await extract_selected_groups(
+            session.id,
+            session.session_id,
+            current_user.id,
+            body.group_ids,
+            db,
+        )
+        return {
+            "status": "ok",
+            "message": (
+                f"{result['extracted_members']} membros extraídos de "
+                f"{len(body.group_ids)} grupos "
+                f"({result['skipped_admin']} admins e {result['skipped_nonbr']} não-BR ignorados)"
+            ),
+            **result,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na extração: {str(e)}")
+
+
+# ── Endpoints de grupos (DB) ──────────────────────────────────────────────────
 @router.get("", response_model=GroupListOut)
 def list_groups(
     session_id: Optional[int] = None,
@@ -61,7 +157,7 @@ def list_groups(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Lista todos os grupos do usuário."""
+    """Lista grupos extraídos (salvos no banco)."""
     query = db.query(models.Group).filter(models.Group.user_id == current_user.id)
 
     if session_id:
@@ -75,106 +171,6 @@ def list_groups(
     return GroupListOut(total=total, page=page, page_size=page_size, items=items)
 
 
-@router.get("/{group_id}", response_model=GroupDetailOut)
-def get_group_detail(
-    group_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    """Obtém detalhes de um grupo com todos os membros."""
-    group = db.query(models.Group).filter(
-        models.Group.id == group_id,
-        models.Group.user_id == current_user.id,
-    ).first()
-
-    if not group:
-        raise HTTPException(status_code=404, detail="Grupo não encontrado")
-
-    return GroupDetailOut(
-        id=group.id,
-        name=group.name,
-        subject=group.subject,
-        member_count=group.member_count,
-        is_active=group.is_active,
-        created_at=group.created_at,
-        last_extracted_at=group.last_extracted_at,
-        members=[
-            GroupMemberOut(
-                id=m.id,
-                phone=m.phone,
-                name=m.name,
-                is_admin=m.is_admin,
-                added_at=m.added_at,
-            )
-            for m in group.members
-        ] if group.members else [],
-    )
-
-
-@router.post("/{group_id}/re-extract")
-async def re_extract_group(
-    group_id: int,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    """
-    Força uma re-extração dos membros de um grupo específico.
-    """
-    group = db.query(models.Group).filter(
-        models.Group.id == group_id,
-        models.Group.user_id == current_user.id,
-    ).first()
-
-    if not group:
-        raise HTTPException(status_code=404, detail="Grupo não encontrado")
-
-    session = db.query(models.WhatsAppSession).filter(
-        models.WhatsAppSession.id == group.session_id
-    ).first()
-
-    if not session or session.status != models.SessionStatus.connected:
-        raise HTTPException(status_code=400, detail="Sessão não está conectada")
-
-    # Dispara extração em background
-    asyncio.create_task(
-        extract_groups_task(group.session_id, session.session_id, current_user.id)
-    )
-
-    return {"status": "extraindo", "message": "Extração iniciada em background"}
-
-
-@router.post("/session/{session_id}/extract-all")
-async def extract_all_groups(
-    session_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    """
-    Força extração completa de todos os grupos da sessão.
-    """
-    session = db.query(models.WhatsAppSession).filter(
-        models.WhatsAppSession.id == session_id,
-        models.WhatsAppSession.user_id == current_user.id,
-    ).first()
-
-    if not session:
-        raise HTTPException(status_code=404, detail="Sessão não encontrada")
-
-    if session.status != models.SessionStatus.connected:
-        raise HTTPException(status_code=400, detail="Sessão não está conectada")
-
-    # Dispara extração em background
-    asyncio.create_task(
-        extract_groups_task(session.id, session.session_id, current_user.id)
-    )
-
-    return {
-        "status": "extraindo",
-        "message": f"Extração de grupos da sessão {session.name} iniciada em background",
-    }
-
-
 @router.get("/{group_id}/members")
 def list_group_members(
     group_id: int,
@@ -184,7 +180,7 @@ def list_group_members(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Lista membros de um grupo com paginação."""
+    """Lista membros de um grupo com paginação e busca opcional."""
     group = db.query(models.Group).filter(
         models.Group.id == group_id,
         models.Group.user_id == current_user.id,
@@ -232,9 +228,7 @@ def add_group_members_to_campaign(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """
-    Adiciona todos os membros de um grupo para uma campanha.
-    """
+    """Adiciona todos os membros de um grupo para uma campanha."""
     group = db.query(models.Group).filter(
         models.Group.id == group_id,
         models.Group.user_id == current_user.id,
@@ -251,25 +245,22 @@ def add_group_members_to_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campanha não encontrada")
 
-    # Adicionar membros à campanha
     members = db.query(models.GroupMember).filter(
         models.GroupMember.group_id == group_id
     ).all()
 
     added_count = 0
     for member in members:
-        # Verificar se já existe
         existing = db.query(models.CampaignContact).filter(
             models.CampaignContact.campaign_id == campaign_id,
             models.CampaignContact.contact_id == member.contact_id,
         ).first()
 
         if not existing and member.contact_id:
-            campaign_contact = models.CampaignContact(
+            db.add(models.CampaignContact(
                 campaign_id=campaign_id,
                 contact_id=member.contact_id,
-            )
-            db.add(campaign_contact)
+            ))
             added_count += 1
 
     db.commit()
@@ -288,7 +279,7 @@ def delete_group(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Delete um grupo e seus membros."""
+    """Deleta um grupo e seus membros."""
     group = db.query(models.Group).filter(
         models.Group.id == group_id,
         models.Group.user_id == current_user.id,

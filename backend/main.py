@@ -37,6 +37,30 @@ def wait_for_db(retries: int = 5, delay: int = 3) -> bool:
     return False
 
 
+def migrate_contacts_unique():
+    """
+    Garante UniqueConstraint(user_id, phone) na tabela contacts.
+    Como o upsert já evita duplicatas em runtime, é seguro criar a constraint.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.table_constraints "
+                "WHERE table_name = 'contacts' AND constraint_name = 'uq_contacts_user_phone')"
+            ))
+            if result.scalar():
+                return  # já existe
+            logger.info("[MIGRATE] Criando unique constraint em contacts(user_id, phone)...")
+            conn.execute(text(
+                "ALTER TABLE contacts "
+                "ADD CONSTRAINT uq_contacts_user_phone UNIQUE (user_id, phone)"
+            ))
+            conn.commit()
+            logger.info("[MIGRATE] Constraint uq_contacts_user_phone criada.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao criar constraint de contatos: {e}")
+
+
 def migrate_groups_table():
     """
     Corrige o schema da tabela groups:
@@ -79,6 +103,7 @@ async def lifespan(app: FastAPI):
     db_ok = wait_for_db(retries=5, delay=3)
     if db_ok:
         try:
+            migrate_contacts_unique()
             migrate_groups_table()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)

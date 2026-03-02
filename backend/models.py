@@ -109,6 +109,7 @@ class Contact(Base):
 
     __table_args__ = (
         Index("ix_contacts_user_phone", "user_id", "phone"),
+        UniqueConstraint("user_id", "phone", name="uq_contacts_user_phone"),
     )
 
 

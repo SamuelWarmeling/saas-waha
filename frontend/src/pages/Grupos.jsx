@@ -16,7 +16,7 @@ export default function Grupos() {
   // Carregar sessões do usuário
   const loadSessoes = async () => {
     try {
-      const response = await api.get('/api/sessoes')
+      const response = await api.get('/sessoes')
       setSessoes(response.data)
     } catch (error) {
       console.error('Erro ao carregar sessões:', error)
@@ -35,7 +35,7 @@ export default function Grupos() {
         params.session_id = selectedSession
       }
       
-      const response = await api.get('/api/grupos', { params })
+      const response = await api.get('/grupos', { params })
       setGrupos(response.data.items)
       setTotal(response.data.total)
     } catch (error) {
@@ -49,7 +49,7 @@ export default function Grupos() {
   // Carregar membros de um grupo
   const loadMembers = async (groupId) => {
     try {
-      const response = await api.get(`/api/grupos/${groupId}/members`)
+      const response = await api.get(`/grupos/${groupId}/members`)
       setMembers(response.data.items)
       setSelectedGroup(groupId)
     } catch (error) {
@@ -62,7 +62,7 @@ export default function Grupos() {
   const reExtractGroups = async (sessionId) => {
     try {
       setLoading(true)
-      await api.post(`/api/grupos/session/${sessionId}/extract-all`)
+      await api.post(`/grupos/session/${sessionId}/extract-all`)
       toast.success('Extração de grupos iniciada em background')
       setTimeout(() => loadGrupos(), 2000)
     } catch (error) {
@@ -78,7 +78,7 @@ export default function Grupos() {
     if (!confirm('Tem certeza que deseja deletar este grupo?')) return
 
     try {
-      await api.delete(`/api/grupos/${groupId}`)
+      await api.delete(`/grupos/${groupId}`)
       toast.success('Grupo deletado com sucesso')
       loadGrupos()
     } catch (error) {

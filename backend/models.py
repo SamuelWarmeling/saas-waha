@@ -119,14 +119,14 @@ class Campaign(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(255), nullable=False)
-    message = Column(Text, nullable=False)
-    media_url = Column(String(500), nullable=True)  # imagem/arquivo opcional
+    message = Column(Text, nullable=True)       # legado: primeira mensagem
+    media_url = Column(String(500), nullable=True)
     status = Column(SAEnum(CampaignStatus), default=CampaignStatus.draft)
     total_contacts = Column(Integer, default=0)
     sent_count = Column(Integer, default=0)
     success_count = Column(Integer, default=0)
     fail_count = Column(Integer, default=0)
-    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id"), nullable=True)
+    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id"), nullable=True)  # legado
     delay_min = Column(Integer, default=5)
     delay_max = Column(Integer, default=15)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -135,8 +135,10 @@ class Campaign(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="campaigns")
-    session = relationship("WhatsAppSession")
+    session = relationship("WhatsAppSession", foreign_keys=[session_id])
     campaign_contacts = relationship("CampaignContact", back_populates="campaign", cascade="all, delete-orphan")
+    messages = relationship("CampaignMessage", back_populates="campaign", cascade="all, delete-orphan", order_by="CampaignMessage.ordem")
+    campaign_sessions = relationship("CampaignSession", back_populates="campaign", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_campaigns_user_id", "user_id"),
@@ -149,16 +151,48 @@ class CampaignContact(Base):
     id = Column(Integer, primary_key=True, index=True)
     campaign_id = Column(Integer, ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
     contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="SET NULL"), nullable=True)
     status = Column(SAEnum(ContactStatus), default=ContactStatus.pending)
     error_message = Column(Text, nullable=True)
     sent_at = Column(DateTime(timezone=True), nullable=True)
 
     campaign = relationship("Campaign", back_populates="campaign_contacts")
     contact = relationship("Contact", back_populates="campaign_contacts")
+    session = relationship("WhatsAppSession")
 
     __table_args__ = (
         Index("ix_cc_campaign_id", "campaign_id"),
         Index("ix_cc_status", "status"),
+    )
+
+
+class CampaignMessage(Base):
+    __tablename__ = "campaign_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
+    text = Column(Text, nullable=False)
+    ordem = Column(Integer, default=0, nullable=False)
+
+    campaign = relationship("Campaign", back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_campaign_messages_campaign_id", "campaign_id"),
+    )
+
+
+class CampaignSession(Base):
+    __tablename__ = "campaign_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="CASCADE"), nullable=False)
+
+    campaign = relationship("Campaign", back_populates="campaign_sessions")
+    session = relationship("WhatsAppSession")
+
+    __table_args__ = (
+        Index("ix_campaign_sessions_campaign_id", "campaign_id"),
     )
 
 

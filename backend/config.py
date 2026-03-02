@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     PLAN_BUSINESS_ID: str = "business"
 
     # Frontend URL (para webhooks/redirects)
-    FRONTEND_URL: str = "http://localhost:5173"
+    FRONTEND_URL: str = "https://app-saas.xeramr.easypanel.host"
 
     class Config:
         env_file = ".env"

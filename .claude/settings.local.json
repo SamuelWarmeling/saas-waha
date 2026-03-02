@@ -36,7 +36,15 @@
       "Bash(cd \"/c/Users/samue/OneDrive/Desktop/saas-waha\" && gh repo create saas-waha --public --source=. --remote=origin --push 2>&1)",
       "Bash(gh auth:*)",
       "Bash(taskkill:*)",
-      "Bash(cmd:*)"
+      "Bash(cmd:*)",
+      "WebFetch(domain:waha-waha.xeramr.easypanel.host)",
+      "Bash(echo Token: ${TOKEN:0:40}...:*)",
+      "Bash(echo:*)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/frontend && npm run dev 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/frontend && npm run build 2>&1)",
+      "Bash(python3:*)",
+      "Bash(node:*)"
     ]
   }
 }

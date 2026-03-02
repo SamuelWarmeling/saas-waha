@@ -62,6 +62,27 @@ def migrate_contacts_unique():
         logger.error(f"[MIGRATE] Erro ao criar constraint de contatos: {e}")
 
 
+def migrate_campaign_contacts_session():
+    """Adiciona coluna session_id em campaign_contacts (rastreia qual chip enviou)."""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'campaign_contacts' AND column_name = 'session_id')"
+            ))
+            if result.scalar():
+                return
+            logger.info("[MIGRATE] Adicionando session_id em campaign_contacts...")
+            conn.execute(text(
+                "ALTER TABLE campaign_contacts "
+                "ADD COLUMN session_id INTEGER REFERENCES whatsapp_sessions(id) ON DELETE SET NULL"
+            ))
+            conn.commit()
+            logger.info("[MIGRATE] Coluna session_id adicionada em campaign_contacts.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar campaign_contacts: {e}")
+
+
 def migrate_groups_table():
     """
     Corrige o schema da tabela groups:
@@ -105,6 +126,7 @@ async def lifespan(app: FastAPI):
     if db_ok:
         try:
             migrate_contacts_unique()
+            migrate_campaign_contacts_session()
             migrate_groups_table()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)

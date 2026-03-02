@@ -75,9 +75,8 @@ function parseAtividade(a) {
 }
 
 export default function Dashboard() {
-  const [data, setData] = useState(null)
+  const [stats, setStats] = useState(null)
   const [campaigns, setCampaigns] = useState([])
-  const [sessions, setSessions] = useState([])
   const [atividades, setAtividades] = useState([])
   const intervalRef = useRef(null)
 
@@ -86,33 +85,17 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    Promise.all([
-      api.get('/contatos?page_size=1').catch(() => ({ data: { total: 0 } })),
-      api.get('/campanhas?page_size=5').catch(() => ({ data: [] })),
-      api.get('/sessoes').catch(() => ({ data: [] })),
-    ]).then(([contacts, camps, sess]) => {
-      setData({ totalContacts: contacts.data.total })
-      setCampaigns(Array.isArray(camps.data) ? camps.data : [])
-      setSessions(Array.isArray(sess.data) ? sess.data : [])
-    })
+    api.get('/dashboard/stats').then(r => setStats(r.data)).catch(() => {})
+    api.get('/campanhas?page_size=5').then(r => {
+      setCampaigns(Array.isArray(r.data) ? r.data : [])
+    }).catch(() => {})
     loadAtividades()
     intervalRef.current = setInterval(loadAtividades, 10000)
     return () => clearInterval(intervalRef.current)
   }, [])
 
-  const connectedSessions = sessions.filter(s => s.status === 'connected').length
-  const todaySent = campaigns.reduce((acc, c) => acc + (c.success_count || 0), 0)
+  const chartData = stats?.chart ?? []
   const activeCampaigns = campaigns.filter(c => c.status === 'running').length
-
-  const chartData = [
-    { name: 'Seg', enviados: 120 },
-    { name: 'Ter', enviados: 185 },
-    { name: 'Qua', enviados: 210 },
-    { name: 'Qui', enviados: 95 },
-    { name: 'Sex', enviados: 240 },
-    { name: 'Sáb', enviados: 180 },
-    { name: 'Dom', enviados: 60 },
-  ]
 
   const statusColor = {
     running: 'badge-green',
@@ -140,20 +123,19 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <Stats
           title="Total de Contatos"
-          value={data?.totalContacts?.toLocaleString('pt-BR') ?? '–'}
+          value={stats ? stats.total_contatos.toLocaleString('pt-BR') : '–'}
           icon={MdContacts}
           color="blue"
         />
         <Stats
-          title="Mensagens Hoje"
-          value={todaySent.toLocaleString('pt-BR')}
-          sub="soma das campanhas"
+          title="Total de Campanhas"
+          value={stats ? stats.total_campanhas.toLocaleString('pt-BR') : '–'}
           icon={MdSend}
           color="green"
         />
         <Stats
           title="Sessões Ativas"
-          value={`${connectedSessions}/${sessions.length}`}
+          value={stats ? `${stats.sessoes_ativas}/${stats.sessoes_total}` : '–'}
           sub="conectadas"
           icon={MdPhoneAndroid}
           color="yellow"

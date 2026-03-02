@@ -13,6 +13,7 @@ from routes.webhook_waha import router as webhook_router
 from routes.admin import router as admin_router
 from routes.debug import router as debug_router
 from routes.atividades import router as atividades_router
+from routes.dashboard import router as dashboard_router
 from config import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -150,6 +151,7 @@ app.include_router(webhook_router, prefix="/api/webhook")
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(debug_router)
 app.include_router(atividades_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")

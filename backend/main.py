@@ -37,12 +37,49 @@ def wait_for_db(retries: int = 5, delay: int = 3) -> bool:
     return False
 
 
+def migrate_groups_table():
+    """
+    Corrige o schema da tabela groups:
+    - Remove a constraint unique global em group_id_waha (se existir)
+    - Garante a constraint composta (user_id, group_id_waha)
+    A tabela é nova e deve estar vazia, portanto é seguro recriar.
+    """
+    try:
+        with engine.connect() as conn:
+            # Verifica se a tabela existe
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                "WHERE table_name = 'groups')"
+            ))
+            if not result.scalar():
+                return  # Tabela não existe ainda, create_all vai criá-la corretamente
+
+            # Verifica se a constraint composta já existe
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.table_constraints "
+                "WHERE table_name = 'groups' AND constraint_name = 'uq_groups_user_group')"
+            ))
+            if result.scalar():
+                logger.info("[MIGRATE] Constraint uq_groups_user_group já existe, OK.")
+                return
+
+            logger.info("[MIGRATE] Migrando tabela groups: recriando com schema correto...")
+            # A tabela é nova e deve estar vazia — recria com schema correto
+            conn.execute(text("DROP TABLE IF EXISTS group_members CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS groups CASCADE"))
+            conn.commit()
+            logger.info("[MIGRATE] Tabelas groups/group_members removidas para recriação.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar tabela groups: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("[STARTUP] Iniciando aplicação...")
     db_ok = wait_for_db(retries=5, delay=3)
     if db_ok:
         try:
+            migrate_groups_table()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")

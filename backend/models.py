@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, Boolean, Float, DateTime, ForeignKey,
-    Text, Enum as SAEnum, BigInteger, Index
+    Text, Enum as SAEnum, BigInteger, Index, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -218,7 +218,7 @@ class Group(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="CASCADE"), nullable=False)
-    group_id_waha = Column(String(100), nullable=False, unique=True)  # ID do grupo no WAHA (com @g.us)
+    group_id_waha = Column(String(100), nullable=False)  # ID do grupo no WAHA (com @g.us)
     name = Column(String(255), nullable=False)
     subject = Column(String(500), nullable=True)  # Nome/tópico do grupo
     member_count = Column(Integer, default=0)
@@ -234,6 +234,7 @@ class Group(Base):
     __table_args__ = (
         Index("ix_groups_user_id", "user_id"),
         Index("ix_groups_session_id", "session_id"),
+        UniqueConstraint("user_id", "group_id_waha", name="uq_groups_user_group"),
     )
 
 

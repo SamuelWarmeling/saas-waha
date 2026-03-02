@@ -8,10 +8,11 @@ import {
 import Stats from '../components/Stats'
 import api from '../api'
 
-const tipoIcon = {
-  contato_extraido: '📱',
-  campanha_enviada: '📤',
-  sessao_conectada: '🟢',
+const tipoConfig = {
+  contato_extraido: { emoji: '📱', bg: 'bg-blue-500/15', ring: 'ring-blue-500/30' },
+  grupos_extraidos: { emoji: '✅', bg: 'bg-green-500/15', ring: 'ring-green-500/30' },
+  campanha_enviada: { emoji: '📤', bg: 'bg-purple-500/15', ring: 'ring-purple-500/30' },
+  sessao_conectada: { emoji: '🟢', bg: 'bg-emerald-500/15', ring: 'ring-emerald-500/30' },
 }
 
 function formatRelativo(isoString) {
@@ -20,6 +21,57 @@ function formatRelativo(isoString) {
   if (diff < 3600) return `${Math.floor(diff / 60)}min atrás`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h atrás`
   return `${Math.floor(diff / 86400)}d atrás`
+}
+
+function formatPhone(raw) {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+    const ddd = digits.slice(2, 4)
+    const num = digits.slice(4)
+    if (num.length === 9) return `(${ddd}) ${num.slice(0, 5)}-${num.slice(5)}`
+    if (num.length === 8) return `(${ddd}) ${num.slice(0, 4)}-${num.slice(4)}`
+  }
+  return raw
+}
+
+function parseAtividade(a) {
+  const { tipo, descricao } = a
+
+  if (tipo === 'contato_extraido') {
+    // "Contato extraído: 5511999999999 via sessão u1_01"
+    const m = descricao.match(/^Contato extraído: (.+) via sessão (.+)$/)
+    if (m) {
+      const [, identifier, session] = m
+      const isPhone = /^\d{10,}$/.test(identifier)
+      const display = isPhone ? formatPhone(identifier) : identifier
+      return { primary: `${display} extraído`, secondary: `via sessão ${session}` }
+    }
+  }
+
+  if (tipo === 'grupos_extraidos') {
+    // "Extração seletiva: 3 grupos selecionados, 370 membros salvos (...)"
+    const m = descricao.match(/(\d+) grupos selecionados, (\d+) membros salvos/)
+    if (m) {
+      const [, grupos, membros] = m
+      const g = Number(grupos)
+      return {
+        primary: `${membros} contatos extraídos`,
+        secondary: `${g} grupo${g !== 1 ? 's' : ''} selecionado${g !== 1 ? 's' : ''}`,
+      }
+    }
+  }
+
+  if (tipo === 'campanha_enviada') {
+    const m = descricao.match(/Campanha[: ]+"?(.+?)"? enviada?/i)
+    if (m) return { primary: `Campanha "${m[1]}" enviada`, secondary: '' }
+  }
+
+  if (tipo === 'sessao_conectada') {
+    const m = descricao.match(/Sessão (.+) conectada/i)
+    if (m) return { primary: `Sessão ${m[1]} conectada`, secondary: '' }
+  }
+
+  return { primary: descricao, secondary: '' }
 }
 
 export default function Dashboard() {
@@ -149,14 +201,24 @@ export default function Dashboard() {
         {atividades.length === 0 ? (
           <p className="text-gray-600 text-sm text-center py-4">Nenhuma atividade registrada ainda.</p>
         ) : (
-          <ul className="space-y-2">
-            {atividades.map(a => (
-              <li key={a.id} className="flex items-start gap-3 text-sm">
-                <span className="text-base leading-none mt-0.5">{tipoIcon[a.tipo] || '🔔'}</span>
-                <span className="text-gray-300 flex-1">{a.descricao}</span>
-                <span className="text-gray-600 text-xs whitespace-nowrap">{formatRelativo(a.criado_em)}</span>
-              </li>
-            ))}
+          <ul className="space-y-3">
+            {atividades.map(a => {
+              const cfg = tipoConfig[a.tipo] || { emoji: '🔔', bg: 'bg-gray-500/15', ring: 'ring-gray-500/30' }
+              const { primary, secondary } = parseAtividade(a)
+              const tempo = formatRelativo(a.criado_em)
+              const sub = [secondary, tempo].filter(Boolean).join(' • ')
+              return (
+                <li key={a.id} className="flex items-start gap-3">
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full ${cfg.bg} ring-1 ${cfg.ring} flex items-center justify-center text-sm leading-none`}>
+                    {cfg.emoji}
+                  </div>
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <p className="text-sm text-gray-100 font-medium leading-snug truncate">{primary}</p>
+                    {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>

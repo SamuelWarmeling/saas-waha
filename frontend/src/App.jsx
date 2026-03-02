@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Campanhas from './pages/Campanhas'
 import Contatos from './pages/Contatos'
 import Sessoes from './pages/Sessoes'
+import Grupos from './pages/Grupos'
 import Configuracoes from './pages/Configuracoes'
 import Admin from './pages/Admin'
 import Layout from './components/Layout'
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="campanhas" element={<Campanhas />} />
         <Route path="contatos" element={<Contatos />} />
         <Route path="sessoes" element={<Sessoes />} />
+        <Route path="grupos" element={<Grupos />} />
         <Route path="configuracoes" element={<Configuracoes />} />
         <Route path="admin" element={<Admin />} />
       </Route>

@@ -210,3 +210,48 @@ class AtividadeLog(Base):
     __table_args__ = (
         Index("ix_atividade_logs_user_id", "user_id"),
     )
+
+
+class Group(Base):
+    __tablename__ = "groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="CASCADE"), nullable=False)
+    group_id_waha = Column(String(100), nullable=False, unique=True)  # ID do grupo no WAHA (com @g.us)
+    name = Column(String(255), nullable=False)
+    subject = Column(String(500), nullable=True)  # Nome/tópico do grupo
+    member_count = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_extracted_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    session = relationship("WhatsAppSession")
+    members = relationship("GroupMember", back_populates="group", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_groups_user_id", "user_id"),
+        Index("ix_groups_session_id", "session_id"),
+    )
+
+
+class GroupMember(Base):
+    __tablename__ = "group_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=True)  # NULL se for member sem contato
+    phone = Column(String(20), nullable=False)
+    name = Column(String(255), nullable=True)
+    is_admin = Column(Boolean, default=False)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    group = relationship("Group", back_populates="members")
+    contact = relationship("Contact")
+
+    __table_args__ = (
+        Index("ix_group_members_group_id", "group_id"),
+        Index("ix_group_members_contact_id", "contact_id"),
+    )

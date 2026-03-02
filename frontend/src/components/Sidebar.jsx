@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   MdDashboard, MdCampaign, MdContacts, MdPhoneAndroid,
-  MdSettings, MdLogout, MdWhatsapp, MdAdminPanelSettings,
+  MdSettings, MdLogout, MdWhatsapp, MdAdminPanelSettings, MdGroup,
 } from 'react-icons/md'
 
 const links = [
@@ -9,6 +9,7 @@ const links = [
   { to: '/campanhas',     icon: MdCampaign,     label: 'Campanhas'      },
   { to: '/contatos',      icon: MdContacts,     label: 'Contatos'       },
   { to: '/sessoes',       icon: MdPhoneAndroid, label: 'Sessões'        },
+  { to: '/grupos',        icon: MdGroup,        label: 'Grupos'         },
   { to: '/configuracoes', icon: MdSettings,     label: 'Configurações'  },
 ]
 

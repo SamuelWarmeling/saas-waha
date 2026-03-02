@@ -2,6 +2,8 @@ from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 import models
+import asyncio
+from grupo_extraction import extract_groups_task
 
 router = APIRouter(tags=["webhook"])
 
@@ -78,7 +80,15 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
                 if raw_phone:
                     sess.phone_number = normalize_phone(raw_phone)
                 sess.qr_code = None
-            db.commit()
+                db.commit()
+                
+                # ⭐ NOVO: Disparar extração de grupos em background ⭐
+                print(f"[WEBHOOK] Sessão {session_waha_id} conectou! Iniciando extração de grupos...")
+                asyncio.create_task(
+                    extract_groups_task(sess.id, session_waha_id, sess.user_id)
+                )
+            else:
+                db.commit()
 
     # ── message ───────────────────────────────────────────────────────────────
     elif event == "message" and sess:

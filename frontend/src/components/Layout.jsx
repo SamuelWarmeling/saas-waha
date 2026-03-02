@@ -4,11 +4,15 @@ import Header from './Header'
 
 export default function Layout() {
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-950">
+    <div className="flex h-screen overflow-hidden bg-surface-950 font-sans text-surface-50 antialiased selection:bg-primary-500/30 selection:text-primary-100">
       <Sidebar />
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 overflow-hidden relative">
+        {/* Background gradient effects */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary-900/10 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary-800/10 blur-[120px] pointer-events-none" />
+
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6 relative z-10 scroll-smooth">
           <Outlet />
         </main>
       </div>

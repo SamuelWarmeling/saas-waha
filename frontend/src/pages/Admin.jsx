@@ -8,7 +8,7 @@ const PLANS = ['starter', 'pro', 'business']
 
 function StatCard({ icon: Icon, label, value, color }) {
   const colors = {
-    green: 'text-green-400 bg-green-900/30',
+    green: 'text-primary-400 bg-primary-900/30',
     blue: 'text-blue-400 bg-blue-900/30',
     yellow: 'text-yellow-400 bg-yellow-900/30',
     purple: 'text-purple-400 bg-purple-900/30',
@@ -85,7 +85,7 @@ export default function Admin() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500" />
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-500" />
       </div>
     )
   }
@@ -93,79 +93,86 @@ export default function Admin() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-white">Painel Admin</h1>
-        <p className="text-sm text-gray-500">Visão geral de todos os usuários e métricas</p>
+        <h1 className="text-2xl font-bold text-surface-50 tracking-tight">Painel Admin</h1>
+        <p className="text-sm text-surface-400 mt-1">Visão geral de todos os usuários e métricas</p>
       </div>
 
       {/* Stats globais */}
       {stats && (
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard icon={MdPeople}      label="Total usuários"   value={stats.total_users}         color="blue"   />
-          <StatCard icon={MdCheckCircle} label="Usuários ativos"  value={stats.active_users}        color="green"  />
-          <StatCard icon={MdPhoneAndroid} label="Sessões ativas"  value={`${stats.connected_sessions}/${stats.total_sessions}`} color="yellow" />
-          <StatCard icon={MdMessage}     label="Msgs hoje"        value={stats.messages_sent_today}  color="purple" />
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
+          <StatCard icon={MdPeople} label="Total usuários" value={stats.total_users} color="blue" />
+          <StatCard icon={MdCheckCircle} label="Usuários ativos" value={stats.active_users} color="green" />
+          <StatCard icon={MdPhoneAndroid} label="Sessões ativas" value={`${stats.connected_sessions}/${stats.total_sessions}`} color="yellow" />
+          <StatCard icon={MdMessage} label="Msgs hoje" value={stats.messages_sent_today} color="purple" />
         </div>
       )}
 
       {/* Tabela de usuários */}
-      <div className="card overflow-x-auto">
-        <h2 className="text-base font-semibold text-white mb-4">Usuários</h2>
+      <div className="glass-card overflow-x-auto">
+        <h2 className="text-sm font-semibold text-surface-300 mb-6">Administrar Usuários</h2>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-gray-500 border-b border-gray-800">
-              <th className="text-left pb-2 pr-4">ID</th>
-              <th className="text-left pb-2 pr-4">Nome</th>
-              <th className="text-left pb-2 pr-4">Email</th>
-              <th className="text-left pb-2 pr-4">Plano</th>
-              <th className="text-left pb-2 pr-4">Expira</th>
-              <th className="text-left pb-2 pr-4">Sessões</th>
-              <th className="text-left pb-2 pr-4">Contatos</th>
-              <th className="text-left pb-2 pr-4">Status</th>
-              <th className="text-left pb-2">Ações</th>
+            <tr className="text-left text-surface-400 border-b border-surface-700/50">
+              <th className="font-medium pb-3 pr-4">ID</th>
+              <th className="font-medium pb-3 pr-4">Nome & Email</th>
+              <th className="font-medium pb-3 pr-4">Plano</th>
+              <th className="font-medium pb-3 pr-4">Status & Métricas</th>
+              <th className="font-medium pb-3 text-right">Ações</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-surface-800/50">
             {users.map(u => (
-              <tr key={u.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                <td className="py-3 pr-4 text-gray-500">{u.id}</td>
-                <td className="py-3 pr-4 text-white font-medium">
-                  {u.name}
-                  {u.is_admin && <span className="ml-1 text-xs badge-blue">admin</span>}
+              <tr key={u.id} className="hover:bg-surface-800/30 transition-colors">
+                <td className="py-4 pr-4 text-surface-500 font-mono text-xs">{u.id}</td>
+                <td className="py-4 pr-4">
+                  <div className="flex items-center gap-2">
+                    <p className="text-surface-100 font-medium">
+                      {u.name}
+                      {u.is_admin && <span className="ml-2 badge-primary">admin</span>}
+                    </p>
+                  </div>
+                  <p className="text-surface-400 text-xs mt-0.5">{u.email}</p>
                 </td>
-                <td className="py-3 pr-4 text-gray-400">{u.email}</td>
-                <td className="py-3 pr-4">
-                  <select
-                    value={u.plan}
-                    onChange={e => changePlan(u.id, e.target.value)}
-                    className="bg-gray-800 border border-gray-700 text-white text-xs rounded px-2 py-1"
-                  >
-                    {PLANS.map(p => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
+                <td className="py-4 pr-4">
+                  <div className="flex flex-col gap-1.5">
+                    <select
+                      value={u.plan}
+                      onChange={e => changePlan(u.id, e.target.value)}
+                      className="bg-surface-900/50 border border-surface-700 text-surface-100 text-xs rounded-lg px-2 py-1.5 w-max focus:ring-1 focus:ring-primary-500 outline-none"
+                    >
+                      {PLANS.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] text-surface-500 font-mono">
+                      Vence em: {u.plan_expires_at ? new Date(u.plan_expires_at).toLocaleDateString('pt-BR') : '—'}
+                    </span>
+                  </div>
                 </td>
-                <td className="py-3 pr-4 text-gray-400 text-xs">
-                  {u.plan_expires_at
-                    ? new Date(u.plan_expires_at).toLocaleDateString('pt-BR')
-                    : '—'}
+                <td className="py-4 pr-4">
+                  <div className="flex flex-col gap-2">
+                    <span className={`w-max ${u.is_active ? 'badge-green' : 'badge-red'}`}>
+                      {u.is_active ? 'Ativo' : 'Inativo'}
+                    </span>
+                    <div className="flex items-center gap-3 text-[11px] text-surface-400 font-medium">
+                      <span className="flex items-center gap-1" title="Sessões">
+                        <MdPhoneAndroid className="text-primary-500" /> {u.sessions_count}
+                      </span>
+                      <span className="flex items-center gap-1" title="Contatos">
+                        <MdPeople className="text-blue-500" /> {u.contacts_count}
+                      </span>
+                    </div>
+                  </div>
                 </td>
-                <td className="py-3 pr-4 text-gray-400">{u.sessions_count}</td>
-                <td className="py-3 pr-4 text-gray-400">{u.contacts_count}</td>
-                <td className="py-3 pr-4">
-                  <span className={u.is_active ? 'badge-green' : 'badge-red'}>
-                    {u.is_active ? 'Ativo' : 'Inativo'}
-                  </span>
-                </td>
-                <td className="py-3">
+                <td className="py-4 text-right">
                   <button
                     onClick={() => toggleActive(u.id, u.is_active)}
-                    className={`text-xs px-3 py-1 rounded-lg transition-colors ${
-                      u.is_active
-                        ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
-                        : 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
-                    }`}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all ${u.is_active
+                        ? 'bg-red-900/20 text-red-400 hover:bg-red-600 hover:text-white border border-red-500/20'
+                        : 'bg-primary-900/20 text-primary-400 hover:bg-primary-600 hover:text-white border border-primary-500/20'
+                      }`}
                   >
-                    {u.is_active ? 'Desativar' : 'Ativar'}
+                    {u.is_active ? 'Desativar' : 'Ativar Conta'}
                   </button>
                 </td>
               </tr>
@@ -173,7 +180,12 @@ export default function Admin() {
           </tbody>
         </table>
         {users.length === 0 && (
-          <p className="text-center text-gray-500 py-8">Nenhum usuário encontrado.</p>
+          <div className="py-12 flex flex-col items-center justify-center text-center">
+            <div className="w-16 h-16 rounded-full bg-surface-800/50 flex items-center justify-center mb-4">
+              <MdPeople className="text-3xl text-surface-500" />
+            </div>
+            <p className="text-surface-400 text-sm font-medium">Nenhum usuário encontrado.</p>
+          </div>
         )}
       </div>
     </div>

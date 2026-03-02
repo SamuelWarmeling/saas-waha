@@ -10,9 +10,9 @@ import api from '../api'
 
 const tipoConfig = {
   contato_extraido: { emoji: '📱', bg: 'bg-blue-500/15', ring: 'ring-blue-500/30' },
-  grupos_extraidos: { emoji: '✅', bg: 'bg-green-500/15', ring: 'ring-green-500/30' },
+  grupos_extraidos: { emoji: '✅', bg: 'bg-primary-500/15', ring: 'ring-primary-500/30' },
   campanha_enviada: { emoji: '📤', bg: 'bg-purple-500/15', ring: 'ring-purple-500/30' },
-  sessao_conectada: { emoji: '🟢', bg: 'bg-emerald-500/15', ring: 'ring-emerald-500/30' },
+  sessao_conectada: { emoji: '🟢', bg: 'bg-primary-500/15', ring: 'ring-primary-500/30' },
 }
 
 function formatRelativo(isoString) {
@@ -81,14 +81,14 @@ export default function Dashboard() {
   const intervalRef = useRef(null)
 
   function loadAtividades() {
-    api.get('/atividades').then(r => setAtividades(r.data)).catch(() => {})
+    api.get('/atividades').then(r => setAtividades(r.data)).catch(() => { })
   }
 
   useEffect(() => {
-    api.get('/dashboard/stats').then(r => setStats(r.data)).catch(() => {})
+    api.get('/dashboard/stats').then(r => setStats(r.data)).catch(() => { })
     api.get('/campanhas?page_size=5').then(r => {
       setCampaigns(Array.isArray(r.data) ? r.data : [])
-    }).catch(() => {})
+    }).catch(() => { })
     loadAtividades()
     intervalRef.current = setInterval(loadAtividades, 10000)
     return () => clearInterval(intervalRef.current)
@@ -113,14 +113,14 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm text-gray-500">Visão geral da sua conta</p>
+        <h1 className="text-2xl font-bold text-surface-50 tracking-tight">Dashboard</h1>
+        <p className="text-sm text-surface-400 mt-1">Visão geral da sua conta</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
         <Stats
           title="Total de Contatos"
           value={stats ? stats.total_contatos.toLocaleString('pt-BR') : '–'}
@@ -148,98 +148,125 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Chart */}
-      <div className="card">
-        <h2 className="text-sm font-semibold text-gray-400 mb-4">Mensagens nos últimos 7 dias</h2>
-        <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={chartData}>
-            <defs>
-              <linearGradient id="colorEnv" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
-            <Tooltip
-              contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8 }}
-              labelStyle={{ color: '#9ca3af' }}
-              itemStyle={{ color: '#22c55e' }}
-            />
-            <Area type="monotone" dataKey="enviados" stroke="#22c55e" fill="url(#colorEnv)" strokeWidth={2} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Atividade Recente */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-2">
-            <MdHistory className="text-base" /> Atividade Recente
-          </h2>
-          <span className="text-xs text-gray-600">atualiza a cada 10s</span>
-        </div>
-        {atividades.length === 0 ? (
-          <p className="text-gray-600 text-sm text-center py-4">Nenhuma atividade registrada ainda.</p>
-        ) : (
-          <ul className="space-y-3">
-            {atividades.map(a => {
-              const cfg = tipoConfig[a.tipo] || { emoji: '🔔', bg: 'bg-gray-500/15', ring: 'ring-gray-500/30' }
-              const { primary, secondary } = parseAtividade(a)
-              const tempo = formatRelativo(a.criado_em)
-              const sub = [secondary, tempo].filter(Boolean).join(' • ')
-              return (
-                <li key={a.id} className="flex items-start gap-3">
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full ${cfg.bg} ring-1 ${cfg.ring} flex items-center justify-center text-sm leading-none`}>
-                    {cfg.emoji}
-                  </div>
-                  <div className="flex-1 min-w-0 pt-0.5">
-                    <p className="text-sm text-gray-100 font-medium leading-snug truncate">{primary}</p>
-                    {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
-
-      {/* Recent campaigns */}
-      <div className="card">
-        <h2 className="text-sm font-semibold text-gray-400 mb-4">Campanhas Recentes</h2>
-        {campaigns.length === 0 ? (
-          <p className="text-gray-600 text-sm text-center py-6">Nenhuma campanha criada ainda.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-800">
-                  <th className="pb-2 font-medium">Nome</th>
-                  <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Contatos</th>
-                  <th className="pb-2 font-medium">Enviados</th>
-                  <th className="pb-2 font-medium">Sucesso</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {campaigns.map(c => (
-                  <tr key={c.id}>
-                    <td className="py-3 text-gray-200 font-medium">{c.name}</td>
-                    <td className="py-3">
-                      <span className={statusColor[c.status] || 'badge-gray'}>
-                        {statusLabel[c.status] || c.status}
-                      </span>
-                    </td>
-                    <td className="py-3 text-gray-400">{c.total_contacts}</td>
-                    <td className="py-3 text-gray-400">{c.sent_count}</td>
-                    <td className="py-3 text-green-400">{c.success_count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content Area */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Chart */}
+          <div className="glass-card">
+            <h2 className="text-sm font-semibold text-surface-300 mb-6">Mensagens nos últimos 7 dias</h2>
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorEnv" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} dy={10} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}
+                  labelStyle={{ color: '#cbd5e1', fontWeight: 600, paddingBottom: 4 }}
+                  itemStyle={{ color: '#a78bfa', fontWeight: 500 }}
+                  cursor={{ stroke: '#475569', strokeWidth: 1, strokeDasharray: '4 4' }}
+                />
+                <Area type="monotone" dataKey="enviados" stroke="#8b5cf6" fill="url(#colorEnv)" strokeWidth={3} activeDot={{ r: 6, fill: '#8b5cf6', stroke: '#fff', strokeWidth: 2 }} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
-        )}
+
+          {/* Recent campaigns */}
+          <div className="glass-card">
+            <h2 className="text-sm font-semibold text-surface-300 mb-6">Campanhas Recentes</h2>
+            {campaigns.length === 0 ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 rounded-full bg-surface-800/50 flex items-center justify-center mb-4">
+                  <MdCampaign className="text-3xl text-surface-500" />
+                </div>
+                <p className="text-surface-400 text-sm font-medium">Nenhuma campanha criada ainda.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto -mx-5 px-5">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-surface-400 border-b border-surface-700/50">
+                      <th className="pb-3 font-medium whitespace-nowrap">Nome</th>
+                      <th className="pb-3 font-medium px-4">Status</th>
+                      <th className="pb-3 font-medium text-right px-4">Contatos</th>
+                      <th className="pb-3 font-medium text-right px-4">Enviados</th>
+                      <th className="pb-3 font-medium text-right">Sucesso</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-800/50">
+                    {campaigns.map(c => (
+                      <tr key={c.id} className="hover:bg-surface-800/30 transition-colors">
+                        <td className="py-3.5 text-surface-100 font-medium whitespace-nowrap">{c.name}</td>
+                        <td className="py-3.5 px-4">
+                          <span className={statusColor[c.status] || 'badge-gray'}>
+                            {statusLabel[c.status] || c.status}
+                          </span>
+                        </td>
+                        <td className="py-3.5 text-surface-400 text-right px-4">{c.total_contacts.toLocaleString('pt-BR')}</td>
+                        <td className="py-3.5 text-surface-400 text-right px-4">{c.sent_count.toLocaleString('pt-BR')}</td>
+                        <td className="py-3.5 text-primary-400 font-medium text-right">
+                          {c.total_contacts > 0 ? Math.round((c.success_count / c.total_contacts) * 100) : 0}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sidebar Space */}
+        <div className="space-y-6">
+          {/* Atividade Recente */}
+          <div className="glass-card min-h-[400px]">
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-surface-700/50">
+              <h2 className="text-sm font-semibold text-surface-100 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center">
+                  <MdHistory className="text-lg" />
+                </div>
+                Atividade da Conta
+              </h2>
+            </div>
+            {atividades.length === 0 ? (
+              <div className="py-10 text-center">
+                <div className="w-12 h-12 mx-auto rounded-full bg-surface-800/40 flex items-center justify-center mb-3">
+                  <span className="w-2 h-2 rounded-full bg-surface-500 animate-pulse"></span>
+                </div>
+                <p className="text-surface-500 text-xs font-medium">Aguardando atividades...</p>
+              </div>
+            ) : (
+              <ul className="space-y-4 pr-1 max-h-[500px] overflow-y-auto custom-scrollbar">
+                {atividades.map(a => {
+                  const cfg = tipoConfig[a.tipo] || { emoji: '🔔', bg: 'bg-surface-700/30', ring: 'ring-surface-600/50' }
+                  const { primary, secondary } = parseAtividade(a)
+                  const tempo = formatRelativo(a.criado_em)
+
+                  return (
+                    <li key={a.id} className="flex items-start gap-3.5 group p-2 rounded-lg hover:bg-surface-800/40 transition-colors">
+                      <div className={`flex-shrink-0 w-10 h-10 mt-0.5 rounded-xl ${cfg.bg} ring-1 ${cfg.ring} flex items-center justify-center text-base shadow-sm group-hover:scale-105 transition-transform`}>
+                        {cfg.emoji}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] text-surface-200 font-medium leading-snug line-clamp-2">{primary}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {secondary && <span className="text-[11px] text-surface-400 truncate max-w-[120px]">{secondary}</span>}
+                          {secondary && <span className="w-1 h-1 rounded-full bg-surface-600"></span>}
+                          <span className="text-[10px] uppercase font-semibold text-primary-400/80 tracking-wider pt-0.5 inline-block">{tempo}</span>
+                        </div>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

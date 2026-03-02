@@ -111,110 +111,127 @@ export default function Contatos() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">Contatos</h1>
-          <p className="text-sm text-gray-500">{total.toLocaleString('pt-BR')} contatos cadastrados</p>
+          <h1 className="text-2xl font-bold text-surface-50 tracking-tight">Contatos</h1>
+          <p className="text-sm text-surface-400 mt-1">{total.toLocaleString('pt-BR')} contatos cadastrados</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
           <label className={`btn-secondary flex items-center gap-2 cursor-pointer ${importing ? 'opacity-50' : ''}`}>
-            <MdUpload /> {importing ? 'Importando...' : 'Importar XLSX'}
+            {importing ? (
+              <div className="w-4 h-4 border-2 border-surface-400 border-t-white rounded-full animate-spin" />
+            ) : (
+              <MdUpload size={18} />
+            )}
+            {importing ? 'Importando...' : 'Importar XLSX'}
             <input type="file" accept=".xlsx,.xls" onChange={handleImport} className="hidden" disabled={importing} />
           </label>
           <button onClick={handleExport} className="btn-secondary flex items-center gap-2">
-            <MdDownload /> Exportar
+            <MdDownload size={18} /> Exportar
           </button>
           <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
-            <MdAdd /> Adicionar
+            <MdAdd size={20} /> Adicionar
           </button>
         </div>
       </div>
 
       {/* Info banner */}
-      <div className="flex items-start gap-3 bg-blue-900/20 border border-blue-800/40 rounded-xl p-4">
-        <MdInfo className="text-blue-400 text-xl mt-0.5 flex-shrink-0" />
-        <p className="text-sm text-blue-300">
+      <div className="flex items-start gap-3 bg-primary-900/10 border border-primary-500/20 backdrop-blur-md rounded-2xl p-4 shadow-inner">
+        <MdInfo className="text-primary-400 text-xl mt-0.5 flex-shrink-0 drop-shadow-[0_0_8px_rgba(139,92,246,0.4)]" />
+        <p className="text-sm text-primary-200/80 leading-relaxed font-medium">
           Contatos são extraídos automaticamente quando alguém envia mensagem para suas sessões conectadas. Você também pode adicionar manualmente ou importar via XLSX.
         </p>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+      <div className="glass-card p-4 flex flex-wrap gap-4 items-center">
+        <div className="relative flex-1 min-w-[240px]">
+          <MdSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400 text-lg" />
           <input
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1) }}
             placeholder="Buscar por nome ou número..."
-            className="input pl-9"
+            className="input pl-10 w-full"
           />
         </div>
-        <select
-          value={filterBlacklist === null ? '' : String(filterBlacklist)}
-          onChange={e => {
-            setFilterBlacklist(e.target.value === '' ? null : e.target.value === 'true')
-            setPage(1)
-          }}
-          className="input w-auto"
-        >
-          <option value="">Todos</option>
-          <option value="false">Ativos</option>
-          <option value="true">Blacklist</option>
-        </select>
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-surface-400 whitespace-nowrap hidden sm:block">Filtrar por Status:</label>
+          <select
+            value={filterBlacklist === null ? '' : String(filterBlacklist)}
+            onChange={e => {
+              setFilterBlacklist(e.target.value === '' ? null : e.target.value === 'true')
+              setPage(1)
+            }}
+            className="input w-40"
+          >
+            <option value="">Todos os status</option>
+            <option value="false">Apenas Ativos</option>
+            <option value="true">Na Blacklist</option>
+          </select>
+        </div>
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
+      <div className="glass-card overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-800">
-                <th className="pb-3 pr-4 font-medium">Telefone</th>
-                <th className="pb-3 pr-4 font-medium">Nome</th>
-                <th className="pb-3 pr-4 font-medium">Status</th>
-                <th className="pb-3 font-medium">Ações</th>
+            <thead className="bg-surface-900/50">
+              <tr className="text-left text-surface-400 border-b border-surface-700/50">
+                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Telefone</th>
+                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Nome</th>
+                <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Status</th>
+                <th className="px-6 py-4 font-semibold tracking-wider text-xs text-right">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800">
+            <tbody className="divide-y divide-surface-800/50">
               {contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-8 text-center text-gray-600">
-                    Nenhum contato encontrado.
+                  <td colSpan={4} className="py-16 text-center text-surface-500">
+                    <div className="flex flex-col items-center justify-center">
+                      <MdSearch className="text-4xl mb-3 text-surface-600" />
+                      <p className="font-medium text-surface-400">Nenhum contato encontrado.</p>
+                      <p className="text-xs mt-1">Tente ajustar seus filtros de busca.</p>
+                    </div>
                   </td>
                 </tr>
               ) : contacts.map(c => (
-                <tr key={c.id}>
-                  <td className="py-3 pr-4 text-gray-200 font-mono">
-                    {c.phone}
-                    {isNew(c.created_at) && (
-                      <span className="ml-2 text-xs bg-green-900/50 text-green-400 border border-green-700/50 rounded px-1.5 py-0.5">Novo</span>
-                    )}
+                <tr key={c.id} className="hover:bg-surface-800/30 transition-colors">
+                  <td className="px-6 py-4 text-surface-200 font-mono">
+                    <div className="flex items-center gap-3">
+                      <span className="bg-surface-950 px-2.5 py-1 rounded border border-surface-800 shadow-inner">
+                        {c.phone}
+                      </span>
+                      {isNew(c.created_at) && (
+                        <span className="text-[10px] uppercase font-bold tracking-wider bg-primary-500/20 text-primary-400 border border-primary-500/30 rounded px-1.5 py-0.5">Novo</span>
+                      )}
+                    </div>
                   </td>
-                  <td className="py-3 pr-4 text-gray-300">{c.name || '–'}</td>
-                  <td className="py-3 pr-4">
+                  <td className="px-6 py-4 text-surface-300 font-medium">
+                    {c.name || <span className="text-surface-600 italic font-normal">Sem nome</span>}
+                  </td>
+                  <td className="px-6 py-4">
                     {c.is_blacklisted
                       ? <span className="badge-red">Blacklist</span>
                       : <span className="badge-green">Ativo</span>}
                   </td>
-                  <td className="py-3">
-                    <div className="flex items-center gap-1">
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => toggleBlacklist(c.id)}
-                        className={`p-1.5 rounded transition-colors ${
-                          c.is_blacklisted
-                            ? 'hover:bg-green-900/40 text-green-400'
-                            : 'hover:bg-yellow-900/40 text-yellow-400'
-                        }`}
+                        className={`p-2 rounded-lg transition-all border border-transparent ${c.is_blacklisted
+                            ? 'hover:bg-primary-900/30 text-primary-400 hover:border-primary-500/20'
+                            : 'hover:bg-amber-900/30 text-amber-400 hover:border-amber-500/20'
+                          }`}
                         title={c.is_blacklisted ? 'Remover da blacklist' : 'Adicionar à blacklist'}
                       >
-                        <MdBlock />
+                        <MdBlock size={18} />
                       </button>
                       <button
                         onClick={() => deleteContact(c.id)}
-                        className="p-1.5 rounded hover:bg-gray-800 text-gray-500 hover:text-gray-300 transition-colors"
-                        title="Deletar"
+                        className="p-2 rounded-lg hover:bg-red-900/20 text-surface-500 hover:text-red-400 transition-all border border-transparent hover:border-red-500/20"
+                        title="Deletar contato"
                       >
-                        <MdDelete />
+                        <MdDelete size={18} />
                       </button>
                     </div>
                   </td>
@@ -226,22 +243,22 @@ export default function Contatos() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-4 border-t border-gray-800 mt-2">
-            <span className="text-xs text-gray-500">
-              Página {page} de {totalPages}
+          <div className="flex items-center justify-between px-6 py-4 border-t border-surface-700/50 bg-surface-900/30">
+            <span className="text-sm font-medium text-surface-500">
+              Página <span className="text-surface-200">{page}</span> de <span className="text-surface-200">{totalPages}</span>
             </span>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="btn-secondary px-3 py-1 text-xs disabled:opacity-40"
+                className="btn-secondary px-4 py-1.5 text-sm disabled:opacity-40"
               >
                 Anterior
               </button>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="btn-secondary px-3 py-1 text-xs disabled:opacity-40"
+                className="btn-secondary px-4 py-1.5 text-sm disabled:opacity-40"
               >
                 Próxima
               </button>
@@ -252,29 +269,43 @@ export default function Contatos() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="card w-full max-w-md">
-            <h2 className="text-lg font-bold text-white mb-5">Adicionar Contato</h2>
-            <form onSubmit={handleCreate} className="space-y-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-[fadeIn_0.2s_ease-out]">
+          <div className="glass-card w-full max-w-md p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border-surface-600/50 animate-[slideIn_0.3s_ease-out]">
+            <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/50">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center">
+                  <MdAdd size={20} />
+                </div>
+                Adicionar Contato
+              </h2>
+            </div>
+
+            <form onSubmit={handleCreate} className="p-6 space-y-5">
               <div>
                 <label className="label">Telefone</label>
                 <input
                   name="phone" value={form.phone} onChange={update}
                   placeholder="5511999999999" required className="input"
                 />
-                <p className="text-xs text-gray-600 mt-1">Formato: 55 + DDD + número</p>
+                <p className="text-[11px] font-medium text-surface-500 mt-1.5 ml-1">Formato: 55 + DDD + número (apenas números)</p>
               </div>
               <div>
-                <label className="label">Nome (opcional)</label>
+                <label className="label">Nome <span className="text-surface-500 font-normal">(opcional)</span></label>
                 <input name="name" value={form.name} onChange={update}
-                  placeholder="João Silva" className="input" />
+                  placeholder="Ex: João da Silva" className="input" />
               </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1">
+
+              <div className="flex gap-3 pt-4 border-t border-surface-700/50 mt-2">
+                <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1 py-2.5">
                   Cancelar
                 </button>
-                <button type="submit" disabled={loading} className="btn-primary flex-1">
-                  {loading ? 'Salvando...' : 'Adicionar'}
+                <button type="submit" disabled={loading} className="btn-primary flex-1 py-2.5">
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      Salvando...
+                    </span>
+                  ) : 'Adicionar Contato'}
                 </button>
               </div>
             </form>

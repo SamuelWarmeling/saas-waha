@@ -6,11 +6,14 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+import logging
 
 import models
 import auth
 from database import get_db
 from grupo_extraction import fetch_groups_from_waha, extract_selected_groups
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/grupos", tags=["Grupos"])
 
@@ -75,8 +78,15 @@ async def list_waha_groups(
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
-    if session.status != models.SessionStatus.connected:
-        raise HTTPException(status_code=400, detail="Sessão não está conectada")
+    # Loga o status do banco mas não bloqueia — o WAHA é a fonte de verdade.
+    # O banco pode estar desatualizado (webhook não recebido, restart, etc).
+    db_status = str(session.status.value if hasattr(session.status, "value") else session.status)
+    is_connected = db_status.lower() in ("connected", "working")
+    if not is_connected:
+        logger.warning(
+            f"[GRUPOS] waha-list: sessão {session.session_id!r} tem status={db_status!r} "
+            f"no banco. Tentando buscar grupos no WAHA mesmo assim..."
+        )
 
     try:
         groups = await fetch_groups_from_waha(session.session_id)
@@ -96,7 +106,11 @@ async def list_waha_groups(
         return {"total": len(groups), "groups": groups}
 
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erro ao buscar grupos do WAHA: {str(e)}")
+        logger.error(f"[GRUPOS] waha-list falhou para sessão {session.session_id!r} (status DB={db_status!r}): {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Erro ao buscar grupos do WAHA (status DB: {db_status}): {str(e)}",
+        )
 
 
 @router.post("/session/{session_id}/extract-selected")
@@ -121,8 +135,14 @@ async def extract_selected(
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
-    if session.status != models.SessionStatus.connected:
-        raise HTTPException(status_code=400, detail="Sessão não está conectada")
+    # Loga se o banco não marcou como connected, mas não bloqueia.
+    db_status = str(session.status.value if hasattr(session.status, "value") else session.status)
+    is_connected = db_status.lower() in ("connected", "working")
+    if not is_connected:
+        logger.warning(
+            f"[GRUPOS] extract-selected: sessão {session.session_id!r} tem status={db_status!r} "
+            f"no banco. Tentando extrair mesmo assim..."
+        )
 
     if not body.group_ids:
         raise HTTPException(status_code=400, detail="Nenhum grupo selecionado")

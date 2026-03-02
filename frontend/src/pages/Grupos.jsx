@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react'
 import api from '../api'
 import toast from 'react-hot-toast'
-import { FiRefreshCw, FiTrash2, FiUsers, FiCheckSquare, FiSquare } from 'react-icons/fi'
+import {
+  MdGroup,
+  MdRefresh,
+  MdDelete,
+  MdPeople,
+  MdCheckBox,
+  MdCheckBoxOutlineBlank,
+  MdIndeterminateCheckBox,
+  MdClose,
+  MdDownload,
+} from 'react-icons/md'
 
 export default function Grupos() {
   const [sessoes, setSessoes] = useState([])
@@ -55,7 +65,6 @@ export default function Grupos() {
     try {
       const { data } = await api.get(`/grupos/session/${selectedSession}/waha-list`)
       setWahaGroups(data.groups || [])
-      // Pré-selecionar os que ainda não foram extraídos
       const novos = new Set(
         (data.groups || [])
           .filter(g => !g.already_extracted)
@@ -117,7 +126,6 @@ export default function Grupos() {
       )
       setLastResult(data)
       toast.success(data.message)
-      // Recarrega lista do WAHA (atualiza badge "já extraído") e do banco
       await Promise.all([loadWahaGroups(), loadDbGroups()])
     } catch (err) {
       const msg = err.response?.data?.detail || 'Erro na extração'
@@ -166,23 +174,24 @@ export default function Grupos() {
   return (
     <div className="space-y-6">
 
-      {/* ── Cabeçalho + seleção de sessão ────────────────────────────────── */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Grupos do WhatsApp</h2>
-        <p className="text-gray-500 text-sm mb-6">
-          Selecione uma sessão, marque os grupos desejados e clique em Extrair Selecionados.
-          Admins, números fora do Brasil e números fora de 12–13 dígitos são ignorados automaticamente.
+      {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
+      <div>
+        <h1 className="text-xl font-bold text-white">Grupos do WhatsApp</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Selecione uma sessão, marque os grupos e extraia os membros. Admins, números fora do Brasil
+          e números inválidos são ignorados automaticamente.
         </p>
+      </div>
 
+      {/* ── Seleção de sessão ─────────────────────────────────────────────── */}
+      <div className="card p-5">
         <div className="flex flex-col sm:flex-row gap-3 items-end">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Sessão
-            </label>
+            <label className="label">Sessão WhatsApp</label>
             <select
               value={selectedSession || ''}
               onChange={e => setSelectedSession(e.target.value ? parseInt(e.target.value) : null)}
-              className="block w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="input"
             >
               <option value="">-- Selecione uma sessão --</option>
               {sessoes.map(s => (
@@ -197,9 +206,9 @@ export default function Grupos() {
             <button
               onClick={loadWahaGroups}
               disabled={loadingWaha}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+              className="btn-secondary flex items-center gap-2 disabled:opacity-50"
             >
-              <FiRefreshCw className={loadingWaha ? 'animate-spin' : ''} />
+              <MdRefresh className={loadingWaha ? 'animate-spin' : ''} size={18} />
               Atualizar lista
             </button>
           )}
@@ -208,24 +217,24 @@ export default function Grupos() {
 
       {/* ── Resultado da última extração ─────────────────────────────────── */}
       {lastResult && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <p className="font-semibold text-green-800 mb-1">Extração concluída</p>
+        <div className="bg-green-900/20 border border-green-800/40 rounded-xl p-4">
+          <p className="font-semibold text-green-400 mb-3">Extração concluída</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-            <div className="bg-white rounded p-3 text-center shadow-sm">
-              <div className="text-2xl font-bold text-green-600">{lastResult.extracted_members}</div>
-              <div className="text-gray-500">Membros salvos</div>
+            <div className="bg-black/30 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-green-400">{lastResult.extracted_members}</div>
+              <div className="text-gray-400 text-xs mt-1">Membros salvos</div>
             </div>
-            <div className="bg-white rounded p-3 text-center shadow-sm">
-              <div className="text-2xl font-bold text-gray-700">{lastResult.skipped_admin}</div>
-              <div className="text-gray-500">Admins ignorados</div>
+            <div className="bg-black/30 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-gray-300">{lastResult.skipped_admin}</div>
+              <div className="text-gray-400 text-xs mt-1">Admins ignorados</div>
             </div>
-            <div className="bg-white rounded p-3 text-center shadow-sm">
-              <div className="text-2xl font-bold text-gray-700">{lastResult.skipped_nonbr}</div>
-              <div className="text-gray-500">Não-BR ignorados</div>
+            <div className="bg-black/30 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-gray-300">{lastResult.skipped_nonbr}</div>
+              <div className="text-gray-400 text-xs mt-1">Não-BR ignorados</div>
             </div>
-            <div className="bg-white rounded p-3 text-center shadow-sm">
-              <div className="text-2xl font-bold text-gray-700">{lastResult.skipped_invalid}</div>
-              <div className="text-gray-500">Inválidos ignorados</div>
+            <div className="bg-black/30 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-gray-300">{lastResult.skipped_invalid}</div>
+              <div className="text-gray-400 text-xs mt-1">Inválidos ignorados</div>
             </div>
           </div>
         </div>
@@ -233,112 +242,131 @@ export default function Grupos() {
 
       {/* ── Lista de grupos do WAHA (para seleção) ───────────────────────── */}
       {selectedSession && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-wrap gap-3">
+        <div className="card overflow-hidden">
+          {/* Header do card */}
+          <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between flex-wrap gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                Grupos disponíveis no WhatsApp
+              <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                <MdGroup size={20} className="text-green-500" />
+                Grupos disponíveis
                 {wahaGroups.length > 0 && (
-                  <span className="ml-2 text-sm font-normal text-gray-500">
+                  <span className="text-sm font-normal text-gray-500">
                     ({wahaGroups.length} grupos)
                   </span>
                 )}
-              </h3>
+              </h2>
               {selectedIds.size > 0 && (
-                <p className="text-sm text-blue-600">{selectedIds.size} selecionados</p>
+                <p className="text-xs text-green-400 mt-0.5">{selectedIds.size} selecionado(s)</p>
               )}
             </div>
+
             <div className="flex gap-2">
               {wahaGroups.length > 0 && (
                 <button
                   onClick={toggleAll}
-                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1"
+                  className="btn-secondary flex items-center gap-1.5 text-sm py-1.5 px-3"
                 >
-                  {allChecked ? <FiCheckSquare className="text-blue-500" /> : <FiSquare />}
+                  {allChecked
+                    ? <MdCheckBox size={16} className="text-green-400" />
+                    : someChecked
+                      ? <MdIndeterminateCheckBox size={16} className="text-green-400" />
+                      : <MdCheckBoxOutlineBlank size={16} />
+                  }
                   {allChecked ? 'Desmarcar todos' : 'Selecionar todos'}
                 </button>
               )}
+
               <button
                 onClick={extractSelected}
                 disabled={extracting || selectedIds.size === 0}
-                className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
+                className="btn-primary flex items-center gap-2 disabled:opacity-40"
               >
-                {extracting
-                  ? <><FiRefreshCw className="animate-spin" /> Extraindo...</>
-                  : <><FiUsers /> Extrair Selecionados ({selectedIds.size})</>
-                }
+                {extracting ? (
+                  <>
+                    <div className="w-4 h-4 border-b-2 border-white rounded-full animate-spin" />
+                    Extraindo...
+                  </>
+                ) : (
+                  <>
+                    <MdDownload size={18} />
+                    Extrair selecionados ({selectedIds.size})
+                  </>
+                )}
               </button>
             </div>
           </div>
 
+          {/* Corpo */}
           {loadingWaha ? (
-            <div className="p-8 text-center text-gray-400">
-              <FiRefreshCw className="animate-spin mx-auto mb-2 text-2xl" />
+            <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+              <div className="w-8 h-8 border-b-2 border-green-500 rounded-full animate-spin mb-3" />
               Carregando grupos...
             </div>
           ) : wahaGroups.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">
-              {selectedSession
-                ? 'Nenhum grupo encontrado. Certifique-se de que a sessão está conectada.'
-                : 'Selecione uma sessão para ver os grupos.'}
+            <div className="flex flex-col items-center justify-center py-16 text-gray-600">
+              <MdGroup size={48} className="mb-3 text-gray-700" />
+              <p className="text-sm">Nenhum grupo encontrado.</p>
+              <p className="text-xs text-gray-700 mt-1">Certifique-se de que a sessão está conectada no WhatsApp.</p>
             </div>
           ) : (
             <div className="overflow-x-auto max-h-96 overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                <thead className="sticky top-0 bg-gray-900 border-b border-gray-800">
                   <tr>
                     <th className="w-10 px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={allChecked}
-                        ref={el => { if (el) el.indeterminate = someChecked }}
-                        onChange={toggleAll}
-                        className="w-4 h-4 rounded text-blue-600 cursor-pointer"
-                      />
+                      <button onClick={toggleAll} className="text-gray-400 hover:text-white">
+                        {allChecked
+                          ? <MdCheckBox size={18} className="text-green-400" />
+                          : someChecked
+                            ? <MdIndeterminateCheckBox size={18} className="text-green-400" />
+                            : <MdCheckBoxOutlineBlank size={18} />
+                        }
+                      </button>
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600 uppercase text-xs">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Nome do Grupo
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600 uppercase text-xs">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Participantes
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600 uppercase text-xs">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-800">
                   {wahaGroups.map(grupo => (
                     <tr
                       key={grupo.id}
                       onClick={() => toggleGroup(grupo.id)}
-                      className={`cursor-pointer hover:bg-blue-50 transition-colors ${
-                        selectedIds.has(grupo.id) ? 'bg-blue-50' : ''
+                      className={`cursor-pointer transition-colors ${
+                        selectedIds.has(grupo.id)
+                          ? 'bg-green-900/10 hover:bg-green-900/20'
+                          : 'hover:bg-gray-800/50'
                       }`}
                     >
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(grupo.id)}
-                          onChange={() => toggleGroup(grupo.id)}
-                          className="w-4 h-4 rounded text-blue-600 cursor-pointer"
-                        />
+                        <button onClick={() => toggleGroup(grupo.id)} className="text-gray-400 hover:text-white">
+                          {selectedIds.has(grupo.id)
+                            ? <MdCheckBox size={18} className="text-green-400" />
+                            : <MdCheckBoxOutlineBlank size={18} />
+                          }
+                        </button>
                       </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">
+                      <td className="px-4 py-3 font-medium text-gray-200">
                         {grupo.name}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {grupo.size}
+                      <td className="px-4 py-3 text-gray-400">
+                        <span className="flex items-center gap-1">
+                          <MdPeople size={14} />
+                          {grupo.size}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         {grupo.already_extracted ? (
-                          <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
-                            Extraído
-                          </span>
+                          <span className="badge-green">Extraído</span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">
-                            Não extraído
-                          </span>
+                          <span className="badge-gray">Não extraído</span>
                         )}
                       </td>
                     </tr>
@@ -352,52 +380,52 @@ export default function Grupos() {
 
       {/* ── Grupos já extraídos (banco) ───────────────────────────────────── */}
       {selectedSession && dbGroups.length > 0 && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="p-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-800">
+            <h2 className="text-base font-semibold text-white">
               Grupos extraídos
               <span className="ml-2 text-sm font-normal text-gray-500">
                 ({dbTotal} total)
               </span>
-            </h3>
+            </h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="border-b border-gray-800">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Nome</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Membros salvos</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Última extração</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Ações</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Membros</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última extração</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-800">
                 {dbGroups.map(grupo => (
-                  <tr key={grupo.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{grupo.name}</td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 font-medium">
-                        {grupo.member_count}
-                      </span>
+                  <tr key={grupo.id} className="hover:bg-gray-800/40 transition-colors">
+                    <td className="px-5 py-3 font-medium text-gray-200">{grupo.name}</td>
+                    <td className="px-5 py-3">
+                      <span className="badge-green">{grupo.member_count} membros</span>
                     </td>
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-5 py-3 text-gray-500 text-xs">
                       {grupo.last_extracted_at
                         ? new Date(grupo.last_extracted_at).toLocaleString('pt-BR')
                         : '–'}
                     </td>
-                    <td className="px-4 py-3 flex items-center gap-3">
-                      <button
-                        onClick={() => loadMembers(grupo)}
-                        className="text-blue-600 hover:text-blue-800 font-medium text-xs"
-                      >
-                        Ver membros
-                      </button>
-                      <button
-                        onClick={() => deleteGroup(grupo.id)}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <FiTrash2 />
-                      </button>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => loadMembers(grupo)}
+                          className="text-xs text-green-400 hover:text-green-300 font-medium transition-colors"
+                        >
+                          Ver membros
+                        </button>
+                        <button
+                          onClick={() => deleteGroup(grupo.id)}
+                          className="p-1 rounded hover:bg-red-900/30 text-gray-500 hover:text-red-400 transition-colors"
+                        >
+                          <MdDelete size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -409,47 +437,62 @@ export default function Grupos() {
 
       {/* ── Membros do grupo selecionado ──────────────────────────────────── */}
       {memberGroup && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Membros: {memberGroup.name}
-              <span className="ml-2 text-sm font-normal text-gray-500">
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-white flex items-center gap-2">
+              <MdPeople size={18} className="text-green-500" />
+              {memberGroup.name}
+              <span className="text-sm font-normal text-gray-500">
                 ({membersTotal} contatos)
               </span>
-            </h3>
+            </h2>
             <button
               onClick={() => { setMemberGroup(null); setMembers([]) }}
-              className="text-gray-400 hover:text-gray-600 text-sm"
+              className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-300 transition-colors"
             >
-              Fechar
+              <MdClose size={18} />
             </button>
           </div>
 
           {loadingMembers ? (
-            <div className="text-center text-gray-400 py-4">
-              <FiRefreshCw className="animate-spin mx-auto mb-1" />
-              Carregando...
+            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+              <div className="w-7 h-7 border-b-2 border-green-500 rounded-full animate-spin mb-3" />
+              Carregando membros...
+            </div>
+          ) : members.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-600">
+              <MdPeople size={40} className="mb-2 text-gray-700" />
+              <p className="text-sm">Nenhum membro encontrado.</p>
             </div>
           ) : (
             <div className="overflow-x-auto max-h-80 overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b sticky top-0">
+                <thead className="sticky top-0 bg-gray-900 border-b border-gray-800">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Telefone</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Nome</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-800">
                   {members.map(m => (
-                    <tr key={m.id}>
-                      <td className="px-4 py-2 font-mono text-gray-800">{m.phone}</td>
-                      <td className="px-4 py-2 text-gray-600">{m.name || '–'}</td>
+                    <tr key={m.id} className="hover:bg-gray-800/40 transition-colors">
+                      <td className="px-5 py-3 font-mono text-gray-200">{m.phone}</td>
+                      <td className="px-5 py-3 text-gray-400">{m.name || '–'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Estado vazio: nenhuma sessão selecionada ─────────────────────── */}
+      {!selectedSession && (
+        <div className="card flex flex-col items-center justify-center py-20 text-gray-600">
+          <MdGroup size={56} className="mb-4 text-gray-700" />
+          <p className="text-base font-medium text-gray-500">Selecione uma sessão para ver os grupos</p>
+          <p className="text-sm text-gray-700 mt-1">Os grupos disponíveis no WhatsApp serão listados aqui</p>
         </div>
       )}
     </div>

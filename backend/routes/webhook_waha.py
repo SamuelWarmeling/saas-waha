@@ -14,8 +14,8 @@ def normalize_phone(raw: str) -> str:
 
 
 def is_valid_phone(phone: str) -> bool:
-    """Valida que o número tem entre 10 e 15 dígitos."""
-    return 10 <= len(phone) <= 15
+    """Valida número brasileiro: começa com '55' e tem 12 ou 13 dígitos."""
+    return phone.startswith("55") and len(phone) in (12, 13)
 
 
 def upsert_contact(db: Session, user_id: int, phone: str, name: str | None) -> bool:

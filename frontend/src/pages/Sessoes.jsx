@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { MdAdd, MdRefresh, MdQrCode, MdDelete, MdCheckCircle, MdError, MdInfo } from 'react-icons/md'
+import {
+  MdAdd, MdRefresh, MdQrCode, MdDelete, MdCheckCircle, MdInfo, MdContentCopy,
+} from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
 
@@ -10,11 +12,57 @@ const STATUS_CONFIG = {
   error: { label: 'Erro', cls: 'badge-red' },
 }
 
+function formatPhone(raw) {
+  if (!raw) return null
+  const digits = raw.replace(/\D/g, '')
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+    const ddd = digits.slice(2, 4)
+    const num = digits.slice(4)
+    if (num.length === 9) return `(${ddd}) ${num.slice(0, 5)}-${num.slice(5)}`
+    if (num.length === 8) return `(${ddd}) ${num.slice(0, 4)}-${num.slice(4)}`
+  }
+  return raw
+}
+
+function SessionIdBadge({ sessionId }) {
+  const [copied, setCopied] = useState(false)
+
+  function copy(e) {
+    e.stopPropagation()
+    navigator.clipboard.writeText(sessionId).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md"
+      style={{
+        background: 'rgba(88,28,135,0.2)',
+        border: '1px solid rgba(107,33,168,0.45)',
+      }}
+    >
+      <span className="text-[10px] text-surface-500 select-none">ID:</span>
+      <span className="font-mono text-[11px] text-primary-400 tracking-wide">{sessionId}</span>
+      <button
+        onClick={copy}
+        title="Copiar ID"
+        className="ml-0.5 transition-all duration-150 opacity-30 hover:opacity-100 hover:text-primary-400 text-surface-300 flex items-center"
+      >
+        {copied
+          ? <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wide">Copiado!</span>
+          : <MdContentCopy size={12} />
+        }
+      </button>
+    </div>
+  )
+}
+
 export default function Sessoes() {
   const [sessions, setSessions] = useState([])
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [qrSession, setQrSession] = useState(null) // { id, name, qr, status }
+  const [qrSession, setQrSession] = useState(null)
   const [form, setForm] = useState({ name: '', delay_min: 5, delay_max: 15 })
 
   const load = useCallback(async () => {
@@ -152,7 +200,9 @@ export default function Sessoes() {
             <MdQrCode className="text-4xl text-surface-500" />
           </div>
           <p className="text-lg font-semibold text-surface-300">Nenhuma sessão criada</p>
-          <p className="text-sm text-surface-500 mt-2 max-w-sm mx-auto">Para começar a enviar mensagens e extrair contatos, crie uma nova sessão e escaneie o QR Code com seu WhatsApp.</p>
+          <p className="text-sm text-surface-500 mt-2 max-w-sm mx-auto">
+            Para começar a enviar mensagens e extrair contatos, crie uma nova sessão e escaneie o QR Code com seu WhatsApp.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -160,36 +210,77 @@ export default function Sessoes() {
             const st = STATUS_CONFIG[sess.status] || STATUS_CONFIG.disconnected
             const pct = sess.max_daily_messages > 0
               ? Math.round((sess.messages_sent_today / sess.max_daily_messages) * 100) : 0
+            const phoneFormatted = formatPhone(sess.phone_number)
 
             return (
-              <div key={sess.id} className="glass-card space-y-5 p-0 overflow-hidden flex flex-col transition-all hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)] group border-surface-700/50 hover:border-surface-600">
-                <div className={`p-6 border-b ${sess.status === 'connected' ? 'bg-primary-900/10 border-primary-900/30' : sess.status === 'error' ? 'bg-red-900/10 border-red-900/30' : sess.status === 'connecting' ? 'bg-amber-900/10 border-amber-900/30' : 'bg-surface-900/30 border-surface-800/50'}`}>
+              <div
+                key={sess.id}
+                className="glass-card space-y-5 p-0 overflow-hidden flex flex-col transition-all hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)] group"
+              >
+                {/* Header do card */}
+                <div className={`p-6 border-b ${
+                  sess.status === 'connected'
+                    ? 'bg-primary-900/10 border-primary-900/30'
+                    : sess.status === 'error'
+                      ? 'bg-red-900/10 border-red-900/30'
+                      : sess.status === 'connecting'
+                        ? 'bg-amber-900/10 border-amber-900/30'
+                        : 'bg-surface-900/30 border-surface-800/50'
+                }`}>
                   <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold text-surface-100 group-hover:text-primary-300 transition-colors">{sess.name}</h3>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="text-xs font-mono bg-surface-950 px-2 py-0.5 rounded border border-surface-800 text-surface-300 shadow-inner">
-                          {sess.phone_number || 'Sem número'}
-                        </span>
+                    <div className="min-w-0 flex-1 pr-3">
+                      {/* Nome */}
+                      <h3 className="text-lg font-bold text-surface-100 group-hover:text-primary-300 transition-colors truncate">
+                        {sess.name}
+                      </h3>
+
+                      {/* Telefone formatado ou status de conexão */}
+                      <div className="mt-1.5">
+                        {phoneFormatted ? (
+                          <span
+                            className="inline-flex items-center text-xs font-mono px-2 py-0.5 rounded"
+                            style={{
+                              background: 'rgba(11,9,20,0.5)',
+                              border: '1px solid rgba(45,34,68,0.8)',
+                              color: '#cbd5e1',
+                            }}
+                          >
+                            {phoneFormatted}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-surface-500 italic">
+                            {sess.status === 'connected' ? 'WhatsApp conectado' : 'Aguardando número'}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[11px] text-surface-500 font-mono mt-2 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-surface-600"></span> ID: {sess.session_id}
-                      </p>
+
+                      {/* Badge tech do session_id com botão copiar */}
+                      <SessionIdBadge sessionId={sess.session_id} />
                     </div>
-                    <span className={`${st.cls} shadow-sm px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold`}>{st.label}</span>
+
+                    <span className={`${st.cls} shadow-sm px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold flex-shrink-0`}>
+                      {st.label}
+                    </span>
                   </div>
                 </div>
 
                 <div className="p-6 pt-2 flex-1 space-y-5">
-                  {/* Daily limit */}
+                  {/* Barra de limite diário */}
                   <div className="bg-surface-900/40 rounded-xl p-3.5 border border-surface-800/60 shadow-inner">
                     <div className="flex justify-between text-xs text-surface-400 font-medium mb-2">
-                      <span className="flex items-center gap-1.5"><div className="w-1 h-3 rounded-full bg-primary-500"></div> Disparos hoje</span>
+                      <span className="flex items-center gap-1.5">
+                        <div className="w-1 h-3 rounded-full bg-primary-500"></div>
+                        Disparos hoje
+                      </span>
                       <span><strong className="text-surface-200">{sess.messages_sent_today}</strong> / {sess.max_daily_messages}</span>
                     </div>
                     <div className="w-full bg-surface-950 rounded-full h-2 overflow-hidden border border-surface-800 shadow-inner">
                       <div
-                        className={`h-full rounded-full transition-all duration-1000 ease-out relative ${pct >= 90 ? 'bg-red-500 shadow-[0_0_10px_theme(colors.red.500)]' : 'bg-gradient-to-r from-primary-600 to-primary-400 shadow-[0_0_10px_theme(colors.primary.500/50)]'}`}
+                        className={`h-full rounded-full transition-all duration-1000 ease-out relative ${
+                          pct >= 90
+                            ? 'bg-red-500 shadow-[0_0_10px_theme(colors.red.500)]'
+                            : 'bg-gradient-to-r from-primary-600 to-primary-400 shadow-[0_0_10px_theme(colors.primary.500/50)]'
+                        }`}
                         style={{ width: `${Math.min(pct, 100)}%` }}
                       >
                         <div className="absolute top-0 left-0 w-full h-full bg-white/20"></div>
@@ -199,11 +290,13 @@ export default function Sessoes() {
 
                   <div className="flex items-center justify-between text-[11px] font-medium text-surface-400 bg-surface-800/30 py-2 px-3 rounded-lg border border-surface-700/30">
                     <span className="uppercase tracking-wider">Delay Configurado</span>
-                    <span className="text-surface-200 bg-surface-900 px-2 py-0.5 rounded shadow-inner border border-surface-800">{sess.delay_min}s – {sess.delay_max}s</span>
+                    <span className="text-surface-200 bg-surface-900 px-2 py-0.5 rounded shadow-inner border border-surface-800">
+                      {sess.delay_min}s – {sess.delay_max}s
+                    </span>
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* Ações */}
                 <div className="p-4 bg-surface-900/50 border-t border-surface-700/50 flex gap-3">
                   {sess.status === 'disconnected' || sess.status === 'error' ? (
                     <button
@@ -242,7 +335,7 @@ export default function Sessoes() {
         </div>
       )}
 
-      {/* QR Code Modal */}
+      {/* Modal QR Code */}
       {qrSession && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-[fadeIn_0.2s_ease-out]">
           <div className="glass-card w-full max-w-sm p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border-surface-600/50 animate-[slideIn_0.3s_ease-out] text-center">
@@ -255,7 +348,7 @@ export default function Sessoes() {
             </div>
 
             <div className="p-8">
-              <p className="text-xs text-surface-400 mb-6 bg-surface-800/50 p-3 rounded-lg border border-surface-700/50">
+              <p className="text-xs text-surface-400 mb-6 bg-surface-800/50 p-3 rounded-lg border border-surface-700/50 text-left leading-relaxed">
                 1. Abra o WhatsApp no celular<br />
                 2. Toque em <strong>Menu</strong> ou <strong>Configurações</strong><br />
                 3. Selecione <strong>Aparelhos conectados</strong><br />
@@ -272,7 +365,7 @@ export default function Sessoes() {
                 </div>
               ) : qrSession.qr ? (
                 <div className="relative inline-block">
-                  <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-purple-500 blur-xl opacity-20 rounded-2xl"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-primary-700 blur-xl opacity-20 rounded-2xl"></div>
                   <img
                     key={qrSession.qr}
                     src={qrSession.qr}
@@ -329,7 +422,7 @@ export default function Sessoes() {
                 />
                 <p className="text-[11px] font-medium text-surface-500 mt-1.5 ml-1 flex items-center gap-1">
                   <MdInfo size={12} className="text-surface-400" />
-                  ID interno gerado automaticamente (ex: u1_01)
+                  Um ID técnico será gerado automaticamente para esta sessão
                 </p>
               </div>
 
@@ -350,7 +443,9 @@ export default function Sessoes() {
                       onChange={update} min={1} max={120} className="input text-center" />
                   </div>
                 </div>
-                <p className="text-[11px] text-surface-500 mt-3 text-center">Tempo aleatório aguardado entre cada mensagem enviada para evitar bloqueios.</p>
+                <p className="text-[11px] text-surface-500 mt-3 text-center">
+                  Tempo aleatório aguardado entre cada mensagem enviada para evitar bloqueios.
+                </p>
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-surface-700/50 mt-2">

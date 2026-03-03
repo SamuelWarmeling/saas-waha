@@ -158,20 +158,20 @@ export default function Dashboard() {
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorEnv" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#9D4EDD" stopOpacity={0.45} />
+                    <stop offset="95%" stopColor="#9D4EDD" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} dy={10} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d2244" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} dy={10} />
+                <YAxis tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip
-                  contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}
+                  contentStyle={{ background: '#120e1e', border: '1px solid rgba(157,78,221,0.2)', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.6)' }}
                   labelStyle={{ color: '#cbd5e1', fontWeight: 600, paddingBottom: 4 }}
-                  itemStyle={{ color: '#a78bfa', fontWeight: 500 }}
-                  cursor={{ stroke: '#475569', strokeWidth: 1, strokeDasharray: '4 4' }}
+                  itemStyle={{ color: '#b07de6', fontWeight: 500 }}
+                  cursor={{ stroke: '#3d3058', strokeWidth: 1, strokeDasharray: '4 4' }}
                 />
-                <Area type="monotone" dataKey="enviados" stroke="#8b5cf6" fill="url(#colorEnv)" strokeWidth={3} activeDot={{ r: 6, fill: '#8b5cf6', stroke: '#fff', strokeWidth: 2 }} />
+                <Area type="monotone" dataKey="enviados" stroke="#9D4EDD" fill="url(#colorEnv)" strokeWidth={2.5} activeDot={{ r: 6, fill: '#9D4EDD', stroke: '#0B0914', strokeWidth: 2, filter: 'drop-shadow(0 0 6px #9D4EDD)' }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

@@ -20,28 +20,72 @@ export default function Header() {
   }
 
   return (
-    <header className="h-16 bg-surface-900/40 backdrop-blur-xl border-b border-surface-700/50 flex items-center justify-between px-6 sticky top-0 z-20 shadow-sm">
+    <header
+      className="h-16 flex items-center justify-between px-6 sticky top-0 z-20"
+      style={{
+        background: 'rgba(26,22,37,0.85)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(157,78,221,0.2)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+      }}
+    >
       <div />
       <div className="flex items-center gap-4">
         {user && (
           <div className="flex items-center gap-2">
             <span
-              className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${isPlanActive
-                  ? 'bg-primary-900/30 text-primary-300 border-primary-500/30 shadow-[0_0_10px_theme(colors.primary.900/40)]'
-                  : 'bg-red-900/30 text-red-400 border-red-500/30'
-                }`}
+              className="text-xs px-2.5 py-1 rounded-full font-semibold"
+              style={
+                isPlanActive
+                  ? {
+                      background: 'rgba(157,78,221,0.12)',
+                      color: '#b07de6',
+                      border: '1px solid rgba(157,78,221,0.35)',
+                      boxShadow: '0 0 12px rgba(157,78,221,0.15)',
+                    }
+                  : {
+                      background: 'rgba(239,68,68,0.12)',
+                      color: '#f87171',
+                      border: '1px solid rgba(239,68,68,0.3)',
+                    }
+              }
             >
               {isPlanActive ? `Plano ${planLabel[user.plan] || user.plan}` : 'Plano expirado'}
             </span>
           </div>
         )}
-        <button className="relative w-10 h-10 flex items-center justify-center rounded-xl text-surface-400 hover:text-primary-300 hover:bg-surface-800/50 transition-all border border-transparent hover:border-surface-600/50">
+        <button
+          className="relative w-10 h-10 flex items-center justify-center rounded-xl text-surface-400 transition-all"
+          style={{ border: '1px solid rgba(157,78,221,0.15)' }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(157,78,221,0.1)'
+            e.currentTarget.style.color = '#b07de6'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.color = ''
+          }}
+        >
           <MdNotifications className="text-xl" />
-          {/* Mock notification dot */}
-          <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-primary-500 rounded-full animate-pulse shadow-[0_0_8px_theme(colors.primary.500)]"></span>
+          <span
+            className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full animate-pulse"
+            style={{ background: '#9D4EDD', boxShadow: '0 0 8px #9D4EDD' }}
+          />
         </button>
-        <div className="flex items-center gap-3 bg-surface-800/40 border border-surface-700/50 rounded-xl px-4 py-2 hover:bg-surface-800/60 transition-colors cursor-pointer">
-          <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-primary-500 to-primary-700 flex items-center justify-center text-white shadow-sm shadow-primary-900/50">
+        <div
+          className="flex items-center gap-3 rounded-xl px-4 py-2 cursor-pointer transition-all"
+          style={{
+            background: 'rgba(26,22,37,0.6)',
+            border: '1px solid rgba(157,78,221,0.2)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(157,78,221,0.1)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(26,22,37,0.6)' }}
+        >
+          <div
+            className="w-6 h-6 rounded-full flex items-center justify-center text-white shadow-sm"
+            style={{ background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)' }}
+          >
             <MdPerson className="text-sm" />
           </div>
           <span className="text-sm font-medium text-surface-200">{user?.name || '...'}</span>

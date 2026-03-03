@@ -420,7 +420,7 @@ export default function Grupos() {
                   <tr key={grupo.id} className="hover:bg-surface-800/30 transition-colors">
                     <td className="px-6 py-4 font-medium text-surface-100">{grupo.name}</td>
                     <td className="px-6 py-4">
-                      <span className="badge-green px-2.5 py-1">{grupo.member_count} membros</span>
+                      <span className="badge-primary px-2.5 py-1">{grupo.member_count} membros</span>
                     </td>
                     <td className="px-6 py-4 text-surface-500 text-xs font-mono">
                       {grupo.last_extracted_at

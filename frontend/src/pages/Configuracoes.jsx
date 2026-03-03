@@ -23,8 +23,8 @@ const PLANS = [
     id: 'business', name: 'Business', price: 797,
     sessions: 10, messages: 1000,
     features: ['10 sessões WhatsApp', '1000 disparos/dia', 'API de integração', 'Suporte dedicado', 'Relatórios em tempo real'],
-    color: 'border-purple-600',
-    btnClass: 'bg-purple-600 hover:bg-purple-500 text-white font-medium px-4 py-2 rounded-lg transition-colors',
+    color: 'border-primary-600',
+    btnClass: 'btn-primary',
   },
 ]
 

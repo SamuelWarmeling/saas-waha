@@ -18,6 +18,7 @@ const EMPTY_FORM = {
   session_ids: [],
   delay_min: 3,
   delay_max: 8,
+  ordem_mensagens: 'aleatorio',
 }
 
 function ProgressBar({ percent }) {
@@ -121,6 +122,7 @@ export default function Campanhas() {
         session_ids: form.session_ids,
         delay_min: Number(form.delay_min),
         delay_max: Number(form.delay_max),
+        ordem_mensagens: form.ordem_mensagens,
       })
       toast.success('Campanha criada!')
       setShowModal(false)
@@ -362,10 +364,59 @@ export default function Campanhas() {
                     </div>
                   ))}
                 </div>
-                <div className="mt-4 flex items-start gap-2 bg-primary-900/10 p-3 rounded-lg border border-primary-500/20">
+                {/* Ordem de envio */}
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Ordem de envio</p>
+                  <div
+                    className="flex rounded-xl p-1 gap-1"
+                    style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}
+                  >
+                    {[
+                      { value: 'aleatorio', icon: '🔀', label: 'Aleatório', desc: 'Mensagem sorteada a cada envio' },
+                      { value: 'sequencial', icon: '🔢', label: 'Em ordem', desc: 'Mensagem 1 → contato 1, mensagem 2 → contato 2…' },
+                    ].map(opt => {
+                      const active = form.ordem_mensagens === opt.value
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, ordem_mensagens: opt.value }))}
+                          className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200"
+                          style={
+                            active
+                              ? {
+                                  background: 'linear-gradient(135deg, rgba(157,78,221,0.25), rgba(106,13,173,0.2))',
+                                  color: '#b07de6',
+                                  border: '1px solid rgba(157,78,221,0.4)',
+                                  boxShadow: '0 0 12px rgba(157,78,221,0.15)',
+                                }
+                              : {
+                                  color: '#64748b',
+                                  background: 'transparent',
+                                  border: '1px solid transparent',
+                                }
+                          }
+                        >
+                          <span className="text-base leading-none">{opt.icon}</span>
+                          <div className="text-left">
+                            <div>{opt.label}</div>
+                            <div
+                              className="text-[10px] font-normal leading-tight mt-0.5"
+                              style={{ color: active ? 'rgba(176,125,230,0.7)' : '#475569' }}
+                            >
+                              {opt.desc}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-start gap-2 bg-primary-900/10 p-3 rounded-lg border border-primary-500/20">
                   <MdInfo className="text-primary-400 text-lg flex-shrink-0" />
                   <p className="text-[11px] leading-relaxed text-primary-200/70 font-medium">
-                    As mensagens selecionadas serão enviadas aleatoriamente em formato de rodízio para os contatos. Você pode usar a variável <span className="font-mono text-primary-300 bg-primary-900/40 px-1 py-0.5 rounded border border-primary-800/50">{'{nome}'}</span> no texto.
+                    Use a variável <span className="font-mono text-primary-300 bg-primary-900/40 px-1 py-0.5 rounded border border-primary-800/50">{'{nome}'}</span> para personalizar o texto com o nome do contato.
                   </p>
                 </div>
               </div>

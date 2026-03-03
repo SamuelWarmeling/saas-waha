@@ -129,6 +129,7 @@ class Campaign(Base):
     session_id = Column(Integer, ForeignKey("whatsapp_sessions.id"), nullable=True)  # legado
     delay_min = Column(Integer, default=5)
     delay_max = Column(Integer, default=15)
+    ordem_mensagens = Column(String(20), default="aleatorio", nullable=False, server_default="aleatorio")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)

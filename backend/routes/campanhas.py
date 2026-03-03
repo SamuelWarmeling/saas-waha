@@ -26,6 +26,7 @@ class CampaignCreate(BaseModel):
     delay_min: Optional[int] = 3
     delay_max: Optional[int] = 8
     media_url: Optional[str] = None
+    ordem_mensagens: Optional[str] = "aleatorio"  # "aleatorio" | "sequencial"
 
     @field_validator("messages")
     @classmethod
@@ -61,6 +62,7 @@ class CampaignOut(BaseModel):
     fail_count: int
     delay_min: int
     delay_max: int
+    ordem_mensagens: str = "aleatorio"
     media_url: Optional[str]
     created_at: datetime
     started_at: Optional[datetime]
@@ -107,6 +109,7 @@ def _campaign_out(c: models.Campaign) -> dict:
         "fail_count": c.fail_count,
         "delay_min": c.delay_min,
         "delay_max": c.delay_max,
+        "ordem_mensagens": c.ordem_mensagens or "aleatorio",
         "media_url": c.media_url,
         "created_at": c.created_at,
         "started_at": c.started_at,
@@ -163,12 +166,13 @@ async def send_campaign(campaign_id: int, user_id: int):
             .all()
         )
 
+        ordem = campaign.ordem_mensagens or "aleatorio"
         headers = {}
         if settings.WAHA_API_KEY:
             headers["X-Api-Key"] = settings.WAHA_API_KEY
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            for cc in pending:
+            for contact_index, cc in enumerate(pending):
                 # Verificar se pausou/cancelou
                 campaign = db.query(models.Campaign).filter(
                     models.Campaign.id == campaign_id
@@ -185,8 +189,11 @@ async def send_campaign(campaign_id: int, user_id: int):
                     db.commit()
                     continue
 
-                # ── Escolher mensagem aleatória ────────────────────────────
-                text_template = random.choice(message_texts)
+                # ── Escolher mensagem (aleatória ou sequencial) ────────────
+                if ordem == "sequencial":
+                    text_template = message_texts[contact_index % len(message_texts)]
+                else:
+                    text_template = random.choice(message_texts)
                 text = text_template.replace("{nome}", contact.name or "Cliente")
 
                 # ── Escolher sessão disponível (rodízio aleatório) ─────────
@@ -328,6 +335,7 @@ def create_campaign(
         delay_min=data.delay_min,
         delay_max=data.delay_max,
         media_url=data.media_url,
+        ordem_mensagens=data.ordem_mensagens or "aleatorio",
         total_contacts=len(contacts),
     )
     db.add(campaign)

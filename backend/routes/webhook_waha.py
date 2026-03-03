@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
+import httpx
 from database import get_db
+from config import settings
 import models
 
 router = APIRouter(tags=["webhook"])
@@ -73,10 +75,41 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
         if sess and new_status:
             sess.status = new_status
             if new_status == models.SessionStatus.connected:
+                # 1. Tenta extrair número do payload do webhook
                 me = payload.get("me", {}) or {}
-                raw_phone = me.get("id", "") or payload.get("id", "")
+                raw_phone = (
+                    me.get("id", "")
+                    or me.get("phoneNumber", "")
+                    or payload.get("id", "")
+                    or payload.get("phoneNumber", "")
+                )
                 if raw_phone:
                     sess.phone_number = normalize_phone(raw_phone)
+                    print(f"[webhook] Número salvo do payload: {sess.phone_number}")
+
+                # 2. Fallback: busca /me direto na WAHA API se número não veio
+                if not sess.phone_number:
+                    try:
+                        headers = {}
+                        if settings.WAHA_API_KEY:
+                            headers["X-Api-Key"] = settings.WAHA_API_KEY
+                        async with httpx.AsyncClient(timeout=10.0) as client:
+                            r = await client.get(
+                                f"{settings.WAHA_API_URL}/api/{session_waha_id}/me",
+                                headers=headers,
+                            )
+                        if r.status_code == 200:
+                            me_data = r.json()
+                            raw = (
+                                me_data.get("id", "")
+                                or me_data.get("phoneNumber", "")
+                            )
+                            if raw:
+                                sess.phone_number = normalize_phone(raw)
+                                print(f"[webhook] Número salvo via /me: {sess.phone_number}")
+                    except Exception as exc:
+                        print(f"[webhook] Erro ao buscar /me: {exc}")
+
                 sess.qr_code = None
                 db.commit()
             else:

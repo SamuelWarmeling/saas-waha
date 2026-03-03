@@ -369,22 +369,33 @@ async def check_session_status(
         waha_status = data.get("status", "STOPPED")
 
         status_map = {
-            "WORKING": models.SessionStatus.connected,
+            "WORKING":      models.SessionStatus.connected,
+            "CONNECTED":    models.SessionStatus.connected,   # alguns WAHA retornam este
             "SCAN_QR_CODE": models.SessionStatus.connecting,
-            "STOPPED": models.SessionStatus.disconnected,
-            "FAILED": models.SessionStatus.error,
+            "STARTING":     models.SessionStatus.connecting,
+            "STOPPED":      models.SessionStatus.disconnected,
+            "FAILED":       models.SessionStatus.error,
         }
-        new_status = status_map.get(waha_status, models.SessionStatus.disconnected)
+        new_status = status_map.get(waha_status)
+        if new_status is None:
+            # Status desconhecido — não sobrescreve o estado atual
+            db.refresh(session)
+            return {"status": session.status, "phone_number": session.phone_number}
 
         if new_status != session.status:
             session.status = new_status
-            if new_status == models.SessionStatus.connected:
-                me = await waha_request("GET", f"/api/sessions/{session.session_id}/me")
-                session.phone_number = me.get("id", "").replace("@c.us", "")
+            if new_status == models.SessionStatus.connected and not session.phone_number:
+                try:
+                    me = await waha_request("GET", f"/api/{session.session_id}/me")
+                    raw = me.get("id", "") or me.get("phoneNumber", "")
+                    if raw:
+                        session.phone_number = raw.split("@")[0].strip()
+                except Exception as exc:
+                    print(f"[status] Erro ao buscar /me para {session.session_id}: {exc}")
                 session.qr_code = None
             db.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[status] Erro ao checar status WAHA: {exc}")
 
     db.refresh(session)
     return {"status": session.status, "phone_number": session.phone_number}

@@ -156,7 +156,9 @@ export default function Campanhas() {
     }
   }
 
-  const connectedSessions = sessions.filter(s => s.status === 'connected')
+  const connectedSessions = sessions.filter(s =>
+    ['connected', 'working'].includes((s.status || '').toLowerCase())
+  )
   const msgCount = form.messages.filter(m => m.trim()).length
   const chipCount = form.session_ids.length
 

@@ -106,7 +106,7 @@ async def get_qrcode(
 
 
 @router.get("", response_model=List[SessionOut])
-def list_sessions(
+async def list_sessions(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -115,6 +115,21 @@ def list_sessions(
         .filter(models.WhatsAppSession.user_id == current_user.id)
         .all()
     )
+    # Auto-fetch phone number for connected sessions that don't have one yet
+    changed = False
+    for sess in sessions:
+        if sess.status == models.SessionStatus.connected and not sess.phone_number:
+            try:
+                me = await waha_request("GET", f"/api/{sess.session_id}/me")
+                raw = me.get("id", "") or me.get("phoneNumber", "")
+                if raw:
+                    sess.phone_number = raw.split("@")[0].strip()
+                    changed = True
+                    print(f"[list] Phone synced for {sess.session_id}: {sess.phone_number}")
+            except Exception as exc:
+                print(f"[list] Erro ao buscar /me para {sess.session_id}: {exc}")
+    if changed:
+        db.commit()
     return sessions
 
 
@@ -309,16 +324,37 @@ async def connect_session(
         # 3. Aguarda WAHA processar e tenta buscar QR
         import asyncio
         await asyncio.sleep(3)
+
+        # Verifica status real do WAHA (pode já estar WORKING em reconexão)
+        try:
+            waha_data = await waha_request("GET", f"/api/sessions/{session.session_id}")
+            waha_status = waha_data.get("status", "")
+            if waha_status in ("WORKING", "CONNECTED"):
+                session.status = models.SessionStatus.connected
+        except Exception:
+            pass
+
         try:
             qr_data = await waha_request("GET", f"/api/{session.session_id}/auth/qr")
             b64 = qr_data.get("data", "")
             if b64:
                 session.qr_code = f"data:image/png;base64,{b64}"
-                db.commit()
                 print(f"[WAHA] QR obtido para {session.session_id}")
         except Exception as exc:
             print(f"[WAHA] QR ainda não disponível: {type(exc).__name__}: {exc}")
 
+        # 4. Se já conectado, busca número do telefone
+        if session.status == models.SessionStatus.connected and not session.phone_number:
+            try:
+                me = await waha_request("GET", f"/api/{session.session_id}/me")
+                raw = me.get("id", "") or me.get("phoneNumber", "")
+                if raw:
+                    session.phone_number = raw.split("@")[0].strip()
+                    print(f"[WAHA] Número obtido no connect: {session.phone_number}")
+            except Exception as exc:
+                print(f"[WAHA] Erro ao buscar /me no connect: {exc}")
+
+        db.commit()
         db.refresh(session)
         return {"qr_code": session.qr_code, "status": session.status.value}
     except httpx.HTTPError as e:

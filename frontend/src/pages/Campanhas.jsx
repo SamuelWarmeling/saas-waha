@@ -42,16 +42,14 @@ export default function Campanhas() {
   const [form, setForm] = useState(EMPTY_FORM)
 
   const load = useCallback(async () => {
-    try {
-      const [c, s] = await Promise.all([
-        api.get('/campanhas?page_size=50'),
-        api.get('/sessoes'),
-      ])
-      setCampaigns(c.data)
-      setSessions(s.data)
-    } catch {
-      toast.error('Erro ao carregar campanhas')
-    }
+    const [cRes, sRes] = await Promise.allSettled([
+      api.get('/campanhas?page_size=50'),
+      api.get('/sessoes'),
+    ])
+    if (cRes.status === 'fulfilled') setCampaigns(cRes.value.data)
+    else toast.error('Erro ao carregar campanhas')
+    if (sRes.status === 'fulfilled') setSessions(sRes.value.data)
+    else toast.error('Erro ao carregar sessões')
   }, [])
 
   useEffect(() => { load() }, [load])

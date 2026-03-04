@@ -83,6 +83,40 @@ def migrate_campaign_contacts_session():
         logger.error(f"[MIGRATE] Erro ao migrar campaign_contacts: {e}")
 
 
+def migrate_campaigns_new_columns():
+    """Adiciona colunas novas na tabela campaigns que não existiam na versão original."""
+    try:
+        with engine.connect() as conn:
+            # ordem_mensagens (adicionado para suporte a múltiplas mensagens)
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'campaigns' AND column_name = 'ordem_mensagens')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Adicionando ordem_mensagens em campaigns...")
+                conn.execute(text(
+                    "ALTER TABLE campaigns ADD COLUMN ordem_mensagens VARCHAR(20) NOT NULL DEFAULT 'aleatorio'"
+                ))
+                conn.commit()
+                logger.info("[MIGRATE] Coluna ordem_mensagens adicionada em campaigns.")
+
+            # delay_min / delay_max (caso não existam)
+            for col, default in [("delay_min", 5), ("delay_max", 15)]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = 'campaigns' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em campaigns...")
+                    conn.execute(text(
+                        f"ALTER TABLE campaigns ADD COLUMN {col} INTEGER NOT NULL DEFAULT {default}"
+                    ))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em campaigns.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar colunas de campaigns: {e}")
+
+
 def migrate_groups_table():
     """
     Corrige o schema da tabela groups:
@@ -127,6 +161,7 @@ async def lifespan(app: FastAPI):
         try:
             migrate_contacts_unique()
             migrate_campaign_contacts_session()
+            migrate_campaigns_new_columns()
             migrate_groups_table()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)

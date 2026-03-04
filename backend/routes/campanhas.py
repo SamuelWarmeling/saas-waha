@@ -132,6 +132,11 @@ async def send_campaign(campaign_id: int, user_id: int):
         campaign.started_at = datetime.now(timezone.utc)
         db.commit()
 
+        # ── Configurações de disparo do usuário ────────────────────────────
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        user_delay_min = user.dispatch_delay_min if user else 5
+        user_delay_max = user.dispatch_delay_max if user else 15
+
         # ── Mensagens ──────────────────────────────────────────────────────
         db_msgs = db.query(models.CampaignMessage).filter(
             models.CampaignMessage.campaign_id == campaign_id
@@ -258,10 +263,7 @@ async def send_campaign(campaign_id: int, user_id: int):
                 used_session.messages_sent_today += 1
                 db.commit()
 
-                delay = random.uniform(
-                    campaign.delay_min or used_session.delay_min,
-                    campaign.delay_max or used_session.delay_max,
-                )
+                delay = random.uniform(user_delay_min, user_delay_max)
                 await asyncio.sleep(delay)
 
         # Finaliza

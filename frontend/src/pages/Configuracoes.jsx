@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MdCheckCircle, MdStar } from 'react-icons/md'
+import { MdCheckCircle, MdStar, MdTimer } from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
 
@@ -32,14 +32,17 @@ export default function Configuracoes() {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState({ name: '', email: '' })
   const [passwords, setPasswords] = useState({ current_password: '', new_password: '' })
+  const [dispatch, setDispatch] = useState({ delay_min: 5, delay_max: 15, limite_diario: 200 })
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [loadingPassword, setLoadingPassword] = useState(false)
+  const [loadingDispatch, setLoadingDispatch] = useState(false)
 
   useEffect(() => {
     api.get('/usuarios/me').then(r => {
       setUser(r.data)
       setProfile({ name: r.data.name, email: r.data.email })
     })
+    api.get('/usuarios/me/configuracoes').then(r => setDispatch(r.data)).catch(() => {})
   }, [])
 
   async function saveProfile(e) {
@@ -71,6 +74,23 @@ export default function Configuracoes() {
       toast.error(err.response?.data?.detail || 'Erro ao alterar senha')
     } finally {
       setLoadingPassword(false)
+    }
+  }
+
+  async function saveDispatch(e) {
+    e.preventDefault()
+    setLoadingDispatch(true)
+    try {
+      await api.put('/usuarios/me/configuracoes', {
+        delay_min: Number(dispatch.delay_min),
+        delay_max: Number(dispatch.delay_max),
+        limite_diario: Number(dispatch.limite_diario),
+      })
+      toast.success('Configurações de disparo salvas!')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao salvar')
+    } finally {
+      setLoadingDispatch(false)
     }
   }
 
@@ -176,7 +196,75 @@ export default function Configuracoes() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6 border-t border-surface-800/50">
+      {/* Configurações de Disparo */}
+      <div className="glass-card pt-6 border-t border-surface-800/50">
+        <div className="mb-6 flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-primary-500/15 text-primary-400 shadow-[0_0_15px_theme(colors.primary.500/15)]">
+            <MdTimer className="text-2xl" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-surface-100">Configurações de Disparo</h2>
+            <p className="text-sm text-surface-400 mt-0.5">Controle o ritmo e o limite diário de envio de mensagens</p>
+          </div>
+        </div>
+
+        <form onSubmit={saveDispatch}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div>
+              <label className="label">Delay mínimo (seg)</label>
+              <input
+                type="number"
+                value={dispatch.delay_min}
+                onChange={e => setDispatch(d => ({ ...d, delay_min: e.target.value }))}
+                min={1} max={60}
+                className="input text-center font-mono text-lg font-bold"
+                required
+              />
+              <p className="text-[11px] text-surface-500 mt-1.5 ml-1">Espera mínima entre mensagens</p>
+            </div>
+            <div>
+              <label className="label">Delay máximo (seg)</label>
+              <input
+                type="number"
+                value={dispatch.delay_max}
+                onChange={e => setDispatch(d => ({ ...d, delay_max: e.target.value }))}
+                min={1} max={300}
+                className="input text-center font-mono text-lg font-bold"
+                required
+              />
+              <p className="text-[11px] text-surface-500 mt-1.5 ml-1">Espera máxima entre mensagens</p>
+            </div>
+            <div>
+              <label className="label">Limite diário por chip</label>
+              <input
+                type="number"
+                value={dispatch.limite_diario}
+                onChange={e => setDispatch(d => ({ ...d, limite_diario: e.target.value }))}
+                min={1} max={10000}
+                className="input text-center font-mono text-lg font-bold"
+                required
+              />
+              <p className="text-[11px] text-surface-500 mt-1.5 ml-1">Máx. de msgs por chip por dia</p>
+            </div>
+          </div>
+
+          <div className="mt-5 pt-5 border-t border-surface-800/40 flex items-center justify-between gap-4">
+            <p className="text-[11px] text-surface-500 leading-relaxed max-w-sm">
+              Um delay aleatório entre <strong className="text-surface-300">{dispatch.delay_min}s</strong> e <strong className="text-surface-300">{dispatch.delay_max}s</strong> será aplicado entre cada mensagem enviada. Isso ajuda a evitar bloqueios pelo WhatsApp.
+            </p>
+            <button type="submit" disabled={loadingDispatch} className="btn-primary px-8 shrink-0">
+              {loadingDispatch ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  Salvando...
+                </span>
+              ) : 'Salvar Configurações'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-surface-800/50">
         {/* Perfil */}
         <div className="glass-card">
           <div className="mb-6">

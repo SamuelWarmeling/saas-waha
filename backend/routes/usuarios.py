@@ -55,6 +55,12 @@ class UpdateProfileRequest(BaseModel):
     email: Optional[EmailStr] = None
 
 
+class DispatchSettingsRequest(BaseModel):
+    delay_min: int
+    delay_max: int
+    limite_diario: int
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 @router.post("/registro", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
 def register(data: UserCreate, db: Session = Depends(get_db)):
@@ -154,6 +160,36 @@ def change_password(
     current_user.password_hash = auth.hash_password(data.new_password)
     db.commit()
     return {"message": "Senha alterada com sucesso"}
+
+
+@router.get("/me/configuracoes")
+def get_dispatch_settings(current_user: models.User = Depends(auth.get_current_user)):
+    return {
+        "delay_min": current_user.dispatch_delay_min,
+        "delay_max": current_user.dispatch_delay_max,
+        "limite_diario": current_user.dispatch_daily_limit,
+    }
+
+
+@router.put("/me/configuracoes")
+def update_dispatch_settings(
+    data: DispatchSettingsRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    current_user.dispatch_delay_min = data.delay_min
+    current_user.dispatch_delay_max = data.delay_max
+    current_user.dispatch_daily_limit = data.limite_diario
+    # Sincroniza limite diário em todas as sessões do usuário
+    db.query(models.WhatsAppSession).filter(
+        models.WhatsAppSession.user_id == current_user.id
+    ).update({"max_daily_messages": data.limite_diario})
+    db.commit()
+    return {
+        "delay_min": data.delay_min,
+        "delay_max": data.delay_max,
+        "limite_diario": data.limite_diario,
+    }
 
 
 @router.get("/plano-info")

@@ -63,7 +63,7 @@ export default function Sessoes() {
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [qrSession, setQrSession] = useState(null)
-  const [form, setForm] = useState({ name: '', delay_min: 5, delay_max: 15 })
+  const [form, setForm] = useState({ name: '' })
 
   const load = useCallback(async () => {
     try {
@@ -109,14 +109,10 @@ export default function Sessoes() {
     e.preventDefault()
     setLoading(true)
     try {
-      await api.post('/sessoes', {
-        ...form,
-        delay_min: Number(form.delay_min),
-        delay_max: Number(form.delay_max),
-      })
+      await api.post('/sessoes', { name: form.name })
       toast.success('Sessão criada!')
       setShowModal(false)
-      setForm({ name: '', delay_min: 5, delay_max: 15 })
+      setForm({ name: '' })
       load()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao criar sessão')
@@ -288,12 +284,6 @@ export default function Sessoes() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-[11px] font-medium text-surface-400 bg-surface-800/30 py-2 px-3 rounded-lg border border-surface-700/30">
-                    <span className="uppercase tracking-wider">Delay Configurado</span>
-                    <span className="text-surface-200 bg-surface-900 px-2 py-0.5 rounded shadow-inner border border-surface-800">
-                      {sess.delay_min}s – {sess.delay_max}s
-                    </span>
-                  </div>
                 </div>
 
                 {/* Ações */}
@@ -423,28 +413,6 @@ export default function Sessoes() {
                 <p className="text-[11px] font-medium text-surface-500 mt-1.5 ml-1 flex items-center gap-1">
                   <MdInfo size={12} className="text-surface-400" />
                   Um ID técnico será gerado automaticamente para esta sessão
-                </p>
-              </div>
-
-              <div className="bg-surface-900/30 p-4 rounded-xl border border-surface-800/50">
-                <h3 className="text-sm font-semibold text-surface-200 mb-3 flex items-center gap-2">
-                  <div className="w-1.5 h-4 rounded-full bg-primary-500"></div>
-                  Configuração de Delay
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Mínimo (seg)</label>
-                    <input type="number" name="delay_min" value={form.delay_min}
-                      onChange={update} min={1} max={60} className="input text-center" />
-                  </div>
-                  <div>
-                    <label className="label">Máximo (seg)</label>
-                    <input type="number" name="delay_max" value={form.delay_max}
-                      onChange={update} min={1} max={120} className="input text-center" />
-                  </div>
-                </div>
-                <p className="text-[11px] text-surface-500 mt-3 text-center">
-                  Tempo aleatório aguardado entre cada mensagem enviada para evitar bloqueios.
                 </p>
               </div>
 

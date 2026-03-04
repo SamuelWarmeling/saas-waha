@@ -55,6 +55,9 @@ class User(Base):
     plan_expires_at = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
+    dispatch_delay_min = Column(Integer, default=5, nullable=False, server_default="5")
+    dispatch_delay_max = Column(Integer, default=15, nullable=False, server_default="15")
+    dispatch_daily_limit = Column(Integer, default=200, nullable=False, server_default="200")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

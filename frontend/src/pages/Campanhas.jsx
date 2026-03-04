@@ -16,8 +16,6 @@ const EMPTY_FORM = {
   name: '',
   messages: [''],
   session_ids: [],
-  delay_min: 3,
-  delay_max: 8,
   ordem_mensagens: 'aleatorio',
 }
 
@@ -118,8 +116,6 @@ export default function Campanhas() {
         name: form.name,
         messages: form.messages.filter(m => m.trim()),
         session_ids: form.session_ids,
-        delay_min: Number(form.delay_min),
-        delay_max: Number(form.delay_max),
         ordem_mensagens: form.ordem_mensagens,
       })
       toast.success('Campanha criada!')
@@ -464,36 +460,6 @@ export default function Campanhas() {
                     })}
                   </div>
                 )}
-              </div>
-
-              {/* Delay */}
-              <div className="bg-surface-900/30 p-4 rounded-xl border border-surface-800/50">
-                <h3 className="text-sm font-semibold text-surface-200 mb-4 flex items-center gap-2">
-                  <div className="w-1.5 h-4 rounded-full bg-primary-500"></div>
-                  Configuração de Delay (em segundos)
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label text-xs">Aguardar mínimo</label>
-                    <input
-                      type="number"
-                      value={form.delay_min}
-                      onChange={e => setForm(f => ({ ...f, delay_min: e.target.value }))}
-                      min={1} max={60}
-                      className="input text-center text-lg font-mono font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="label text-xs">Até máximo de</label>
-                    <input
-                      type="number"
-                      value={form.delay_max}
-                      onChange={e => setForm(f => ({ ...f, delay_max: e.target.value }))}
-                      min={1} max={120}
-                      className="input text-center text-lg font-mono font-bold"
-                    />
-                  </div>
-                </div>
               </div>
 
               {/* Preview Resumo */}

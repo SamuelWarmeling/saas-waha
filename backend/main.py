@@ -83,6 +83,30 @@ def migrate_campaign_contacts_session():
         logger.error(f"[MIGRATE] Erro ao migrar campaign_contacts: {e}")
 
 
+def migrate_user_dispatch_settings():
+    """Adiciona colunas de configuração de disparo na tabela users."""
+    try:
+        with engine.connect() as conn:
+            for col, default in [
+                ("dispatch_delay_min", 5),
+                ("dispatch_delay_max", 15),
+                ("dispatch_daily_limit", 200),
+            ]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = 'users' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em users...")
+                    conn.execute(text(
+                        f"ALTER TABLE users ADD COLUMN {col} INTEGER NOT NULL DEFAULT {default}"
+                    ))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em users.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar user dispatch settings: {e}")
+
+
 def migrate_campaigns_new_columns():
     """Adiciona colunas novas na tabela campaigns que não existiam na versão original."""
     try:
@@ -162,6 +186,7 @@ async def lifespan(app: FastAPI):
             migrate_contacts_unique()
             migrate_campaign_contacts_session()
             migrate_campaigns_new_columns()
+            migrate_user_dispatch_settings()
             migrate_groups_table()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)

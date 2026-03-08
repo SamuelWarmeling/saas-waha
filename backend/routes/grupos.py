@@ -218,7 +218,7 @@ def cleanup_small_groups(
 def list_groups(
     session_id: Optional[int] = None,
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):

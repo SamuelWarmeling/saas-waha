@@ -44,7 +44,9 @@
       "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git push origin master 2>&1)",
       "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha/frontend && npm run build 2>&1)",
       "Bash(python3:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(cd \"C:/Users/samue/OneDrive/Desktop/saas-waha/frontend\" && npm run build 2>&1)",
+      "Bash(PGPASSWORD=postgres psql:*)"
     ]
   }
 }

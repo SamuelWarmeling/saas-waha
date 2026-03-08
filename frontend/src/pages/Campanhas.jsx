@@ -934,175 +934,177 @@ export default function Campanhas() {
       )}
 
       {/* ── Drawer Configurações Avançadas ─────────────────────────────────── */}
-      {showModal && (
-        <>
-          <div
-            onClick={() => setShowDrawer(false)}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 9998,
-              background: 'rgba(0,0,0,0.55)',
-              opacity: showDrawer ? 1 : 0,
-              pointerEvents: showDrawer ? 'auto' : 'none',
-              transition: 'opacity 0.3s',
-            }}
-          />
-          <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              right: 0,
-              width: '400px',
-              maxWidth: '100vw',
-              height: '100vh',
-              zIndex: 9999,
-              display: 'flex',
-              flexDirection: 'column',
-              background: 'linear-gradient(160deg,#1a1228 0%,#120d1e 100%)',
-              borderLeft: '1px solid rgba(157,78,221,0.2)',
-              boxShadow: '-20px 0 60px rgba(0,0,0,0.6)',
-              transform: showDrawer ? 'translateX(0)' : 'translateX(100%)',
-              transition: 'transform 0.32s cubic-bezier(0.4,0,0.2,1)',
-            }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 flex-shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(157,78,221,0.2)' }}>
-                  <MdSettings size={18} className="text-primary-400" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white leading-tight">Configurações de Disparo</h3>
-                  <p className="text-[10px] text-surface-500 mt-0.5">Ajuste fino do comportamento</p>
-                </div>
-              </div>
-              <button onClick={() => setShowDrawer(false)}
-                className="w-7 h-7 rounded-full flex items-center justify-center text-surface-500 hover:text-white hover:bg-white/10 transition-colors">
-                <MdClose size={16} />
-              </button>
+      {/* IMPORTANTE: fora do bloco {showModal} para evitar backdrop-filter criar novo stacking context */}
+      {/* Overlay */}
+      <div
+        onClick={() => setShowDrawer(false)}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9998,
+          background: 'rgba(0,0,0,0.6)',
+          opacity: showDrawer ? 1 : 0,
+          pointerEvents: showDrawer ? 'auto' : 'none',
+          transition: 'opacity 0.3s ease',
+        }}
+      />
+      {/* Painel */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          width: '420px',
+          maxWidth: '100vw',
+          height: '100vh',
+          overflowY: 'auto',
+          zIndex: 9999,
+          background: 'linear-gradient(160deg,#1a1228 0%,#120d1e 100%)',
+          borderLeft: '1px solid rgba(157,78,221,0.2)',
+          boxShadow: '-20px 0 60px rgba(0,0,0,0.6)',
+          transform: showDrawer ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 0.32s cubic-bezier(0.4,0,0.2,1)',
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', position: 'sticky', top: 0, background: '#1a1228', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(157,78,221,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <MdSettings size={18} style={{ color: '#b07de6' }} />
             </div>
-
-            {/* Conteúdo com scroll */}
-            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-7">
-
-              {/* Agendamento */}
-              <DrawerSection icon={MdSchedule} title="Agendamento">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-surface-300">Agendar envio</p>
-                    <p className="text-[11px] text-surface-500 mt-0.5">Inicia automaticamente na data/hora</p>
-                  </div>
-                  <Toggle checked={drawerDraft.schedule_enabled} onChange={v => setDrawerDraft(d => ({ ...d, schedule_enabled: v }))} />
-                </div>
-                {drawerDraft.schedule_enabled && (
-                  <div className="grid grid-cols-2 gap-3 mt-1">
-                    <div>
-                      <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Data</label>
-                      <input type="date" value={drawerDraft.schedule_date}
-                        onChange={e => setDrawerDraft(d => ({ ...d, schedule_date: e.target.value }))}
-                        className="input text-sm py-2" min={new Date().toISOString().split('T')[0]} />
-                    </div>
-                    <div>
-                      <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Hora</label>
-                      <input type="time" value={drawerDraft.schedule_time}
-                        onChange={e => setDrawerDraft(d => ({ ...d, schedule_time: e.target.value }))}
-                        className="input text-sm py-2" />
-                    </div>
-                  </div>
-                )}
-              </DrawerSection>
-
-              {/* Delay */}
-              <DrawerSection icon={MdAccessTime} title="Delay entre mensagens">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Mínimo (s)</label>
-                    <input type="number" min={1} value={drawerDraft.delay_min}
-                      onChange={e => setDrawerDraft(d => ({ ...d, delay_min: e.target.value }))} className="input text-sm py-2" />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Máximo (s)</label>
-                    <input type="number" min={1} value={drawerDraft.delay_max}
-                      onChange={e => setDrawerDraft(d => ({ ...d, delay_max: e.target.value }))} className="input text-sm py-2" />
-                  </div>
-                </div>
-                <p className="text-[11px] text-surface-500 mt-2">
-                  Aguardará entre <span className="text-primary-400 font-semibold">{drawerDraft.delay_min}s</span> e <span className="text-primary-400 font-semibold">{drawerDraft.delay_max}s</span> entre cada envio.
-                </p>
-              </DrawerSection>
-
-              {/* Limite de segurança */}
-              <DrawerSection icon={MdShield} title="Limite de segurança">
-                <div>
-                  <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Máx. disparos por chip por dia</label>
-                  <input type="number" min={1} value={drawerDraft.max_per_chip_per_day}
-                    onChange={e => setDrawerDraft(d => ({ ...d, max_per_chip_per_day: e.target.value }))} className="input text-sm py-2" />
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <div>
-                    <p className="text-xs font-medium text-surface-300">Parar se chip desconectar</p>
-                    <p className="text-[11px] text-surface-500 mt-0.5">Interrompe a campanha automaticamente</p>
-                  </div>
-                  <Toggle checked={drawerDraft.stop_on_disconnect} onChange={v => setDrawerDraft(d => ({ ...d, stop_on_disconnect: v }))} />
-                </div>
-              </DrawerSection>
-
-              {/* Horário de envio */}
-              <DrawerSection icon={MdSchedule} title="Horário de envio">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-surface-300">Apenas horário comercial</p>
-                    <p className="text-[11px] text-surface-500 mt-0.5">Pausa fora do intervalo definido</p>
-                  </div>
-                  <Toggle checked={drawerDraft.business_hours_only} onChange={v => setDrawerDraft(d => ({ ...d, business_hours_only: v }))} />
-                </div>
-                {drawerDraft.business_hours_only && (
-                  <div className="grid grid-cols-2 gap-3 mt-1">
-                    <div>
-                      <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Início</label>
-                      <input type="time" value={drawerDraft.business_hours_start}
-                        onChange={e => setDrawerDraft(d => ({ ...d, business_hours_start: e.target.value }))} className="input text-sm py-2" />
-                    </div>
-                    <div>
-                      <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Fim</label>
-                      <input type="time" value={drawerDraft.business_hours_end}
-                        onChange={e => setDrawerDraft(d => ({ ...d, business_hours_end: e.target.value }))} className="input text-sm py-2" />
-                    </div>
-                  </div>
-                )}
-              </DrawerSection>
-
-              {/* Filtros de contato */}
-              <DrawerSection icon={MdFilterList} title="Filtros de contato">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-surface-300">Ignorar sem nome salvo</p>
-                    <p className="text-[11px] text-surface-500 mt-0.5">Pula contatos sem nome no cadastro</p>
-                  </div>
-                  <Toggle checked={drawerDraft.skip_unnamed_contacts} onChange={v => setDrawerDraft(d => ({ ...d, skip_unnamed_contacts: v }))} />
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <div>
-                    <p className="text-xs font-medium text-surface-300">Evitar duplicatas</p>
-                    <p className="text-[11px] text-surface-500 mt-0.5">Envia apenas uma vez por contato</p>
-                  </div>
-                  <Toggle checked={drawerDraft.no_duplicates} onChange={v => setDrawerDraft(d => ({ ...d, no_duplicates: v }))} />
-                </div>
-              </DrawerSection>
-            </div>
-
-            {/* Footer */}
-            <div className="px-5 py-4 border-t border-white/10 flex-shrink-0">
-              <button type="button" onClick={saveDrawer}
-                className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all"
-                style={{ background: 'linear-gradient(135deg,#9d4edd,#6a0dad)', boxShadow: '0 4px 20px rgba(157,78,221,0.35)' }}>
-                Salvar configurações
-              </button>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>Configurações de Disparo</div>
+              <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>Ajuste fino do comportamento</div>
             </div>
           </div>
-        </>
-      )}
+          <button onClick={() => setShowDrawer(false)}
+            style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', background: 'transparent', border: 'none', cursor: 'pointer' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#64748b' }}>
+            <MdClose size={16} />
+          </button>
+        </div>
+
+        {/* Conteúdo */}
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 28 }}>
+
+          {/* Agendamento */}
+          <DrawerSection icon={MdSchedule} title="Agendamento">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-surface-300">Agendar envio</p>
+                <p className="text-[11px] text-surface-500 mt-0.5">Inicia automaticamente na data/hora</p>
+              </div>
+              <Toggle checked={drawerDraft.schedule_enabled} onChange={v => setDrawerDraft(d => ({ ...d, schedule_enabled: v }))} />
+            </div>
+            {drawerDraft.schedule_enabled && (
+              <div className="grid grid-cols-2 gap-3 mt-1">
+                <div>
+                  <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Data</label>
+                  <input type="date" value={drawerDraft.schedule_date}
+                    onChange={e => setDrawerDraft(d => ({ ...d, schedule_date: e.target.value }))}
+                    className="input text-sm py-2" min={new Date().toISOString().split('T')[0]} />
+                </div>
+                <div>
+                  <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Hora</label>
+                  <input type="time" value={drawerDraft.schedule_time}
+                    onChange={e => setDrawerDraft(d => ({ ...d, schedule_time: e.target.value }))}
+                    className="input text-sm py-2" />
+                </div>
+              </div>
+            )}
+          </DrawerSection>
+
+          {/* Delay */}
+          <DrawerSection icon={MdAccessTime} title="Delay entre mensagens">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Mínimo (s)</label>
+                <input type="number" min={1} value={drawerDraft.delay_min}
+                  onChange={e => setDrawerDraft(d => ({ ...d, delay_min: e.target.value }))} className="input text-sm py-2" />
+              </div>
+              <div>
+                <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Máximo (s)</label>
+                <input type="number" min={1} value={drawerDraft.delay_max}
+                  onChange={e => setDrawerDraft(d => ({ ...d, delay_max: e.target.value }))} className="input text-sm py-2" />
+              </div>
+            </div>
+            <p className="text-[11px] text-surface-500 mt-2">
+              Aguardará entre <span className="text-primary-400 font-semibold">{drawerDraft.delay_min}s</span> e <span className="text-primary-400 font-semibold">{drawerDraft.delay_max}s</span> entre cada envio.
+            </p>
+          </DrawerSection>
+
+          {/* Limite de segurança */}
+          <DrawerSection icon={MdShield} title="Limite de segurança">
+            <div>
+              <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Máx. disparos por chip por dia</label>
+              <input type="number" min={1} value={drawerDraft.max_per_chip_per_day}
+                onChange={e => setDrawerDraft(d => ({ ...d, max_per_chip_per_day: e.target.value }))} className="input text-sm py-2" />
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <p className="text-xs font-medium text-surface-300">Parar se chip desconectar</p>
+                <p className="text-[11px] text-surface-500 mt-0.5">Interrompe a campanha automaticamente</p>
+              </div>
+              <Toggle checked={drawerDraft.stop_on_disconnect} onChange={v => setDrawerDraft(d => ({ ...d, stop_on_disconnect: v }))} />
+            </div>
+          </DrawerSection>
+
+          {/* Horário de envio */}
+          <DrawerSection icon={MdSchedule} title="Horário de envio">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-surface-300">Apenas horário comercial</p>
+                <p className="text-[11px] text-surface-500 mt-0.5">Pausa fora do intervalo definido</p>
+              </div>
+              <Toggle checked={drawerDraft.business_hours_only} onChange={v => setDrawerDraft(d => ({ ...d, business_hours_only: v }))} />
+            </div>
+            {drawerDraft.business_hours_only && (
+              <div className="grid grid-cols-2 gap-3 mt-1">
+                <div>
+                  <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Início</label>
+                  <input type="time" value={drawerDraft.business_hours_start}
+                    onChange={e => setDrawerDraft(d => ({ ...d, business_hours_start: e.target.value }))} className="input text-sm py-2" />
+                </div>
+                <div>
+                  <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Fim</label>
+                  <input type="time" value={drawerDraft.business_hours_end}
+                    onChange={e => setDrawerDraft(d => ({ ...d, business_hours_end: e.target.value }))} className="input text-sm py-2" />
+                </div>
+              </div>
+            )}
+          </DrawerSection>
+
+          {/* Filtros de contato */}
+          <DrawerSection icon={MdFilterList} title="Filtros de contato">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-surface-300">Ignorar sem nome salvo</p>
+                <p className="text-[11px] text-surface-500 mt-0.5">Pula contatos sem nome no cadastro</p>
+              </div>
+              <Toggle checked={drawerDraft.skip_unnamed_contacts} onChange={v => setDrawerDraft(d => ({ ...d, skip_unnamed_contacts: v }))} />
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <p className="text-xs font-medium text-surface-300">Evitar duplicatas</p>
+                <p className="text-[11px] text-surface-500 mt-0.5">Envia apenas uma vez por contato</p>
+              </div>
+              <Toggle checked={drawerDraft.no_duplicates} onChange={v => setDrawerDraft(d => ({ ...d, no_duplicates: v }))} />
+            </div>
+          </DrawerSection>
+
+          {/* Footer */}
+          <div style={{ paddingBottom: 8 }}>
+            <button type="button" onClick={saveDrawer}
+              style={{ width: '100%', padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 700, color: '#fff', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#9d4edd,#6a0dad)', boxShadow: '0 4px 20px rgba(157,78,221,0.35)' }}>
+              Salvar configurações
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* ── Modal de Relatório ──────────────────────────────────────────────── */}
       {reportCampaign && (

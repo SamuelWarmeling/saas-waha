@@ -937,14 +937,28 @@ export default function Campanhas() {
       {showModal && (
         <>
           <div
-            className={`fixed inset-0 z-[60] transition-opacity duration-300 ${showDrawer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
-            style={{ background: 'rgba(0,0,0,0.55)' }}
             onClick={() => setShowDrawer(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9998,
+              background: 'rgba(0,0,0,0.55)',
+              opacity: showDrawer ? 1 : 0,
+              pointerEvents: showDrawer ? 'auto' : 'none',
+              transition: 'opacity 0.3s',
+            }}
           />
           <div
-            className="fixed top-0 right-0 h-full z-[61] flex flex-col"
             style={{
-              width: 400,
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              width: '400px',
+              maxWidth: '100vw',
+              height: '100vh',
+              zIndex: 9999,
+              display: 'flex',
+              flexDirection: 'column',
               background: 'linear-gradient(160deg,#1a1228 0%,#120d1e 100%)',
               borderLeft: '1px solid rgba(157,78,221,0.2)',
               boxShadow: '-20px 0 60px rgba(0,0,0,0.6)',

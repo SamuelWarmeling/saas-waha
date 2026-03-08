@@ -264,6 +264,7 @@ class Group(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_extracted_at = Column(DateTime(timezone=True), nullable=True)
+    auto_update_interval = Column(Integer, nullable=True)  # horas, null = desativado
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User")

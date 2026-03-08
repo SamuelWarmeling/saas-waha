@@ -11,39 +11,68 @@ import {
   MdIndeterminateCheckBox,
   MdClose,
   MdDownload,
+  MdAutorenew,
+  MdSchedule,
 } from 'react-icons/md'
+
+// ── Helpers de tempo ─────────────────────────────────────────────────────────
+
+function horasAtras(dateStr) {
+  if (!dateStr) return null
+  const diffMs = Date.now() - new Date(dateStr).getTime()
+  const diffH = Math.floor(diffMs / 3600000)
+  if (diffH < 1) return 'menos de 1h atrás'
+  if (diffH < 24) return `${diffH}h atrás`
+  return `${Math.floor(diffH / 24)}d atrás`
+}
+
+function proximaExtracao(dateStr, intervalHours) {
+  if (!dateStr || !intervalHours) return null
+  const nextMs = new Date(dateStr).getTime() + intervalHours * 3600000
+  const diffMs = nextMs - Date.now()
+  if (diffMs <= 0) return 'Em breve'
+  const diffH = Math.ceil(diffMs / 3600000)
+  if (diffH < 24) return `em ${diffH}h`
+  return `em ${Math.floor(diffH / 24)}d`
+}
+
+const AUTO_OPTIONS = [
+  { label: 'Desativado', value: null },
+  { label: 'A cada 6h', value: 6 },
+  { label: 'A cada 12h', value: 12 },
+  { label: 'A cada 24h', value: 24 },
+  { label: 'A cada 7 dias', value: 168 },
+]
+
+// ── Componente principal ──────────────────────────────────────────────────────
 
 export default function Grupos() {
   const [sessoes, setSessoes] = useState([])
   const [selectedSession, setSelectedSession] = useState(null)
 
-  // Grupos do WAHA (para seleção — não estão no banco ainda)
   const [wahaGroups, setWahaGroups] = useState([])
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [loadingWaha, setLoadingWaha] = useState(false)
 
-  // Resultado da última extração
   const [lastResult, setLastResult] = useState(null)
   const [extracting, setExtracting] = useState(false)
 
-  // Grupos já extraídos (do banco)
   const [dbGroups, setDbGroups] = useState([])
   const [dbTotal, setDbTotal] = useState(0)
 
-  // Membros de um grupo específico
   const [memberGroup, setMemberGroup] = useState(null)
   const [members, setMembers] = useState([])
   const [membersTotal, setMembersTotal] = useState(0)
   const [loadingMembers, setLoadingMembers] = useState(false)
 
-  // ── Sessões ──────────────────────────────────────────────────────────────
+  // loading individual por grupo { [groupId]: boolean }
+  const [autoUpdateLoading, setAutoUpdateLoading] = useState({})
+
+  // ── Sessões ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    api.get('/sessoes')
-      .then(r => setSessoes(r.data))
-      .catch(() => { })
+    api.get('/sessoes').then(r => setSessoes(r.data)).catch(() => {})
   }, [])
 
-  // ── Ao trocar sessão: carregar lista do WAHA + grupos do banco ────────────
   useEffect(() => {
     if (!selectedSession) {
       setWahaGroups([])
@@ -58,7 +87,6 @@ export default function Grupos() {
     loadDbGroups()
   }, [selectedSession])
 
-  // ── Carrega grupos direto do WAHA (para seleção) ──────────────────────────
   const loadWahaGroups = async () => {
     setLoadingWaha(true)
     setLastResult(null)
@@ -66,21 +94,17 @@ export default function Grupos() {
       const { data } = await api.get(`/grupos/session/${selectedSession}/waha-list`)
       setWahaGroups(data.groups || [])
       const novos = new Set(
-        (data.groups || [])
-          .filter(g => !g.already_extracted)
-          .map(g => g.id)
+        (data.groups || []).filter(g => !g.already_extracted).map(g => g.id)
       )
       setSelectedIds(novos)
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Erro ao carregar grupos'
-      toast.error(msg)
+      toast.error(err.response?.data?.detail || 'Erro ao carregar grupos')
       setWahaGroups([])
     } finally {
       setLoadingWaha(false)
     }
   }
 
-  // ── Carrega grupos já extraídos (do banco) ────────────────────────────────
   const loadDbGroups = async () => {
     try {
       const { data } = await api.get('/grupos', {
@@ -93,7 +117,6 @@ export default function Grupos() {
     }
   }
 
-  // ── Toggle de checkbox individual ────────────────────────────────────────
   const toggleGroup = (id) => {
     setSelectedIds(prev => {
       const next = new Set(prev)
@@ -102,7 +125,6 @@ export default function Grupos() {
     })
   }
 
-  // ── Selecionar / desmarcar todos ──────────────────────────────────────────
   const toggleAll = () => {
     if (selectedIds.size === wahaGroups.length) {
       setSelectedIds(new Set())
@@ -111,7 +133,6 @@ export default function Grupos() {
     }
   }
 
-  // ── Extrair grupos selecionados ───────────────────────────────────────────
   const extractSelected = async () => {
     if (selectedIds.size === 0) {
       toast.error('Selecione ao menos um grupo')
@@ -128,14 +149,12 @@ export default function Grupos() {
       toast.success(data.message)
       await Promise.all([loadWahaGroups(), loadDbGroups()])
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Erro na extração'
-      toast.error(msg)
+      toast.error(err.response?.data?.detail || 'Erro na extração')
     } finally {
       setExtracting(false)
     }
   }
 
-  // ── Ver membros de um grupo extraído ─────────────────────────────────────
   const loadMembers = async (group) => {
     setMemberGroup(group)
     setLoadingMembers(true)
@@ -152,7 +171,6 @@ export default function Grupos() {
     }
   }
 
-  // ── Deletar grupo do banco ────────────────────────────────────────────────
   const deleteGroup = async (groupId) => {
     if (!confirm('Deletar este grupo e seus membros?')) return
     try {
@@ -168,13 +186,34 @@ export default function Grupos() {
     }
   }
 
+  const setAutoUpdate = async (groupId, intervalValue) => {
+    setAutoUpdateLoading(prev => ({ ...prev, [groupId]: true }))
+    try {
+      await api.patch(`/grupos/${groupId}/auto-update`, {
+        auto_update_interval: intervalValue,
+      })
+      setDbGroups(prev =>
+        prev.map(g => g.id === groupId ? { ...g, auto_update_interval: intervalValue } : g)
+      )
+      toast.success(
+        intervalValue
+          ? `Auto-atualização ativada: a cada ${intervalValue}h`
+          : 'Auto-atualização desativada'
+      )
+    } catch {
+      toast.error('Erro ao salvar configuração')
+    } finally {
+      setAutoUpdateLoading(prev => ({ ...prev, [groupId]: false }))
+    }
+  }
+
   const allChecked = wahaGroups.length > 0 && selectedIds.size === wahaGroups.length
   const someChecked = selectedIds.size > 0 && selectedIds.size < wahaGroups.length
 
   return (
     <div className="space-y-6">
 
-      {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
+      {/* ── Cabeçalho ────────────────────────────────────────────────────────── */}
       <div>
         <h1 className="text-2xl font-bold text-surface-50 tracking-tight">Grupos do WhatsApp</h1>
         <p className="text-sm text-surface-400 mt-1">
@@ -183,7 +222,7 @@ export default function Grupos() {
         </p>
       </div>
 
-      {/* ── Seleção de sessão ─────────────────────────────────────────────── */}
+      {/* ── Seleção de sessão ─────────────────────────────────────────────────── */}
       <div className="glass-card p-6">
         <div className="flex flex-col sm:flex-row gap-4 items-end">
           <div className="flex-1">
@@ -215,7 +254,7 @@ export default function Grupos() {
         </div>
       </div>
 
-      {/* ── Resultado da última extração ─────────────────────────────────── */}
+      {/* ── Resultado da última extração ──────────────────────────────────────── */}
       {lastResult && (
         <div className="bg-primary-900/20 border border-primary-500/30 backdrop-blur-md shadow-lg shadow-primary-900/20 rounded-2xl p-5 relative overflow-hidden">
           <div className="absolute top-[-50%] right-[-10%] w-[40%] h-[200%] bg-primary-500/10 blur-[50px] pointer-events-none rounded-full" />
@@ -224,30 +263,24 @@ export default function Grupos() {
             Extração concluída com sucesso
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm relative z-10">
-            <div className="bg-surface-950/50 border border-surface-700/50 rounded-xl p-4 text-center shadow-inner">
-              <div className="text-3xl font-bold text-primary-400">{lastResult.extracted_members}</div>
-              <div className="text-surface-400 text-xs mt-1.5 font-medium">Membros salvos</div>
-            </div>
-            <div className="bg-surface-950/50 border border-surface-700/50 rounded-xl p-4 text-center shadow-inner">
-              <div className="text-3xl font-bold text-surface-200">{lastResult.skipped_admin}</div>
-              <div className="text-surface-400 text-xs mt-1.5 font-medium">Admins ignorados</div>
-            </div>
-            <div className="bg-surface-950/50 border border-surface-700/50 rounded-xl p-4 text-center shadow-inner">
-              <div className="text-3xl font-bold text-surface-200">{lastResult.skipped_nonbr}</div>
-              <div className="text-surface-400 text-xs mt-1.5 font-medium">Não-BR ignorados</div>
-            </div>
-            <div className="bg-surface-950/50 border border-surface-700/50 rounded-xl p-4 text-center shadow-inner">
-              <div className="text-3xl font-bold text-surface-200">{lastResult.skipped_invalid}</div>
-              <div className="text-surface-400 text-xs mt-1.5 font-medium">Inválidos ignorados</div>
-            </div>
+            {[
+              { val: lastResult.extracted_members, label: 'Membros salvos', color: 'text-primary-400' },
+              { val: lastResult.skipped_admin, label: 'Admins ignorados', color: 'text-surface-200' },
+              { val: lastResult.skipped_nonbr, label: 'Não-BR ignorados', color: 'text-surface-200' },
+              { val: lastResult.skipped_invalid, label: 'Inválidos ignorados', color: 'text-surface-200' },
+            ].map(({ val, label, color }) => (
+              <div key={label} className="bg-surface-950/50 border border-surface-700/50 rounded-xl p-4 text-center shadow-inner">
+                <div className={`text-3xl font-bold ${color}`}>{val}</div>
+                <div className="text-surface-400 text-xs mt-1.5 font-medium">{label}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* ── Lista de grupos do WAHA (para seleção) ───────────────────────── */}
+      {/* ── Lista de grupos do WAHA (para seleção) ─────────────────────────────── */}
       {selectedSession && (
         <div className="glass-card overflow-hidden p-0">
-          {/* Header do card */}
           <div className="px-6 py-4 border-b border-surface-700/50 flex items-center justify-between flex-wrap gap-4 bg-surface-900/30">
             <div>
               <h2 className="text-sm font-semibold text-surface-100 flex items-center gap-2">
@@ -263,7 +296,7 @@ export default function Grupos() {
               </h2>
               {selectedIds.size > 0 && (
                 <p className="text-xs text-primary-400 font-medium mt-1 ml-10 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary-500 shadow-[0_0_8px_theme(colors.primary.500)] animate-pulse"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary-500 shadow-[0_0_8px_theme(colors.primary.500)] animate-pulse" />
                   {selectedIds.size} selecionado(s)
                 </p>
               )}
@@ -305,7 +338,6 @@ export default function Grupos() {
             </div>
           </div>
 
-          {/* Corpo */}
           {loadingWaha ? (
             <div className="flex flex-col items-center justify-center py-20 text-surface-400">
               <div className="w-10 h-10 border-2 border-surface-700 border-t-primary-500 rounded-full animate-spin mb-4" />
@@ -334,15 +366,9 @@ export default function Grupos() {
                         }
                       </button>
                     </th>
-                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">
-                      Nome do Grupo
-                    </th>
-                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">
-                      Participantes
-                    </th>
-                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">
-                      Status
-                    </th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Nome do Grupo</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Participantes</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-800/50">
@@ -350,10 +376,9 @@ export default function Grupos() {
                     <tr
                       key={grupo.id}
                       onClick={() => toggleGroup(grupo.id)}
-                      className={`cursor-pointer transition-all duration-200 ${selectedIds.has(grupo.id)
-                          ? 'bg-primary-900/10 hover:bg-primary-900/20'
-                          : 'hover:bg-surface-800/40'
-                        }`}
+                      className={`cursor-pointer transition-all duration-200 ${
+                        selectedIds.has(grupo.id) ? 'bg-primary-900/10 hover:bg-primary-900/20' : 'hover:bg-surface-800/40'
+                      }`}
                     >
                       <td className="px-5 py-4" onClick={e => e.stopPropagation()}>
                         <button onClick={() => toggleGroup(grupo.id)} className="text-surface-500 hover:text-surface-300 transition-colors">
@@ -376,11 +401,10 @@ export default function Grupos() {
                         </span>
                       </td>
                       <td className="px-5 py-4">
-                        {grupo.already_extracted ? (
-                          <span className="badge-primary">Já extraído</span>
-                        ) : (
-                          <span className="badge-gray">Novo grupo</span>
-                        )}
+                        {grupo.already_extracted
+                          ? <span className="badge-primary">Já extraído</span>
+                          : <span className="badge-gray">Novo grupo</span>
+                        }
                       </td>
                     </tr>
                   ))}
@@ -391,7 +415,7 @@ export default function Grupos() {
         </div>
       )}
 
-      {/* ── Grupos já extraídos (banco) ───────────────────────────────────── */}
+      {/* ── Grupos já extraídos (banco) ─────────────────────────────────────────── */}
       {selectedSession && dbGroups.length > 0 && (
         <div className="glass-card overflow-hidden p-0 mt-8">
           <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/30">
@@ -410,49 +434,107 @@ export default function Grupos() {
               <thead className="bg-surface-900/50 border-b border-surface-700/50">
                 <tr>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Nome</th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Membros Salvos</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Membros</th>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Última extração</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Auto-atualização</th>
                   <th className="px-6 py-3.5 text-right text-xs font-semibold text-surface-400 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-800/50">
-                {dbGroups.map(grupo => (
-                  <tr key={grupo.id} className="hover:bg-surface-800/30 transition-colors">
-                    <td className="px-6 py-4 font-medium text-surface-100">{grupo.name}</td>
-                    <td className="px-6 py-4">
-                      <span className="badge-primary px-2.5 py-1">{grupo.member_count} membros</span>
-                    </td>
-                    <td className="px-6 py-4 text-surface-500 text-xs font-mono">
-                      {grupo.last_extracted_at
-                        ? new Date(grupo.last_extracted_at).toLocaleString('pt-BR')
-                        : '–'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-3">
-                        <button
-                          onClick={() => loadMembers(grupo)}
-                          className="text-xs text-primary-400 border border-primary-500/30 hover:bg-primary-500/20 bg-primary-900/10 px-3 py-1.5 rounded-lg font-medium transition-colors"
-                        >
-                          Ver contatos
-                        </button>
-                        <button
-                          onClick={() => deleteGroup(grupo.id)}
-                          className="p-1.5 rounded-lg hover:bg-red-900/30 text-surface-500 hover:text-red-400 transition-colors border border-transparent hover:border-red-500/20"
-                          title="Excluir grupo"
-                        >
-                          <MdDelete size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {dbGroups.map(grupo => {
+                  const atras = horasAtras(grupo.last_extracted_at)
+                  const proxima = proximaExtracao(grupo.last_extracted_at, grupo.auto_update_interval)
+                  const isAutoActive = !!grupo.auto_update_interval
+                  const isLoading = autoUpdateLoading[grupo.id]
+
+                  return (
+                    <tr key={grupo.id} className="hover:bg-surface-800/30 transition-colors">
+                      {/* Nome + badge Auto */}
+                      <td className="px-6 py-4 font-medium text-surface-100">
+                        <div className="flex items-center gap-2">
+                          <span>{grupo.name}</span>
+                          {isAutoActive && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-500/30">
+                              <MdAutorenew size={11} className="animate-spin" style={{ animationDuration: '3s' }} />
+                              Auto
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Membros */}
+                      <td className="px-6 py-4">
+                        <span className="badge-primary px-2.5 py-1">{grupo.member_count} membros</span>
+                      </td>
+
+                      {/* Última extração */}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-xs text-surface-300 font-medium flex items-center gap-1">
+                            <MdSchedule size={13} className="text-surface-500" />
+                            {atras || '–'}
+                          </span>
+                          {proxima && (
+                            <span className="text-[11px] text-green-400/80 font-medium">
+                              Próxima: {proxima}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Auto-atualização */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          {isLoading ? (
+                            <div className="w-4 h-4 border-2 border-primary-500/30 border-t-primary-400 rounded-full animate-spin" />
+                          ) : null}
+                          <select
+                            value={grupo.auto_update_interval ?? ''}
+                            onChange={e => {
+                              const val = e.target.value === '' ? null : parseInt(e.target.value)
+                              setAutoUpdate(grupo.id, val)
+                            }}
+                            disabled={isLoading}
+                            className="text-xs rounded-lg px-2 py-1.5 border border-surface-700/60 bg-surface-800/60 text-surface-300 focus:outline-none focus:border-primary-500/50 focus:ring-1 focus:ring-primary-500/30 disabled:opacity-50 transition-colors hover:border-surface-500 cursor-pointer"
+                            style={{ minWidth: 130 }}
+                          >
+                            {AUTO_OPTIONS.map(opt => (
+                              <option key={String(opt.value)} value={opt.value ?? ''}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </td>
+
+                      {/* Ações */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => loadMembers(grupo)}
+                            className="text-xs text-primary-400 border border-primary-500/30 hover:bg-primary-500/20 bg-primary-900/10 px-3 py-1.5 rounded-lg font-medium transition-colors"
+                          >
+                            Ver contatos
+                          </button>
+                          <button
+                            onClick={() => deleteGroup(grupo.id)}
+                            className="p-1.5 rounded-lg hover:bg-red-900/30 text-surface-500 hover:text-red-400 transition-colors border border-transparent hover:border-red-500/20"
+                            title="Excluir grupo"
+                          >
+                            <MdDelete size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* ── Membros do grupo selecionado ──────────────────────────────────── */}
+      {/* ── Membros do grupo selecionado ──────────────────────────────────────── */}
       {memberGroup && (
         <div className="glass-card overflow-hidden p-0 border-primary-500/30 shadow-[0_0_30px_rgba(0,0,0,0.4)] mt-8 animate-[slideIn_0.3s_ease-out]">
           <div className="px-6 py-5 border-b border-surface-700/50 flex items-center justify-between bg-surface-900/50">
@@ -514,7 +596,7 @@ export default function Grupos() {
         </div>
       )}
 
-      {/* ── Estado vazio: nenhuma sessão selecionada ─────────────────────── */}
+      {/* ── Estado vazio ──────────────────────────────────────────────────────── */}
       {!selectedSession && (
         <div className="glass-card flex flex-col items-center justify-center py-24 text-surface-500 mt-4 border-dashed border-2 border-surface-700 bg-surface-900/20">
           <div className="w-20 h-20 rounded-full bg-surface-800 flex items-center justify-center mb-6 shadow-inner">

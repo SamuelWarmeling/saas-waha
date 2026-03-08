@@ -38,6 +38,7 @@ class GroupOut(BaseModel):
     is_active: bool
     created_at: datetime
     last_extracted_at: Optional[datetime]
+    auto_update_interval: Optional[int]
 
     class Config:
         from_attributes = True
@@ -56,6 +57,10 @@ class GroupListOut(BaseModel):
 
 class ExtractSelectedBody(BaseModel):
     group_ids: List[str]
+
+
+class AutoUpdateBody(BaseModel):
+    auto_update_interval: Optional[int] = None  # horas, None = desativar
 
 
 # ── Endpoints de sessão (devem vir ANTES de /{group_id} para evitar conflito) ─
@@ -291,6 +296,28 @@ def add_group_members_to_campaign(
         "added_count": added_count,
         "message": f"{added_count} membros adicionados à campanha",
     }
+
+
+@router.patch("/{group_id}/auto-update")
+def set_auto_update(
+    group_id: int,
+    body: AutoUpdateBody,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Define ou remove o intervalo de auto-atualização de um grupo."""
+    group = db.query(models.Group).filter(
+        models.Group.id == group_id,
+        models.Group.user_id == current_user.id,
+    ).first()
+
+    if not group:
+        raise HTTPException(status_code=404, detail="Grupo não encontrado")
+
+    group.auto_update_interval = body.auto_update_interval
+    db.commit()
+    db.refresh(group)
+    return {"id": group.id, "auto_update_interval": group.auto_update_interval}
 
 
 @router.delete("/{group_id}")

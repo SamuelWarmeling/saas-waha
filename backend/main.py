@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone, timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -141,6 +143,23 @@ def migrate_campaigns_new_columns():
         logger.error(f"[MIGRATE] Erro ao migrar colunas de campaigns: {e}")
 
 
+def migrate_groups_auto_update():
+    """Adiciona coluna auto_update_interval na tabela groups."""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'groups' AND column_name = 'auto_update_interval')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Adicionando auto_update_interval em groups...")
+                conn.execute(text("ALTER TABLE groups ADD COLUMN auto_update_interval INTEGER"))
+                conn.commit()
+                logger.info("[MIGRATE] Coluna auto_update_interval adicionada em groups.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar groups auto_update_interval: {e}")
+
+
 def migrate_groups_table():
     """
     Corrige o schema da tabela groups:
@@ -177,6 +196,76 @@ def migrate_groups_table():
         logger.error(f"[MIGRATE] Erro ao migrar tabela groups: {e}")
 
 
+async def _run_auto_updates():
+    """Verifica grupos com auto_update ativo e re-extrai se o intervalo passou."""
+    from grupo_extraction import extract_selected_groups
+    db_gen = get_db()
+    db = next(db_gen)
+    try:
+        now = datetime.now(timezone.utc)
+        groups = db.query(models.Group).filter(
+            models.Group.auto_update_interval.isnot(None),
+            models.Group.auto_update_interval > 0,
+        ).all()
+
+        for group in groups:
+            try:
+                last = group.last_extracted_at
+                if last is not None and last.tzinfo is None:
+                    last = last.replace(tzinfo=timezone.utc)
+                interval = timedelta(hours=group.auto_update_interval)
+                if last is None or (now - last) >= interval:
+                    session = db.query(models.WhatsAppSession).filter(
+                        models.WhatsAppSession.id == group.session_id
+                    ).first()
+                    if not session:
+                        continue
+                    result = await extract_selected_groups(
+                        group.session_id,
+                        session.session_id,
+                        group.user_id,
+                        [group.group_id_waha],
+                        db,
+                    )
+                    db.add(models.AtividadeLog(
+                        user_id=group.user_id,
+                        tipo="grupo_auto_atualizado",
+                        descricao=(
+                            f"Auto-atualização do grupo '{group.name}': "
+                            f"{result['extracted_members']} novos membros encontrados"
+                        ),
+                    ))
+                    db.commit()
+                    logger.info(
+                        f"[AUTO-UPDATE] Grupo '{group.name}' atualizado: "
+                        f"{result['extracted_members']} membros"
+                    )
+            except Exception as e:
+                logger.error(f"[AUTO-UPDATE] Erro ao atualizar grupo {group.id}: {e}")
+    except Exception as e:
+        logger.error(f"[AUTO-UPDATE] Erro geral: {e}")
+    finally:
+        try:
+            db_gen.close()
+        except Exception:
+            pass
+
+
+async def auto_update_groups_task():
+    """Background task que roda a cada hora verificando grupos com auto_update ativo."""
+    logger.info("[AUTO-UPDATE] Background task iniciada.")
+    while True:
+        try:
+            await asyncio.sleep(3600)  # 1 hora
+            logger.info("[AUTO-UPDATE] Rodando verificação de grupos...")
+            await _run_auto_updates()
+        except asyncio.CancelledError:
+            logger.info("[AUTO-UPDATE] Background task cancelada.")
+            break
+        except Exception as e:
+            logger.error(f"[AUTO-UPDATE] Erro inesperado: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("[STARTUP] Iniciando aplicação...")
@@ -188,6 +277,7 @@ async def lifespan(app: FastAPI):
             migrate_campaigns_new_columns()
             migrate_user_dispatch_settings()
             migrate_groups_table()
+            migrate_groups_auto_update()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
@@ -196,7 +286,13 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("[STARTUP] Pulando create_all — banco indisponível no momento do startup.")
     logger.info("[STARTUP] Aplicação pronta para receber requisições.")
+    task = asyncio.create_task(auto_update_groups_task())
     yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
     logger.info("[SHUTDOWN] Encerrando aplicação.")
 
 

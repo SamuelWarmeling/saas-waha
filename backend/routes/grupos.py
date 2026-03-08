@@ -63,6 +63,11 @@ class AutoUpdateBody(BaseModel):
     auto_update_interval: Optional[int] = None  # horas, None = desativar
 
 
+class AddContactsToCampaignBody(BaseModel):
+    campaign_id: int
+    contact_ids: List[int]
+
+
 # ── Endpoints de sessão (devem vir ANTES de /{group_id} para evitar conflito) ─
 @router.get("/session/{session_id}/waha-list")
 async def list_waha_groups(
@@ -200,12 +205,13 @@ def list_groups(
 def list_group_members(
     group_id: int,
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=500),
     search: Optional[str] = None,
+    filter_type: Optional[str] = None,  # all | named | unnamed | admins
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Lista membros de um grupo com paginação e busca opcional."""
+    """Lista membros de um grupo com paginação, busca e filtros opcionais."""
     group = db.query(models.Group).filter(
         models.Group.id == group_id,
         models.Group.user_id == current_user.id,
@@ -224,8 +230,30 @@ def list_group_members(
             (models.GroupMember.name.ilike(f"%{search}%"))
         )
 
+    if filter_type == "named":
+        query = query.filter(
+            models.GroupMember.name.isnot(None),
+            models.GroupMember.name != "",
+        )
+    elif filter_type == "unnamed":
+        query = query.filter(
+            (models.GroupMember.name.is_(None)) | (models.GroupMember.name == "")
+        )
+    elif filter_type == "admins":
+        query = query.filter(models.GroupMember.is_admin == True)  # noqa: E712
+
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    # Busca status de blacklist dos contatos
+    contact_ids_with_val = [m.contact_id for m in items if m.contact_id]
+    blacklisted_ids: set = set()
+    if contact_ids_with_val:
+        bl = db.query(models.Contact.id).filter(
+            models.Contact.id.in_(contact_ids_with_val),
+            models.Contact.is_blacklisted == True,  # noqa: E712
+        ).all()
+        blacklisted_ids = {c.id for c in bl}
 
     return {
         "group_id": group_id,
@@ -236,13 +264,58 @@ def list_group_members(
         "items": [
             {
                 "id": m.id,
+                "contact_id": m.contact_id,
                 "phone": m.phone,
                 "name": m.name,
                 "is_admin": m.is_admin,
+                "is_blacklisted": m.contact_id in blacklisted_ids,
                 "added_at": m.added_at,
             }
             for m in items
         ],
+    }
+
+
+@router.post("/{group_id}/add-contacts-to-campaign")
+def add_contacts_to_campaign_selected(
+    group_id: int,
+    body: AddContactsToCampaignBody,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Adiciona contatos específicos (por contact_id) de um grupo a uma campanha."""
+    group = db.query(models.Group).filter(
+        models.Group.id == group_id,
+        models.Group.user_id == current_user.id,
+    ).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Grupo não encontrado")
+
+    campaign = db.query(models.Campaign).filter(
+        models.Campaign.id == body.campaign_id,
+        models.Campaign.user_id == current_user.id,
+    ).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campanha não encontrada")
+
+    added = 0
+    for contact_id in body.contact_ids:
+        existing = db.query(models.CampaignContact).filter(
+            models.CampaignContact.campaign_id == body.campaign_id,
+            models.CampaignContact.contact_id == contact_id,
+        ).first()
+        if not existing:
+            db.add(models.CampaignContact(
+                campaign_id=body.campaign_id,
+                contact_id=contact_id,
+            ))
+            added += 1
+
+    db.commit()
+    return {
+        "campaign_id": body.campaign_id,
+        "added_count": added,
+        "message": f"{added} contato(s) adicionado(s) à campanha",
     }
 
 

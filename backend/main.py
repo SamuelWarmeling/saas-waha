@@ -15,6 +15,7 @@ import models  # noqa: F401 – importa para registrar os models
 
 from routes import usuarios, sessoes, contatos, campanhas, pagamentos, grupos
 from routes.webhook_waha import router as webhook_router
+from routes.funnel import router as funnel_router, funnel_worker_task
 from routes.admin import router as admin_router
 from routes.debug import router as debug_router
 from routes.atividades import router as atividades_router
@@ -240,6 +241,29 @@ def migrate_campaign_contact_ack():
         logger.error(f"[MIGRATE] Erro ao migrar campaign_contacts ack: {e}")
 
 
+def migrate_funnel_tables():
+    """Cria tabelas do funil de leads se não existirem (via SQL direto para evitar conflito de enums)."""
+    try:
+        with engine.connect() as conn:
+            # Cria enums se não existirem
+            for enum_name, values in [
+                ("funnelsequenciastatus", ("ativo", "pausado")),
+                ("funnelcontatostatus", ("ativo", "respondeu", "concluido", "cancelado")),
+                ("funneltemperatura", ("frio", "morno", "quente", "convertido")),
+                ("funnelmensagemtipo", ("texto", "imagem", "audio")),
+            ]:
+                exists = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = '{enum_name}')"
+                )).scalar()
+                if not exists:
+                    vals = ", ".join(f"'{v}'" for v in values)
+                    conn.execute(text(f"CREATE TYPE {enum_name} AS ENUM ({vals})"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Enum {enum_name} criado.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao criar enums do funil: {e}")
+
+
 def migrate_campaign_message_media():
     """Adiciona tipo, media_url, media_filename, botoes em campaign_messages."""
     try:
@@ -395,6 +419,7 @@ async def lifespan(app: FastAPI):
             migrate_campaign_scheduled()
             migrate_campaign_contact_ack()
             migrate_campaign_message_media()
+            migrate_funnel_tables()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
@@ -405,10 +430,12 @@ async def lifespan(app: FastAPI):
     logger.info("[STARTUP] Aplicação pronta para receber requisições.")
     task_auto = asyncio.create_task(auto_update_groups_task())
     task_sched = asyncio.create_task(scheduled_campaigns_task())
+    task_funnel = asyncio.create_task(funnel_worker_task())
     yield
     task_auto.cancel()
     task_sched.cancel()
-    for t in (task_auto, task_sched):
+    task_funnel.cancel()
+    for t in (task_auto, task_sched, task_funnel):
         try:
             await t
         except asyncio.CancelledError:
@@ -451,6 +478,7 @@ app.include_router(admin_router, prefix="/api/admin")
 app.include_router(debug_router)
 app.include_router(atividades_router)
 app.include_router(dashboard_router)
+app.include_router(funnel_router)
 
 
 @app.get("/")

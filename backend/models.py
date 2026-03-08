@@ -260,6 +260,93 @@ class AtividadeLog(Base):
     )
 
 
+class FunnelSequenciaStatus(str, enum.Enum):
+    ativo = "ativo"
+    pausado = "pausado"
+
+
+class FunnelContatoStatus(str, enum.Enum):
+    ativo = "ativo"
+    respondeu = "respondeu"
+    concluido = "concluido"
+    cancelado = "cancelado"
+
+
+class FunnelTemperatura(str, enum.Enum):
+    frio = "frio"
+    morno = "morno"
+    quente = "quente"
+    convertido = "convertido"
+
+
+class FunnelMensagemTipo(str, enum.Enum):
+    texto = "texto"
+    imagem = "imagem"
+    audio = "audio"
+
+
+class FunnelSequencia(Base):
+    __tablename__ = "funnel_sequencias"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    nome = Column(String(255), nullable=False)
+    status = Column(SAEnum(FunnelSequenciaStatus), default=FunnelSequenciaStatus.ativo, nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    mensagens = relationship("FunnelMensagem", back_populates="sequencia", cascade="all, delete-orphan", order_by="FunnelMensagem.ordem")
+    contatos = relationship("FunnelContato", back_populates="sequencia", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_funnel_sequencias_user_id", "user_id"),
+    )
+
+
+class FunnelMensagem(Base):
+    __tablename__ = "funnel_mensagens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sequencia_id = Column(Integer, ForeignKey("funnel_sequencias.id", ondelete="CASCADE"), nullable=False)
+    ordem = Column(Integer, nullable=False, default=1)
+    mensagem = Column(Text, nullable=False)
+    tipo = Column(SAEnum(FunnelMensagemTipo), default=FunnelMensagemTipo.texto, nullable=False)
+    aguardar_horas = Column(Float, default=0.0, nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    sequencia = relationship("FunnelSequencia", back_populates="mensagens")
+
+    __table_args__ = (
+        Index("ix_funnel_mensagens_sequencia_id", "sequencia_id"),
+    )
+
+
+class FunnelContato(Base):
+    __tablename__ = "funnel_contatos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sequencia_id = Column(Integer, ForeignKey("funnel_sequencias.id", ondelete="CASCADE"), nullable=False)
+    contato_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="SET NULL"), nullable=True)
+    status = Column(SAEnum(FunnelContatoStatus), default=FunnelContatoStatus.ativo, nullable=False)
+    temperatura = Column(SAEnum(FunnelTemperatura), default=FunnelTemperatura.frio, nullable=False)
+    etapa_atual = Column(Integer, default=1, nullable=False)
+    iniciado_em = Column(DateTime(timezone=True), server_default=func.now())
+    ultimo_envio = Column(DateTime(timezone=True), nullable=True)
+    respondeu_em = Column(DateTime(timezone=True), nullable=True)
+
+    sequencia = relationship("FunnelSequencia", back_populates="contatos")
+    contato = relationship("Contact")
+    session = relationship("WhatsAppSession")
+
+    __table_args__ = (
+        Index("ix_funnel_contatos_sequencia_id", "sequencia_id"),
+        Index("ix_funnel_contatos_status", "status"),
+        UniqueConstraint("sequencia_id", "contato_id", name="uq_funnel_contato_sequencia"),
+    )
+
+
 class Group(Base):
     __tablename__ = "groups"
 

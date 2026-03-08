@@ -5,6 +5,7 @@ import httpx
 from database import get_db
 from config import settings
 import models
+from models import FunnelContatoStatus as FunnelContatoStatus, FunnelTemperatura as FunnelTemperatura
 
 router = APIRouter(tags=["webhook"])
 
@@ -175,6 +176,45 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
                 descricao=descricao,
             ))
             db.commit()
+
+        # ── Verifica se o remetente tem funil ativo ──────────────────────────
+        contato_db = (
+            db.query(models.Contact)
+            .filter(
+                models.Contact.user_id == sess.user_id,
+                models.Contact.phone == phone,
+            )
+            .first()
+        )
+        if contato_db:
+            fc_ativo = (
+                db.query(models.FunnelContato)
+                .join(models.FunnelSequencia, models.FunnelContato.sequencia_id == models.FunnelSequencia.id)
+                .filter(
+                    models.FunnelContato.contato_id == contato_db.id,
+                    models.FunnelContato.status == models.FunnelContatoStatus.ativo,
+                    models.FunnelSequencia.user_id == sess.user_id,
+                )
+                .first()
+            )
+            if fc_ativo:
+                now_ts = datetime.now(timezone.utc)
+                fc_ativo.status = models.FunnelContatoStatus.respondeu
+                fc_ativo.respondeu_em = now_ts
+                fc_ativo.temperatura = models.FunnelTemperatura.quente
+                db.commit()
+                seq_nome = fc_ativo.sequencia.nome if fc_ativo.sequencia else "?"
+                label_contato = contato_db.name or phone
+                db.add(models.AtividadeLog(
+                    user_id=sess.user_id,
+                    tipo="funnel_respondeu",
+                    descricao=(
+                        f"💬 Lead {label_contato} respondeu! "
+                        f"Funil '{seq_nome}' pausado automaticamente."
+                    ),
+                ))
+                db.commit()
+                print(f"[FUNNEL] Lead {phone} respondeu — funil pausado.")
 
     # ── message.ack (entregue / lido) ─────────────────────────────────────────
     elif event in ("message.ack", "message_ack") and sess:

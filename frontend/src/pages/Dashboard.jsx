@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   MdContacts, MdSend, MdPhoneAndroid, MdCampaign, MdHistory,
   MdWarning, MdTrendingUp, MdTrendingDown, MdCheckCircle,
-  MdSchedule, MdBarChart, MdStar,
+  MdSchedule, MdBarChart, MdStar, MdFilterAlt,
 } from 'react-icons/md'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -18,7 +18,9 @@ const tipoConfig = {
   grupos_extraidos:  { emoji: '✅', bg: 'bg-primary-500/15', ring: 'ring-primary-500/30' },
   campanha_enviada:  { emoji: '📤', bg: 'bg-purple-500/15',  ring: 'ring-purple-500/30' },
   sessao_conectada:  { emoji: '🟢', bg: 'bg-primary-500/15', ring: 'ring-primary-500/30' },
-  grupo_auto_atualizado: { emoji: '🔄', bg: 'bg-indigo-500/15', ring: 'ring-indigo-500/30' },
+  grupo_auto_atualizado:    { emoji: '🔄', bg: 'bg-indigo-500/15',  ring: 'ring-indigo-500/30' },
+  funnel_respondeu:         { emoji: '💬', bg: 'bg-emerald-500/15', ring: 'ring-emerald-500/30' },
+  funnel_mensagem_enviada:  { emoji: '🎯', bg: 'bg-purple-500/15',  ring: 'ring-purple-500/30' },
 }
 
 function formatRelativo(isoString) {
@@ -84,6 +86,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [campaigns, setCampaigns] = useState([])
   const [atividades, setAtividades] = useState([])
+  const [funnelStats, setFunnelStats] = useState(null)
   const activityRef = useRef(null)
   const sessionsRef = useRef(null)
 
@@ -99,6 +102,7 @@ export default function Dashboard() {
     loadStats()
     api.get('/campanhas?page_size=5').then(r => setCampaigns(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     loadAtividades()
+    api.get('/funnel/stats').then(r => setFunnelStats(r.data)).catch(() => {})
 
     // Activity polling: 10s
     activityRef.current = setInterval(loadAtividades, 10000)
@@ -449,6 +453,56 @@ export default function Dashboard() {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+
+          {/* Card Funil de Leads */}
+          <div className="glass-card">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-surface-700/50">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(157,78,221,0.2)', color: '#9D4EDD' }}>
+                <MdFilterAlt size={18} />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-surface-100">Funil de Leads 🎯</h2>
+                <p className="text-[10px] text-surface-500">Recuperação automática</p>
+              </div>
+            </div>
+            {!funnelStats || funnelStats.total_sequencias === 0 ? (
+              <div className="py-4 text-center">
+                <p className="text-surface-500 text-xs mb-2">Nenhuma sequência ativa</p>
+                <button onClick={() => navigate('/funil')} className="text-xs font-semibold text-primary-300 hover:text-primary-200 underline underline-offset-2">
+                  Criar sequência →
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
+                    <div className="text-xl font-bold text-blue-400">{funnelStats.total_ativos}</div>
+                    <div className="text-[10px] text-surface-500">Em andamento</div>
+                  </div>
+                  <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }}>
+                    <div className="text-xl font-bold text-yellow-400">{funnelStats.total_convertidos}</div>
+                    <div className="text-[10px] text-surface-500">Convertidos</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[11px] text-surface-400">Taxa de conversão</span>
+                    <span className="text-[11px] font-bold text-yellow-400">{funnelStats.taxa_conversao}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-surface-800/60 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${funnelStats.taxa_conversao}%`, background: 'linear-gradient(90deg, #9D4EDD, #eab308)' }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-surface-500 mt-1.5">{funnelStats.total_sequencias} sequência(s) · {funnelStats.total_contatos} leads</p>
+                </div>
+                <button onClick={() => navigate('/funil')} className="w-full text-center text-xs font-semibold text-primary-300 hover:text-primary-200 py-1 transition-colors">
+                  Ver funil completo →
+                </button>
+              </div>
             )}
           </div>
 

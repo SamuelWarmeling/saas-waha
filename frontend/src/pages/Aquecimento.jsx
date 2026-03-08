@@ -64,13 +64,15 @@ const PLANOS = [
 
 // ── Modal Iniciar Aquecimento ─────────────────────────────────────────────────
 
-function ModalIniciar({ sessoes, onSave, onClose }) {
+function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
   const [sessionId, setSessionId] = useState(sessoes[0]?.id ?? '')
   const [diasTotal, setDiasTotal] = useState(14)
   const [usarIa, setUsarIa] = useState(true)
   const [saving, setSaving] = useState(false)
 
   const sessaoSelecionada = sessoes.find(s => s.id === Number(sessionId))
+  const tipoChip = sessaoSelecionada?.tipo_chip ?? 'fisico'
+  const isVirtual = tipoChip === 'virtual'
 
   async function confirmar() {
     if (!sessionId) { toast.error('Selecione um chip'); return }
@@ -109,7 +111,7 @@ function ModalIniciar({ sessoes, onSave, onClose }) {
             <select className="input w-full" value={sessionId} onChange={e => setSessionId(e.target.value)}>
               {sessoes.map(s => (
                 <option key={s.id} value={s.id}>
-                  {s.name}{s.phone_number ? ` · ${s.phone_number}` : ''}
+                  {s.tipo_chip === 'virtual' ? '💻' : '📱'} {s.name}{s.phone_number ? ` · ${s.phone_number}` : ''}
                   {s.status !== 'connected' ? ' ⚠️ offline' : ' ✅'}
                 </option>
               ))}
@@ -118,6 +120,43 @@ function ModalIniciar({ sessoes, onSave, onClose }) {
               <p className="text-xs text-orange-400 mt-1.5">⚠️ Este chip não está conectado. Conecte-o antes de iniciar o aquecimento.</p>
             )}
           </div>
+
+          {/* Tipo do chip detectado */}
+          {sessaoSelecionada && (
+            <div className="rounded-xl border p-4 flex items-start gap-3" style={{
+              borderColor: isVirtual ? 'rgba(59,130,246,0.3)' : 'rgba(34,197,94,0.3)',
+              background: isVirtual ? 'rgba(59,130,246,0.06)' : 'rgba(34,197,94,0.06)',
+            }}>
+              <span className="text-xl">{isVirtual ? '💻' : '📱'}</span>
+              <div className="flex-1">
+                <p className="text-sm font-bold" style={{ color: isVirtual ? '#60a5fa' : '#4ade80' }}>
+                  {isVirtual ? 'Chip Virtual detectado' : 'Chip Físico detectado'}
+                </p>
+                <p className="text-xs mt-1" style={{ color: isVirtual ? '#93c5fd' : '#86efac' }}>
+                  {isVirtual
+                    ? 'Este chip só responderá mensagens de chips físicos. Nunca iniciará conversas. Fica disponível no pool como receptor.'
+                    : 'Este chip irá enviar mensagens para chips virtuais do pool. Ele sempre inicia as conversas.'}
+                </p>
+                {isVirtual && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: poolStatus?.fisicos > 0 ? '#4ade80' : '#ef4444' }} />
+                    <span className="text-xs font-medium" style={{ color: poolStatus?.fisicos > 0 ? '#4ade80' : '#f87171' }}>
+                      🌐 {poolStatus?.fisicos ?? 0} chip{poolStatus?.fisicos !== 1 ? 's' : ''} físico{poolStatus?.fisicos !== 1 ? 's' : ''} disponível{poolStatus?.fisicos !== 1 ? 'is' : ''} para te enviar mensagens
+                    </span>
+                  </div>
+                )}
+                {!isVirtual && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: poolStatus?.virtuais > 0 ? '#4ade80' : '#f59e0b' }} />
+                    <span className="text-xs font-medium" style={{ color: poolStatus?.virtuais > 0 ? '#4ade80' : '#fbbf24' }}>
+                      🌐 {poolStatus?.virtuais ?? 0} chip{poolStatus?.virtuais !== 1 ? 's' : ''} virtual{poolStatus?.virtuais !== 1 ? 'is' : ''} disponível{poolStatus?.virtuais !== 1 ? 'is' : ''} no pool
+                      {(poolStatus?.virtuais ?? 0) === 0 ? ' — adicione chips virtuais para maximizar o aquecimento' : ''}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Seleção de plano */}
           <div>
@@ -282,11 +321,13 @@ function ModalLogs({ aq, onClose }) {
                     <td className="py-2.5 text-surface-300 max-w-[220px] truncate">{l.mensagem}</td>
                     <td className="py-2.5 text-center">
                       {l.status === 'enviado_ia' ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.3)' }}>
-                          ✨ IA
-                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.3)' }}>✨ IA</span>
                       ) : l.status === 'enviado' ? (
                         <span className="badge-green">✓ pool</span>
+                      ) : l.status === 'respondido' ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.3)' }}>💬 resposta</span>
+                      ) : l.status === 'aguardando' ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(245,158,11,0.2)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.3)' }}>⏳ aguardando</span>
                       ) : (
                         <span className="badge-red">✗ erro</span>
                       )}
@@ -317,12 +358,23 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(157,78,221,0.15)', border: '1px solid rgba(157,78,221,0.25)' }}>
-            <MdPhoneAndroid className="text-primary-400" size={22} />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl"
+            style={{
+              background: aq.tipo_chip === 'virtual' ? 'rgba(59,130,246,0.15)' : 'rgba(157,78,221,0.15)',
+              border: aq.tipo_chip === 'virtual' ? '1px solid rgba(59,130,246,0.25)' : '1px solid rgba(157,78,221,0.25)',
+            }}>
+            {aq.tipo_chip === 'virtual' ? '💻' : '📱'}
           </div>
           <div>
             <p className="font-bold text-surface-100 text-sm">{aq.session_name}</p>
             {aq.session_phone && <p className="text-[11px] text-surface-500 font-mono">{aq.session_phone}</p>}
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md mt-0.5 inline-block" style={
+              aq.tipo_chip === 'virtual'
+                ? { background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.25)' }
+                : { background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }
+            }>
+              {aq.tipo_chip === 'virtual' ? '💻 Virtual' : '📱 Físico'}
+            </span>
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -373,13 +425,38 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar }) {
         </div>
       </div>
 
+      {/* Virtual chip stats */}
+      {aq.tipo_chip === 'virtual' && (
+        <div className="rounded-xl border border-blue-500/20 p-3 flex items-center justify-around text-xs" style={{ background: 'rgba(59,130,246,0.06)' }}>
+          <div className="text-center">
+            <p className="font-bold text-blue-400 text-base">{aq.msgs_recebidas ?? 0}</p>
+            <p className="text-surface-500">📨 recebidas</p>
+          </div>
+          <div className="w-px h-8 bg-surface-700/50" />
+          <div className="text-center">
+            <p className="font-bold text-emerald-400 text-base">{aq.respostas_enviadas ?? 0}</p>
+            <p className="text-surface-500">✉️ respostas</p>
+          </div>
+          <div className="w-px h-8 bg-surface-700/50" />
+          <div className="text-center">
+            <p className="font-bold text-amber-400 text-base">{aq.fisicos_disponiveis ?? 0}</p>
+            <p className="text-surface-500">🌐 físicos</p>
+          </div>
+        </div>
+      )}
+      {aq.tipo_chip === 'virtual' && isAtivo && (aq.fisicos_disponiveis ?? 0) === 0 && (
+        <div className="rounded-lg border border-amber-500/20 p-2.5 text-xs text-amber-300/80 flex items-center gap-2" style={{ background: 'rgba(245,158,11,0.06)' }}>
+          ⏸ Aguardando chip físico no pool (0 disponíveis)
+        </div>
+      )}
+
       {/* Info row */}
       <div className="flex items-center justify-between text-xs">
         <div className="flex items-center gap-1.5">
           <span style={{ color: saude.color }}>{saude.emoji}</span>
           <span className="text-surface-400">Saúde: <span className="font-semibold" style={{ color: saude.color }}>{saude.label}</span></span>
         </div>
-        {isAtivo && (
+        {isAtivo && aq.tipo_chip !== 'virtual' && (
           <div className="text-surface-500">
             Próximo: <span className="font-medium text-surface-300">{formatProximoEnvio(aq.proximo_envio)}</span>
           </div>
@@ -439,20 +516,23 @@ export default function Aquecimento() {
   const [aquecimentos, setAquecimentos] = useState([])
   const [sessoes, setSessoes] = useState([])
   const [stats, setStats] = useState(null)
+  const [poolStatus, setPoolStatus] = useState({ fisicos: 0, virtuais: 0 })
   const [loading, setLoading] = useState(true)
   const [modalIniciar, setModalIniciar] = useState(false)
   const [modalLogs, setModalLogs] = useState(null)
 
   const carregar = useCallback(async () => {
     try {
-      const [aqR, sessR, statsR] = await Promise.all([
+      const [aqR, sessR, statsR, poolR] = await Promise.all([
         api.get('/aquecimento'),
         api.get('/sessoes'),
         api.get('/aquecimento/stats'),
+        api.get('/aquecimento/pool-status'),
       ])
       setAquecimentos(aqR.data)
       setSessoes(Array.isArray(sessR.data) ? sessR.data : (sessR.data.items ?? []))
       setStats(statsR.data)
+      setPoolStatus(poolR.data)
     } catch {
       toast.error('Erro ao carregar dados de aquecimento')
     } finally {
@@ -530,6 +610,22 @@ export default function Aquecimento() {
             Disparos em massa simultâneos podem comprometer o processo e levar ao ban.
           </p>
         </div>
+      </div>
+
+      {/* Pool Status */}
+      <div className="rounded-xl border border-surface-700/40 p-4 flex flex-wrap items-center gap-6" style={{ background: 'rgba(255,255,255,0.02)' }}>
+        <span className="text-xs font-semibold text-surface-400 uppercase tracking-wider">🌐 Pool Colaborativo</span>
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ background: poolStatus.fisicos > 0 ? '#4ade80' : '#6b7280' }} />
+          <span className="text-sm font-bold text-emerald-400">{poolStatus.fisicos}</span>
+          <span className="text-xs text-surface-400">📱 Chips físicos conectados</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ background: poolStatus.virtuais > 0 ? '#60a5fa' : '#6b7280' }} />
+          <span className="text-sm font-bold text-blue-400">{poolStatus.virtuais}</span>
+          <span className="text-xs text-surface-400">💻 Chips virtuais conectados</span>
+        </div>
+        <p className="text-xs text-surface-600 ml-auto hidden sm:block">Físicos enviam → Virtuais respondem → Conversa natural!</p>
       </div>
 
       {/* Stats globais */}
@@ -642,6 +738,7 @@ export default function Aquecimento() {
       {modalIniciar && (
         <ModalIniciar
           sessoes={sessoes}
+          poolStatus={poolStatus}
           onSave={() => { setModalIniciar(false); carregar() }}
           onClose={() => setModalIniciar(false)}
         />

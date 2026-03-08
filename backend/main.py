@@ -266,6 +266,28 @@ def migrate_ia_user_columns():
         logger.error(f"[MIGRATE] Erro ao migrar colunas de IA: {e}")
 
 
+def migrate_chip_virtual():
+    """Adiciona tipo_chip em whatsapp_sessions e contadores de resposta em aquecimento_configs."""
+    try:
+        with engine.connect() as conn:
+            for table, col, dtype, default in [
+                ("whatsapp_sessions", "tipo_chip", "VARCHAR(10) NOT NULL", "DEFAULT 'fisico'"),
+                ("aquecimento_configs", "msgs_recebidas", "INTEGER NOT NULL", "DEFAULT 0"),
+                ("aquecimento_configs", "respostas_enviadas", "INTEGER NOT NULL", "DEFAULT 0"),
+            ]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = '{table}' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em {table}...")
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {dtype} {default}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em {table}.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar chip virtual: {e}")
+
+
 def migrate_aquecimento_tables():
     """Cria o enum aquecimentostatus e tabelas de aquecimento se não existirem."""
     try:
@@ -464,6 +486,7 @@ async def lifespan(app: FastAPI):
             migrate_ia_user_columns()
             migrate_aquecimento_tables()
             migrate_funnel_tables()
+            migrate_chip_virtual()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   MdAdd, MdRefresh, MdQrCode, MdDelete, MdCheckCircle, MdInfo, MdContentCopy,
+  MdPhoneAndroid, MdComputer,
 } from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
@@ -172,6 +173,17 @@ export default function Sessoes() {
     }
   }
 
+  async function toggleTipoChip(sess) {
+    const novo = sess.tipo_chip === 'virtual' ? 'fisico' : 'virtual'
+    try {
+      await api.patch(`/sessoes/${sess.id}/tipo-chip`, { tipo_chip: novo })
+      toast.success(`Chip definido como ${novo === 'virtual' ? '💻 Virtual' : '📱 Físico'}`)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao alterar tipo')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -254,9 +266,28 @@ export default function Sessoes() {
                       <SessionIdBadge sessionId={sess.session_id} />
                     </div>
 
-                    <span className={`${st.cls} shadow-sm px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold flex-shrink-0`}>
-                      {st.label}
-                    </span>
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                      <span className={`${st.cls} shadow-sm px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold`}>
+                        {st.label}
+                      </span>
+                      {/* Chip type toggle */}
+                      <button
+                        onClick={() => toggleTipoChip(sess)}
+                        title={sess.tipo_chip === 'virtual'
+                          ? 'Chip Virtual: só responde mensagens. Clique para mudar para Físico.'
+                          : 'Chip Físico: inicia conversas. Clique para mudar para Virtual.'}
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                          sess.tipo_chip === 'virtual'
+                            ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25'
+                            : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
+                        }`}
+                      >
+                        {sess.tipo_chip === 'virtual'
+                          ? <><MdComputer size={13} /> 💻 Virtual</>
+                          : <><MdPhoneAndroid size={13} /> 📱 Físico</>
+                        }
+                      </button>
+                    </div>
                   </div>
                 </div>
 

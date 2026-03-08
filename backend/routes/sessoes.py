@@ -39,9 +39,14 @@ class SessionOut(BaseModel):
     delay_min: int
     delay_max: int
     is_active: bool
+    tipo_chip: str = "fisico"
 
     class Config:
         from_attributes = True
+
+
+class TipoChipUpdate(BaseModel):
+    tipo_chip: str  # "fisico" | "virtual"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -238,6 +243,27 @@ def update_session(
     if data.max_daily_messages is not None:
         session.max_daily_messages = data.max_daily_messages
 
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+@router.patch("/{session_id}/tipo-chip", response_model=SessionOut)
+def update_tipo_chip(
+    session_id: int,
+    data: TipoChipUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    if data.tipo_chip not in ("fisico", "virtual"):
+        raise HTTPException(status_code=400, detail="tipo_chip deve ser 'fisico' ou 'virtual'")
+    session = db.query(models.WhatsAppSession).filter(
+        models.WhatsAppSession.id == session_id,
+        models.WhatsAppSession.user_id == current_user.id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    session.tipo_chip = data.tipo_chip
     db.commit()
     db.refresh(session)
     return session

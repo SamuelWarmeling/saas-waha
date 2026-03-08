@@ -88,6 +88,7 @@ class WhatsAppSession(Base):
     delay_min = Column(Integer, default=5)   # segundos
     delay_max = Column(Integer, default=15)  # segundos
     is_active = Column(Boolean, default=True)
+    tipo_chip = Column(String(10), default="fisico", server_default="fisico", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -370,6 +371,8 @@ class AquecimentoConfig(Base):
     msgs_sem_pausa = Column(Integer, default=0, nullable=False)
     ultima_msg_idx = Column(Integer, nullable=True)
     usar_ia = Column(Boolean, default=True, server_default="true", nullable=False)
+    msgs_recebidas = Column(Integer, default=0, server_default="0", nullable=False)
+    respostas_enviadas = Column(Integer, default=0, server_default="0", nullable=False)
     criado_em = Column(DateTime(timezone=True), server_default=func.now())
     ultimo_envio = Column(DateTime(timezone=True), nullable=True)
     proximo_envio = Column(DateTime(timezone=True), nullable=True)

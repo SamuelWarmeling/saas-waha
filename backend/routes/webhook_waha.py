@@ -1,13 +1,65 @@
+import asyncio
+import random
+
 from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 import httpx
-from database import get_db
+from database import get_db, SessionLocal
 from config import settings
 import models
 from models import FunnelContatoStatus as FunnelContatoStatus, FunnelTemperatura as FunnelTemperatura
 
 router = APIRouter(tags=["webhook"])
+
+
+async def resposta_automatica_virtual(
+    session_waha_id: str,
+    to_phone: str,
+    mensagem_recebida: str,
+    aq_id: int,
+    user_key: str | None,
+):
+    """Envia resposta automática para chip físico após delay de 2-8 minutos."""
+    delay_segundos = random.randint(120, 480)  # 2-8 min
+    await asyncio.sleep(delay_segundos)
+
+    db: Session = SessionLocal()
+    try:
+        import ia_service
+        resposta = await ia_service.gerar_resposta_natural(mensagem_recebida, user_key)
+
+        headers = {}
+        if settings.WAHA_API_KEY:
+            headers["X-Api-Key"] = settings.WAHA_API_KEY
+        payload = {
+            "chatId": f"{to_phone}@c.us",
+            "text": resposta,
+            "session": session_waha_id,
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                f"{settings.WAHA_API_URL}/api/sendText",
+                json=payload,
+                headers=headers,
+            )
+        ok = r.status_code in (200, 201)
+
+        # Incrementa contador de respostas enviadas
+        aq = db.query(models.AquecimentoConfig).filter(models.AquecimentoConfig.id == aq_id).first()
+        if aq and ok:
+            aq.respostas_enviadas = (getattr(aq, "respostas_enviadas", 0) or 0) + 1
+            db.add(models.AquecimentoLog(
+                aquecimento_id=aq_id,
+                telefone_destino=to_phone,
+                mensagem=resposta,
+                status="respondido",
+            ))
+            db.commit()
+    except Exception as exc:
+        print(f"[VIRTUAL-AUTO-RESP] Erro: {exc}")
+    finally:
+        db.close()
 
 
 def normalize_phone(raw: str) -> str:
@@ -215,6 +267,33 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
                 ))
                 db.commit()
                 print(f"[FUNNEL] Lead {phone} respondeu — funil pausado.")
+
+        # ── Chip virtual em aquecimento → auto-resposta ──────────────────────
+        tipo_chip = getattr(sess, "tipo_chip", "fisico")
+        if tipo_chip == "virtual" and not is_group:
+            aq_virtual = (
+                db.query(models.AquecimentoConfig)
+                .filter(
+                    models.AquecimentoConfig.session_id == sess.id,
+                    models.AquecimentoConfig.status == models.AquecimentoStatus.ativo,
+                )
+                .first()
+            )
+            if aq_virtual:
+                aq_virtual.msgs_recebidas = (getattr(aq_virtual, "msgs_recebidas", 0) or 0) + 1
+                db.commit()
+                body_text = payload.get("body") or payload.get("text") or ""
+                user_key = getattr(sess.user, "gemini_api_key", None) if sess.user else None
+                asyncio.create_task(
+                    resposta_automatica_virtual(
+                        session_waha_id=sess.session_id,
+                        to_phone=phone,
+                        mensagem_recebida=body_text,
+                        aq_id=aq_virtual.id,
+                        user_key=user_key,
+                    )
+                )
+                print(f"[VIRTUAL] Chip virtual {sess.session_id} recebeu de {phone[:6]}*** — auto-resposta agendada (2-8min)")
 
     # ── message.ack (entregue / lido) ─────────────────────────────────────────
     elif event in ("message.ack", "message_ack") and sess:

@@ -112,23 +112,39 @@ def get_meta_dia(dia: int) -> int:
     return 40
 
 
-def get_destinos(db: Session, session_id: int) -> List[str]:
-    """Busca destinos para aquecimento: outras sessões conectadas → fallback env."""
+def get_destinos_virtuais(db: Session, session_id: int) -> List[str]:
+    """Físico → busca chips VIRTUAIS conectados para enviar mensagem."""
     sessoes = (
         db.query(models.WhatsAppSession)
         .filter(
             models.WhatsAppSession.status == models.SessionStatus.connected,
             models.WhatsAppSession.id != session_id,
             models.WhatsAppSession.phone_number.isnot(None),
+            models.WhatsAppSession.tipo_chip == "virtual",
         )
         .all()
     )
     numeros = [s.phone_number for s in sessoes if s.phone_number]
 
+    # Fallback: env numbers (tratados como virtuais externos)
     if not numeros and settings.AQUECIMENTO_NUMBERS:
         numeros = [n.strip() for n in settings.AQUECIMENTO_NUMBERS.split(",") if n.strip()]
 
     return numeros
+
+
+def count_fisicos_disponiveis(db: Session, session_id: int) -> int:
+    """Virtual → conta chips FÍSICOS conectados disponíveis para enviar."""
+    return (
+        db.query(models.WhatsAppSession)
+        .filter(
+            models.WhatsAppSession.status == models.SessionStatus.connected,
+            models.WhatsAppSession.id != session_id,
+            models.WhatsAppSession.phone_number.isnot(None),
+            models.WhatsAppSession.tipo_chip == "fisico",
+        )
+        .count()
+    )
 
 
 async def enviar_msg_aquecimento(session_waha_id: str, phone: str, mensagem: str) -> bool:
@@ -153,14 +169,23 @@ async def enviar_msg_aquecimento(session_waha_id: str, phone: str, mensagem: str
         return False
 
 
-def _aq_out(aq: models.AquecimentoConfig):
+def _aq_out(aq: models.AquecimentoConfig, db: Session = None):
     sess = aq.session
+    tipo_chip = getattr(sess, "tipo_chip", "fisico") if sess else "fisico"
     progresso_pct = round((aq.dia_atual - 1) / aq.dias_total * 100, 1) if aq.dias_total > 0 else 0
     saude = "otima"
     if not sess or sess.status != models.SessionStatus.connected:
         saude = "risco"
     elif aq.status == models.AquecimentoStatus.pausado:
         saude = "atencao"
+
+    # Para chip virtual: contar físicos disponíveis
+    fisicos_disponiveis = 0
+    if db and tipo_chip == "virtual":
+        fisicos_disponiveis = count_fisicos_disponiveis(db, aq.session_id)
+        if fisicos_disponiveis == 0 and aq.status == models.AquecimentoStatus.ativo:
+            saude = "atencao"
+
     return {
         "id": aq.id,
         "user_id": aq.user_id,
@@ -169,16 +194,20 @@ def _aq_out(aq: models.AquecimentoConfig):
         "session_phone": sess.phone_number if sess else None,
         "session_status": sess.status.value if sess else "disconnected",
         "status": aq.status.value if hasattr(aq.status, "value") else aq.status,
+        "tipo_chip": tipo_chip,
         "dia_atual": aq.dia_atual,
         "dias_total": aq.dias_total,
         "msgs_hoje": aq.msgs_hoje,
         "meta_hoje": aq.meta_hoje,
         "progresso_pct": progresso_pct,
         "saude": saude,
+        "usar_ia": getattr(aq, "usar_ia", True),
+        "msgs_recebidas": getattr(aq, "msgs_recebidas", 0),
+        "respostas_enviadas": getattr(aq, "respostas_enviadas", 0),
+        "fisicos_disponiveis": fisicos_disponiveis,
         "criado_em": aq.criado_em.isoformat() if aq.criado_em else None,
         "ultimo_envio": aq.ultimo_envio.isoformat() if aq.ultimo_envio else None,
         "proximo_envio": aq.proximo_envio.isoformat() if aq.proximo_envio else None,
-        "usar_ia": getattr(aq, "usar_ia", True),
     }
 
 
@@ -256,7 +285,34 @@ def iniciar_aquecimento(
     db.add(aq)
     db.commit()
     db.refresh(aq)
-    return _aq_out(aq)
+    return _aq_out(aq, db)
+
+
+@router.get("/pool-status")
+def pool_status(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Retorna contagem de chips físicos e virtuais conectados no pool global."""
+    fisicos = (
+        db.query(models.WhatsAppSession)
+        .filter(
+            models.WhatsAppSession.status == models.SessionStatus.connected,
+            models.WhatsAppSession.phone_number.isnot(None),
+            models.WhatsAppSession.tipo_chip == "fisico",
+        )
+        .count()
+    )
+    virtuais = (
+        db.query(models.WhatsAppSession)
+        .filter(
+            models.WhatsAppSession.status == models.SessionStatus.connected,
+            models.WhatsAppSession.phone_number.isnot(None),
+            models.WhatsAppSession.tipo_chip == "virtual",
+        )
+        .count()
+    )
+    return {"fisicos": fisicos, "virtuais": virtuais}
 
 
 @router.get("")
@@ -270,7 +326,7 @@ def listar_aquecimentos(
         .order_by(models.AquecimentoConfig.criado_em.desc())
         .all()
     )
-    return [_aq_out(a) for a in qs]
+    return [_aq_out(a, db) for a in qs]
 
 
 @router.put("/{aq_id}/pausar")
@@ -289,7 +345,7 @@ def pausar_aquecimento(
         raise HTTPException(status_code=400, detail="Aquecimento não está ativo")
     aq.status = models.AquecimentoStatus.pausado
     db.commit()
-    return _aq_out(aq)
+    return _aq_out(aq, db)
 
 
 @router.put("/{aq_id}/retomar")
@@ -310,7 +366,7 @@ def retomar_aquecimento(
     # Reset proximo_envio pra não esperar muito ao retomar
     aq.proximo_envio = datetime.now(timezone.utc) + timedelta(minutes=2)
     db.commit()
-    return _aq_out(aq)
+    return _aq_out(aq, db)
 
 
 @router.delete("/{aq_id}", status_code=204)
@@ -440,15 +496,49 @@ async def processar_aquecimento():
                     logger.warning(f"[AQUECIMENTO] #{aq.id} sessão offline, pulando")
                     continue
 
-                # ── Busca destinos ────────────────────────────────────────────
-                destinos = get_destinos(db, aq.session_id)
+                tipo_chip = getattr(session, "tipo_chip", "fisico")
+
+                # ════════════════════════════════════════════════════════
+                # CHIP VIRTUAL — só responde, nunca inicia
+                # ════════════════════════════════════════════════════════
+                if tipo_chip == "virtual":
+                    fisicos = count_fisicos_disponiveis(db, aq.session_id)
+                    if fisicos == 0:
+                        # Sem chips físicos no pool — registra apenas 1x por ciclo
+                        if not aq.proximo_envio or now >= aq.proximo_envio:
+                            db.add(models.AquecimentoLog(
+                                aquecimento_id=aq.id,
+                                telefone_destino="—",
+                                mensagem="Aguardando chip físico no pool para receber mensagens",
+                                status="aguardando",
+                            ))
+                            aq.proximo_envio = now + timedelta(minutes=30)
+                            db.commit()
+                            logger.info(f"[AQUECIMENTO] #{aq.id} virtual — sem chips físicos, aguardando")
+                    else:
+                        logger.info(f"[AQUECIMENTO] #{aq.id} virtual — {fisicos} chip(s) físico(s) no pool, aguardando mensagens")
+                    continue  # virtual nunca inicia envio
+
+                # ════════════════════════════════════════════════════════
+                # CHIP FÍSICO — inicia conversa com virtuais
+                # ════════════════════════════════════════════════════════
+
+                # ── Busca destinos (chips virtuais) ───────────────────────────
+                destinos = get_destinos_virtuais(db, aq.session_id)
                 if not destinos:
-                    logger.warning(f"[AQUECIMENTO] #{aq.id} sem destinos disponíveis")
+                    logger.warning(f"[AQUECIMENTO] #{aq.id} físico — sem chips virtuais no pool")
+                    db.add(models.AquecimentoLog(
+                        aquecimento_id=aq.id,
+                        telefone_destino="—",
+                        mensagem="Sem chips virtuais disponíveis no pool para receber mensagens",
+                        status="aguardando",
+                    ))
+                    aq.proximo_envio = now + timedelta(minutes=15)
+                    db.commit()
                     continue
 
                 # ── Seleciona mensagem (IA ou pool fixo) ─────────────────────
                 usar_ia = getattr(aq, "usar_ia", True)
-                # Busca histórico recente para evitar repetição
                 historico_recente = (
                     db.query(models.AquecimentoLog.mensagem)
                     .filter(models.AquecimentoLog.aquecimento_id == aq.id)
@@ -458,7 +548,6 @@ async def processar_aquecimento():
                 )
                 historico_msgs = [r[0] for r in historico_recente]
 
-                # Tenta IA; fallback automático se falhar
                 user = aq.user
                 user_key = getattr(user, "gemini_api_key", None) if user else None
                 gemini_habilitado = getattr(user, "gemini_habilitado", True) if user else True
@@ -470,7 +559,6 @@ async def processar_aquecimento():
                     gemini_habilitado=usar_ia and gemini_habilitado,
                 )
 
-                # Fallback de índice para o pool quando IA não usada
                 if not gerada_por_ia:
                     idx = random.randint(0, len(MENSAGENS_AQUECIMENTO) - 1)
                     if aq.ultima_msg_idx is not None and idx == aq.ultima_msg_idx:
@@ -505,12 +593,11 @@ async def processar_aquecimento():
 
                     aq.proximo_envio = now + timedelta(minutes=delay)
                     logger.info(
-                        f"[AQUECIMENTO] #{aq.id} dia {aq.dia_atual} — "
-                        f"msg {aq.msgs_hoje}/{aq.meta_hoje} enviada para {destino[:6]}*** "
+                        f"[AQUECIMENTO] #{aq.id} físico dia {aq.dia_atual} — "
+                        f"msg {aq.msgs_hoje}/{aq.meta_hoje} → {destino[:6]}*** "
                         f"(próxima em {delay}min)"
                     )
                 else:
-                    # Em caso de erro, tenta novamente em 5 minutos
                     aq.proximo_envio = now + timedelta(minutes=5)
                     logger.warning(f"[AQUECIMENTO] #{aq.id} falha ao enviar, tentará em 5min")
 

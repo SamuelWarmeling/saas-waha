@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 import httpx
 from database import get_db
 from config import settings
@@ -174,5 +175,27 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
                 descricao=descricao,
             ))
             db.commit()
+
+    # ── message.ack (entregue / lido) ─────────────────────────────────────────
+    elif event in ("message.ack", "message_ack") and sess:
+        ack = payload.get("ack") or payload.get("status") or 0
+        msg_key = payload.get("key") or {}
+        waha_msg_id = msg_key.get("id") if isinstance(msg_key, dict) else None
+        if not waha_msg_id:
+            waha_msg_id = payload.get("id")
+
+        if waha_msg_id and ack in (2, 3):
+            cc = (
+                db.query(models.CampaignContact)
+                .filter(models.CampaignContact.waha_message_id == str(waha_msg_id))
+                .first()
+            )
+            if cc:
+                now_ts = datetime.now(timezone.utc)
+                if ack >= 2 and not cc.delivered_at:
+                    cc.delivered_at = now_ts
+                if ack >= 3 and not cc.read_at:
+                    cc.read_at = now_ts
+                db.commit()
 
     return {"ok": True}

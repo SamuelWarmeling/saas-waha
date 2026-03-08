@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Frontend URL (para webhooks/redirects)
     FRONTEND_URL: str = "https://app-saas.xeramr.easypanel.host"
 
+    # URL pública do backend (usada pelo WAHA para buscar arquivos de mídia)
+    BACKEND_URL: str = "https://api-saas.xeramr.easypanel.host"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

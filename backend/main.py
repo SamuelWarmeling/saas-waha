@@ -1,11 +1,14 @@
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from database import engine, Base, get_db
 import models  # noqa: F401 – importa para registrar os models
@@ -196,6 +199,113 @@ def migrate_groups_table():
         logger.error(f"[MIGRATE] Erro ao migrar tabela groups: {e}")
 
 
+def migrate_campaign_scheduled():
+    """Adiciona 'scheduled' ao enum campaignstatus e coluna scheduled_at em campaigns."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TYPE campaignstatus ADD VALUE IF NOT EXISTS 'scheduled'"))
+            conn.commit()
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'campaigns' AND column_name = 'scheduled_at')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Adicionando scheduled_at em campaigns...")
+                conn.execute(text("ALTER TABLE campaigns ADD COLUMN scheduled_at TIMESTAMP WITH TIME ZONE"))
+                conn.commit()
+                logger.info("[MIGRATE] Coluna scheduled_at adicionada em campaigns.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar campaign scheduled: {e}")
+
+
+def migrate_campaign_contact_ack():
+    """Adiciona delivered_at, read_at e waha_message_id em campaign_contacts."""
+    try:
+        with engine.connect() as conn:
+            for col, dtype in [
+                ("delivered_at", "TIMESTAMP WITH TIME ZONE"),
+                ("read_at", "TIMESTAMP WITH TIME ZONE"),
+                ("waha_message_id", "VARCHAR(100)"),
+            ]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = 'campaign_contacts' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em campaign_contacts...")
+                    conn.execute(text(f"ALTER TABLE campaign_contacts ADD COLUMN {col} {dtype}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em campaign_contacts.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar campaign_contacts ack: {e}")
+
+
+def migrate_campaign_message_media():
+    """Adiciona tipo, media_url, media_filename, botoes em campaign_messages."""
+    try:
+        with engine.connect() as conn:
+            for col, dtype, default in [
+                ("tipo", "VARCHAR(20)", "'text'"),
+                ("media_url", "VARCHAR(1000)", "NULL"),
+                ("media_filename", "VARCHAR(255)", "NULL"),
+                ("botoes", "TEXT", "NULL"),
+            ]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = 'campaign_messages' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em campaign_messages...")
+                    default_clause = f"DEFAULT {default}" if default != "NULL" else ""
+                    conn.execute(text(
+                        f"ALTER TABLE campaign_messages ADD COLUMN {col} {dtype} {default_clause}"
+                    ))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em campaign_messages.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar campaign_messages media: {e}")
+
+
+async def _run_scheduled_campaigns():
+    """Verifica campanhas agendadas cujo scheduled_at já passou e as inicia."""
+    from routes.campanhas import send_campaign
+    db_gen = get_db()
+    db = next(db_gen)
+    try:
+        now = datetime.now(timezone.utc)
+        scheduled = db.query(models.Campaign).filter(
+            models.Campaign.status == models.CampaignStatus.scheduled,
+            models.Campaign.scheduled_at <= now,
+        ).all()
+        for campaign in scheduled:
+            try:
+                logger.info(f"[AGENDAMENTO] Iniciando campanha agendada #{campaign.id} '{campaign.name}'")
+                asyncio.create_task(send_campaign(campaign.id, campaign.user_id))
+            except Exception as e:
+                logger.error(f"[AGENDAMENTO] Erro ao iniciar campanha #{campaign.id}: {e}")
+    except Exception as e:
+        logger.error(f"[AGENDAMENTO] Erro geral: {e}")
+    finally:
+        try:
+            db_gen.close()
+        except Exception:
+            pass
+
+
+async def scheduled_campaigns_task():
+    """Background task que verifica campanhas agendadas a cada 60 segundos."""
+    logger.info("[AGENDAMENTO] Background task iniciada.")
+    while True:
+        try:
+            await asyncio.sleep(60)
+            await _run_scheduled_campaigns()
+        except asyncio.CancelledError:
+            logger.info("[AGENDAMENTO] Background task cancelada.")
+            break
+        except Exception as e:
+            logger.error(f"[AGENDAMENTO] Erro inesperado: {e}")
+
+
 async def _run_auto_updates():
     """Verifica grupos com auto_update ativo e re-extrai se o intervalo passou."""
     from grupo_extraction import extract_selected_groups
@@ -270,6 +380,10 @@ async def auto_update_groups_task():
 async def lifespan(app: FastAPI):
     logger.info("[STARTUP] Iniciando aplicação...")
     db_ok = wait_for_db(retries=5, delay=3)
+    # Criar pasta de uploads
+    uploads_dir = Path("uploads")
+    uploads_dir.mkdir(exist_ok=True)
+
     if db_ok:
         try:
             migrate_contacts_unique()
@@ -278,6 +392,9 @@ async def lifespan(app: FastAPI):
             migrate_user_dispatch_settings()
             migrate_groups_table()
             migrate_groups_auto_update()
+            migrate_campaign_scheduled()
+            migrate_campaign_contact_ack()
+            migrate_campaign_message_media()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
@@ -286,13 +403,16 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("[STARTUP] Pulando create_all — banco indisponível no momento do startup.")
     logger.info("[STARTUP] Aplicação pronta para receber requisições.")
-    task = asyncio.create_task(auto_update_groups_task())
+    task_auto = asyncio.create_task(auto_update_groups_task())
+    task_sched = asyncio.create_task(scheduled_campaigns_task())
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    task_auto.cancel()
+    task_sched.cancel()
+    for t in (task_auto, task_sched):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
     logger.info("[SHUTDOWN] Encerrando aplicação.")
 
 
@@ -325,6 +445,7 @@ app.include_router(contatos.router)
 app.include_router(campanhas.router)
 app.include_router(pagamentos.router)
 app.include_router(grupos.router)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.include_router(webhook_router, prefix="/api/webhook")
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(debug_router)

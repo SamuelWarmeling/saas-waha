@@ -23,6 +23,7 @@ class SessionStatus(str, enum.Enum):
 
 class CampaignStatus(str, enum.Enum):
     draft = "draft"
+    scheduled = "scheduled"
     running = "running"
     paused = "paused"
     completed = "completed"
@@ -133,6 +134,7 @@ class Campaign(Base):
     delay_min = Column(Integer, default=5)
     delay_max = Column(Integer, default=15)
     ordem_mensagens = Column(String(20), default="aleatorio", nullable=False, server_default="aleatorio")
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
@@ -159,6 +161,9 @@ class CampaignContact(Base):
     status = Column(SAEnum(ContactStatus), default=ContactStatus.pending)
     error_message = Column(Text, nullable=True)
     sent_at = Column(DateTime(timezone=True), nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    waha_message_id = Column(String(100), nullable=True)
 
     campaign = relationship("Campaign", back_populates="campaign_contacts")
     contact = relationship("Contact", back_populates="campaign_contacts")
@@ -175,8 +180,12 @@ class CampaignMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     campaign_id = Column(Integer, ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
-    text = Column(Text, nullable=False)
+    text = Column(Text, nullable=True)     # caption for media, body for text
     ordem = Column(Integer, default=0, nullable=False)
+    tipo = Column(String(20), default="text", nullable=False, server_default="text")  # text|image|file|audio|buttons
+    media_url = Column(String(1000), nullable=True)
+    media_filename = Column(String(255), nullable=True)
+    botoes = Column(Text, nullable=True)  # JSON string of buttons
 
     campaign = relationship("Campaign", back_populates="messages")
 

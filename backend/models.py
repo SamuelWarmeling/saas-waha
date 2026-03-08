@@ -90,6 +90,8 @@ class WhatsAppSession(Base):
     is_active = Column(Boolean, default=True)
     tipo_chip = Column(String(10), default="fisico", server_default="fisico", nullable=False)
     is_aquecido = Column(Boolean, default=False, server_default="false", nullable=False)
+    is_veterano = Column(Boolean, default=False, server_default="false", nullable=False)
+    em_adaptacao = Column(Boolean, default=False, server_default="false", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -374,6 +376,7 @@ class AquecimentoConfig(Base):
     ultima_msg_idx = Column(Integer, nullable=True)
     usar_ia = Column(Boolean, default=True, server_default="true", nullable=False)
     manutencao_ativa = Column(Boolean, default=True, server_default="true", nullable=False)
+    origem_chip = Column(String(20), default="novo", server_default="novo", nullable=False)
     msgs_recebidas = Column(Integer, default=0, server_default="0", nullable=False)
     respostas_enviadas = Column(Integer, default=0, server_default="0", nullable=False)
     criado_em = Column(DateTime(timezone=True), server_default=func.now())

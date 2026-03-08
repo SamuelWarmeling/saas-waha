@@ -855,20 +855,39 @@ export default function Campanhas() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {connectedSessions.map(s => {
                       const checked = form.session_ids.includes(s.id)
+                      const isAdaptacao = !!s.em_adaptacao
                       return (
-                        <label key={s.id} onClick={() => toggleSession(s.id)}
-                          className={`flex justify-between items-center p-3.5 rounded-xl border cursor-pointer transition-all ${checked ? 'border-primary-500/50 bg-primary-900/20' : 'border-surface-700 bg-surface-900/30 hover:border-surface-500'}`}>
+                        <label key={s.id}
+                          onClick={() => !isAdaptacao && toggleSession(s.id)}
+                          title={isAdaptacao ? 'Em adaptação — disponível para campanhas após concluir os 7 dias' : undefined}
+                          className={`flex justify-between items-center p-3.5 rounded-xl border transition-all ${
+                            isAdaptacao
+                              ? 'border-purple-500/20 bg-purple-900/5 cursor-not-allowed opacity-60'
+                              : checked
+                                ? 'border-primary-500/50 bg-primary-900/20 cursor-pointer'
+                                : 'border-surface-700 bg-surface-900/30 hover:border-surface-500 cursor-pointer'
+                          }`}>
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${checked ? 'bg-primary-500 border-primary-500' : 'bg-surface-900 border-surface-600'}`}>
-                              {checked && <MdPlayArrow className="text-white text-xs" />}
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${checked && !isAdaptacao ? 'bg-primary-500 border-primary-500' : 'bg-surface-900 border-surface-600'}`}>
+                              {checked && !isAdaptacao && <MdPlayArrow className="text-white text-xs" />}
                             </div>
                             <div className="flex flex-col min-w-0">
-                              <span className={`text-sm font-bold truncate ${checked ? 'text-primary-300' : 'text-surface-300'}`}>{s.name}</span>
-                              {s.phone_number && <span className={`text-[10px] font-mono mt-0.5 ${checked ? 'text-primary-400/80' : 'text-surface-500'}`}>{s.phone_number}</span>}
+                              <span className={`text-sm font-bold truncate ${checked && !isAdaptacao ? 'text-primary-300' : 'text-surface-300'}`}>{s.name}</span>
+                              {s.phone_number && <span className={`text-[10px] font-mono mt-0.5 ${checked && !isAdaptacao ? 'text-primary-400/80' : 'text-surface-500'}`}>{s.phone_number}</span>}
                             </div>
                           </div>
-                          <div className="flex-shrink-0 ml-2">
-                            {s.is_aquecido ? (
+                          <div className="flex-shrink-0 ml-2 flex flex-col items-end gap-1">
+                            {isAdaptacao ? (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                style={{ background: 'rgba(157,78,221,0.15)', color: '#c4b5fd', border: '1px solid rgba(157,78,221,0.25)' }}>
+                                ⏳ Em adaptação
+                              </span>
+                            ) : s.is_veterano ? (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.25)' }}>
+                                ⭐ Veterano
+                              </span>
+                            ) : s.is_aquecido ? (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
                                 style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.25)' }}>
                                 🔥 Aquecido

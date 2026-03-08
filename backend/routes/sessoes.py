@@ -41,6 +41,8 @@ class SessionOut(BaseModel):
     is_active: bool
     tipo_chip: str = "fisico"
     is_aquecido: bool = False
+    is_veterano: bool = False
+    em_adaptacao: bool = False
 
     class Config:
         from_attributes = True

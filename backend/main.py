@@ -291,6 +291,28 @@ def migrate_pos_aquecimento():
         logger.error(f"[MIGRATE] Erro em migrate_pos_aquecimento: {e}")
 
 
+def migrate_adaptacao():
+    """Adiciona is_veterano, em_adaptacao em whatsapp_sessions e origem_chip em aquecimento_configs."""
+    try:
+        with engine.connect() as conn:
+            for table, col, dtype, default in [
+                ("whatsapp_sessions", "is_veterano", "BOOLEAN NOT NULL", "DEFAULT FALSE"),
+                ("whatsapp_sessions", "em_adaptacao", "BOOLEAN NOT NULL", "DEFAULT FALSE"),
+                ("aquecimento_configs", "origem_chip", "VARCHAR(20) NOT NULL", "DEFAULT 'novo'"),
+            ]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = '{table}' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em {table}...")
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {dtype} {default}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_adaptacao: {e}")
+
+
 def migrate_chip_virtual():
     """Adiciona tipo_chip em whatsapp_sessions e contadores de resposta em aquecimento_configs."""
     try:
@@ -513,6 +535,7 @@ async def lifespan(app: FastAPI):
             migrate_funnel_tables()
             migrate_chip_virtual()
             migrate_pos_aquecimento()
+            migrate_adaptacao()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")

@@ -70,18 +70,33 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
   const [diasTotal, setDiasTotal] = useState(14)
   const [usarIa, setUsarIa] = useState(true)
   const [manutencaoAtiva, setManutencaoAtiva] = useState(true)
+  const [origemChip, setOrigemChip] = useState('novo')
   const [saving, setSaving] = useState(false)
 
   const sessaoSelecionada = sessoes.find(s => s.id === Number(sessionId))
   const tipoChip = sessaoSelecionada?.tipo_chip ?? 'fisico'
   const isVirtual = tipoChip === 'virtual'
+  const isVeterano = origemChip === 'pessoal_antigo'
+  const isPreAquecido = origemChip === 'pre_aquecido'
 
   async function confirmar() {
     if (!sessionId) { toast.error('Selecione um chip'); return }
     setSaving(true)
     try {
-      await api.post('/aquecimento', { session_id: Number(sessionId), dias_total: diasTotal, usar_ia: usarIa, manutencao_ativa: manutencaoAtiva })
-      toast.success('Aquecimento iniciado!')
+      await api.post('/aquecimento', {
+        session_id: Number(sessionId),
+        dias_total: isPreAquecido ? 7 : diasTotal,
+        usar_ia: usarIa,
+        manutencao_ativa: manutencaoAtiva,
+        origem_chip: origemChip,
+      })
+      if (isVeterano) {
+        toast.success('⭐ Chip marcado como Veterano! 150 msgs/dia liberados.')
+      } else if (isPreAquecido) {
+        toast.success('🛍️ Adaptação de 7 dias iniciada!')
+      } else {
+        toast.success('Aquecimento iniciado!')
+      }
       onSave()
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Erro ao iniciar aquecimento')
@@ -123,6 +138,36 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
             )}
           </div>
 
+          {/* Origem do chip */}
+          <div>
+            <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider block mb-3">
+              Como este chip chegou até você?
+            </label>
+            <div className="space-y-2">
+              {[
+                { value: 'novo', emoji: '🆕', title: 'Chip novo', desc: 'Número novo, nunca usado. Aquecimento completo necessário.' },
+                { value: 'pre_aquecido', emoji: '🛍️', title: 'Comprei pré-aquecido', desc: '7 dias de adaptação gradual: dias 1-2 passivos, liberação progressiva.' },
+                { value: 'pessoal_antigo', emoji: '📱', title: 'Chip pessoal antigo', desc: 'Chip com histórico pessoal. Vira veterano direto com 150 msgs/dia.' },
+              ].map(opt => (
+                <label key={opt.value}
+                  className="flex items-start gap-3 p-3.5 rounded-xl cursor-pointer border-2 transition-all"
+                  style={{
+                    borderColor: origemChip === opt.value ? '#9D4EDD' : 'rgba(255,255,255,0.07)',
+                    background: origemChip === opt.value ? 'rgba(157,78,221,0.08)' : 'rgba(255,255,255,0.02)',
+                  }}>
+                  <input type="radio" name="origem" value={opt.value}
+                    checked={origemChip === opt.value}
+                    onChange={() => setOrigemChip(opt.value)}
+                    className="mt-0.5 accent-purple-500" />
+                  <div>
+                    <p className="text-sm font-bold text-surface-100">{opt.emoji} {opt.title}</p>
+                    <p className="text-xs text-surface-400 mt-0.5">{opt.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* Tipo do chip detectado */}
           {sessaoSelecionada && (
             <div className="rounded-xl border p-4 flex items-start gap-3" style={{
@@ -160,7 +205,38 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
             </div>
           )}
 
-          {/* Seleção de plano */}
+          {/* Info especial para chip veterano */}
+          {isVeterano && (
+            <div className="rounded-xl border border-yellow-500/30 p-4 flex gap-3" style={{ background: 'rgba(234,179,8,0.07)' }}>
+              <span className="text-xl">⭐</span>
+              <div>
+                <p className="text-sm font-bold text-yellow-300">Chip Veterano — liberação imediata!</p>
+                <p className="text-xs text-yellow-400/70 mt-1 leading-relaxed">
+                  Sem período de aquecimento. O chip será marcado como veterano com <strong>150 msgs/dia</strong> liberados diretamente.
+                  O histórico de uso pessoal já garante boa reputação no WhatsApp.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Info especial para chip pré-aquecido */}
+          {isPreAquecido && (
+            <div className="rounded-xl border border-purple-500/30 p-4 flex gap-3" style={{ background: 'rgba(157,78,221,0.07)' }}>
+              <span className="text-xl">🛍️</span>
+              <div>
+                <p className="text-sm font-bold text-purple-300">Modo Adaptação — 7 dias obrigatórios</p>
+                <p className="text-xs text-purple-400/70 mt-1 leading-relaxed">
+                  <strong>Dias 1-2:</strong> Apenas recebe mensagens do pool (fase passiva) •{' '}
+                  <strong>Dias 3-4:</strong> 5 msgs/dia •{' '}
+                  <strong>Dias 5-6:</strong> 15 msgs/dia •{' '}
+                  <strong>Dia 7:</strong> 30 msgs/dia. Disparos bloqueados durante adaptação.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Seleção de plano (apenas para chips novos) */}
+          {!isVeterano && !isPreAquecido && (
           <div>
             <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider block mb-3">
               Plano de aquecimento
@@ -206,6 +282,7 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
               ))}
             </div>
           </div>
+          )}
 
           {/* Checklist informativo */}
           <div className="rounded-xl border border-surface-700/40 p-4" style={{ background: '#1a1425' }}>
@@ -225,7 +302,8 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
             ))}
           </div>
 
-          {/* Toggle Manutenção Pós-conclusão */}
+          {/* Toggle Manutenção Pós-conclusão — só para chips não-veteranos */}
+          {!isVeterano && (
           <div className="rounded-xl border border-surface-700/40 p-4 flex items-center justify-between gap-4" style={{ background: '#1a1425' }}>
             <div className="flex items-start gap-3">
               <span className="text-xl">🔧</span>
@@ -248,8 +326,10 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
               />
             </button>
           </div>
+          )}
 
-          {/* Toggle IA Gemini */}
+          {/* Toggle IA Gemini — oculto para veterano */}
+          {!isVeterano && (
           <div className="rounded-xl border border-surface-700/40 p-4 flex items-center justify-between gap-4" style={{ background: '#1a1425' }}>
             <div className="flex items-start gap-3">
               <span className="text-xl">✨</span>
@@ -272,14 +352,25 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
               />
             </button>
           </div>
+          )}
 
-          {/* Aviso */}
-          <div className="rounded-xl border border-red-500/20 p-4 flex gap-3" style={{ background: 'rgba(239,68,68,0.06)' }}>
-            <MdWarning size={18} className="text-red-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-red-300/80 leading-relaxed">
-              <strong>Atenção:</strong> Não use este chip para disparos em massa durante o período de aquecimento. Isso pode causar banimento imediato.
-            </p>
-          </div>
+          {/* Aviso — adaptado por origem */}
+          {isVeterano ? (
+            <div className="rounded-xl border border-yellow-500/20 p-4 flex gap-3" style={{ background: 'rgba(234,179,8,0.06)' }}>
+              <span className="text-lg flex-shrink-0 mt-0.5">⭐</span>
+              <p className="text-xs text-yellow-300/80 leading-relaxed">
+                <strong>Chip Veterano:</strong> Confirme que este número tem histórico real de uso pessoal.
+                Chips novos marcados como veteranos correm risco elevado de ban.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-red-500/20 p-4 flex gap-3" style={{ background: 'rgba(239,68,68,0.06)' }}>
+              <MdWarning size={18} className="text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-red-300/80 leading-relaxed">
+                <strong>Atenção:</strong> Não use este chip para disparos em massa durante o período de aquecimento. Isso pode causar banimento imediato.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 border-t border-surface-700/40 flex justify-end gap-3">
@@ -287,7 +378,7 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
             Cancelar
           </button>
           <button onClick={confirmar} disabled={saving} className="btn-primary px-6 py-2 text-sm">
-            {saving ? 'Iniciando...' : '🔥 Iniciar Aquecimento'}
+            {saving ? 'Processando...' : isVeterano ? '⭐ Marcar como Veterano' : isPreAquecido ? '🛍️ Iniciar Adaptação' : '🔥 Iniciar Aquecimento'}
           </button>
         </div>
       </div>
@@ -486,6 +577,28 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar, onToggle
       {aq.tipo_chip === 'virtual' && isAtivo && (aq.fisicos_disponiveis ?? 0) === 0 && (
         <div className="rounded-lg border border-amber-500/20 p-2.5 text-xs text-amber-300/80 flex items-center gap-2" style={{ background: 'rgba(245,158,11,0.06)' }}>
           ⏸ Aguardando chip físico no pool (0 disponíveis)
+        </div>
+      )}
+
+      {/* Fase de adaptação */}
+      {aq.is_adaptacao && isAtivo && (
+        <div className="rounded-xl border border-purple-500/20 p-3" style={{ background: 'rgba(157,78,221,0.06)' }}>
+          <p className="text-xs font-bold text-purple-300 mb-1">🛍️ Modo Adaptação</p>
+          {aq.fase_adaptacao === 'passiva' && (
+            <p className="text-xs text-surface-500">📭 Dias 1-2: fase passiva — recebendo mensagens, sem enviar</p>
+          )}
+          {aq.fase_adaptacao === 'gradual_leve' && (
+            <p className="text-xs text-surface-500">📈 Dias 3-4: fase gradual — meta 5 msgs/dia</p>
+          )}
+          {aq.fase_adaptacao === 'gradual_media' && (
+            <p className="text-xs text-surface-500">📈 Dias 5-6: fase gradual — meta 15 msgs/dia</p>
+          )}
+          {aq.fase_adaptacao === 'pre_liberacao' && (
+            <p className="text-xs text-surface-500">🚀 Dia 7: pré-liberação — meta 30 msgs/dia</p>
+          )}
+          {(aq.dias_adaptacao_restantes ?? 0) > 0 && (
+            <p className="text-[11px] text-purple-400 mt-1.5">⏳ {aq.dias_adaptacao_restantes} dia(s) restantes para liberação</p>
+          )}
         </div>
       )}
 

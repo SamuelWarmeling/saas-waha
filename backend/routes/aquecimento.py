@@ -112,6 +112,17 @@ def get_meta_dia(dia: int) -> int:
     return 40
 
 
+def get_meta_adaptacao(dia: int) -> int:
+    """Meta de mensagens para o modo adaptação (chip pré-aquecido)."""
+    if dia <= 2:
+        return 0   # fase passiva: só recebe e responde
+    if dia <= 4:
+        return 5   # fase gradual leve
+    if dia <= 6:
+        return 15  # fase gradual média
+    return 30      # dia 7: pré-liberação
+
+
 def get_destinos_virtuais(db: Session, session_id: int) -> List[str]:
     """Físico → busca chips VIRTUAIS conectados para enviar mensagem."""
     sessoes = (
@@ -187,6 +198,20 @@ def _aq_out(aq: models.AquecimentoConfig, db: Session = None):
             saude = "atencao"
 
     is_manutencao = aq.status == models.AquecimentoStatus.manutencao
+    origem_chip = getattr(aq, "origem_chip", "novo")
+    is_adaptacao = origem_chip == "pre_aquecido"
+    fase_adaptacao = None
+    dias_adaptacao_restantes = 0
+    if is_adaptacao and aq.status == models.AquecimentoStatus.ativo:
+        dias_adaptacao_restantes = max(0, 7 - (aq.dia_atual - 1))
+        if aq.dia_atual <= 2:
+            fase_adaptacao = "passiva"
+        elif aq.dia_atual <= 4:
+            fase_adaptacao = "gradual_leve"
+        elif aq.dia_atual <= 6:
+            fase_adaptacao = "gradual_media"
+        else:
+            fase_adaptacao = "pre_liberacao"
 
     return {
         "id": aq.id,
@@ -207,6 +232,10 @@ def _aq_out(aq: models.AquecimentoConfig, db: Session = None):
         "usar_ia": getattr(aq, "usar_ia", True),
         "manutencao_ativa": getattr(aq, "manutencao_ativa", True),
         "is_manutencao": is_manutencao,
+        "origem_chip": origem_chip,
+        "is_adaptacao": is_adaptacao,
+        "fase_adaptacao": fase_adaptacao,
+        "dias_adaptacao_restantes": dias_adaptacao_restantes,
         "msgs_recebidas": getattr(aq, "msgs_recebidas", 0),
         "respostas_enviadas": getattr(aq, "respostas_enviadas", 0),
         "fisicos_disponiveis": fisicos_disponiveis,
@@ -223,6 +252,7 @@ class AquecimentoCreate(BaseModel):
     dias_total: int = 14
     usar_ia: bool = True
     manutencao_ativa: bool = True
+    origem_chip: str = "novo"  # "novo" | "pre_aquecido" | "pessoal_antigo"
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -255,6 +285,32 @@ def iniciar_aquecimento(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    if body.origem_chip not in ("novo", "pre_aquecido", "pessoal_antigo"):
+        raise HTTPException(status_code=400, detail="origem_chip inválido")
+
+    # Chip pessoal antigo → marcar como veterano diretamente sem aquecimento
+    if body.origem_chip == "pessoal_antigo":
+        session_vet = db.query(models.WhatsAppSession).filter(
+            models.WhatsAppSession.id == body.session_id,
+            models.WhatsAppSession.user_id == current_user.id,
+        ).first()
+        if not session_vet:
+            raise HTTPException(status_code=404, detail="Sessão não encontrada")
+        session_vet.is_aquecido = True
+        session_vet.is_veterano = True
+        session_vet.max_daily_messages = 150
+        db.add(models.AtividadeLog(
+            user_id=current_user.id,
+            tipo="aquecimento_concluido",
+            descricao=f"⭐ Chip '{session_vet.name}' marcado como veterano (150 msgs/dia liberados)",
+        ))
+        db.commit()
+        return {"veterano": True, "session_id": body.session_id, "max_daily_messages": 150}
+
+    # Chip pré-aquecido → forçar 7 dias em modo adaptação
+    if body.origem_chip == "pre_aquecido":
+        body = body.model_copy(update={"dias_total": 7})
+
     if body.dias_total not in (7, 14, 21):
         raise HTTPException(status_code=400, detail="dias_total deve ser 7, 14 ou 21")
 
@@ -277,18 +333,26 @@ def iniciar_aquecimento(
         raise HTTPException(status_code=409, detail="Já existe um aquecimento ativo para este chip")
 
     now = datetime.now(timezone.utc)
+    is_adaptacao = body.origem_chip == "pre_aquecido"
+    meta_inicial = get_meta_adaptacao(1) if is_adaptacao else get_meta_dia(1)
+
     aq = models.AquecimentoConfig(
         user_id=current_user.id,
         session_id=body.session_id,
         dias_total=body.dias_total,
         dia_atual=1,
         msgs_hoje=0,
-        meta_hoje=get_meta_dia(1),
+        meta_hoje=meta_inicial,
         msgs_sem_pausa=0,
         inicio_dia_atual=now,
         usar_ia=body.usar_ia,
         manutencao_ativa=body.manutencao_ativa,
+        origem_chip=body.origem_chip,
     )
+
+    # Marcar sessão em adaptação
+    if is_adaptacao:
+        session.em_adaptacao = True
     db.add(aq)
     db.commit()
     db.refresh(aq)
@@ -320,6 +384,31 @@ def pool_status(
         .count()
     )
     return {"fisicos": fisicos, "virtuais": virtuais}
+
+
+@router.post("/marcar-veterano", status_code=200)
+def marcar_veterano(
+    body: AquecimentoCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Marca sessão diretamente como veterana (chip pessoal antigo)."""
+    session = db.query(models.WhatsAppSession).filter(
+        models.WhatsAppSession.id == body.session_id,
+        models.WhatsAppSession.user_id == current_user.id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    session.is_aquecido = True
+    session.is_veterano = True
+    session.max_daily_messages = 150
+    db.add(models.AtividadeLog(
+        user_id=current_user.id,
+        tipo="aquecimento_concluido",
+        descricao=f"⭐ Chip '{session.name}' marcado como veterano (150 msgs/dia liberados)",
+    ))
+    db.commit()
+    return {"ok": True, "session_id": body.session_id, "is_veterano": True, "max_daily_messages": 150}
 
 
 @router.get("")
@@ -496,6 +585,8 @@ async def processar_aquecimento():
 
                 is_manutencao = aq.status == models.AquecimentoStatus.manutencao
 
+                is_adapt = getattr(aq, "origem_chip", "novo") == "pre_aquecido"
+
                 if hoje_br > inicio_br_local:
                     if is_manutencao:
                         # Manutenção — novo dia com meta baixa (3-5 msgs)
@@ -514,6 +605,8 @@ async def processar_aquecimento():
                         sess_local = aq.session
                         if sess_local:
                             sess_local.is_aquecido = True
+                            if is_adapt:
+                                sess_local.em_adaptacao = False
                         manutencao = getattr(aq, "manutencao_ativa", True)
                         if manutencao:
                             aq.status = models.AquecimentoStatus.manutencao
@@ -526,11 +619,12 @@ async def processar_aquecimento():
                             aq.status = models.AquecimentoStatus.concluido
                             descricao_status = "concluído"
                         chip_nome = sess_local.name if sess_local else "?"
+                        emoji_tipo = "🛍️" if is_adapt else "🔥"
                         db.add(models.AtividadeLog(
                             user_id=aq.user_id,
                             tipo="aquecimento_concluido",
                             descricao=(
-                                f"🔥 Chip '{chip_nome}' aquecido com sucesso após {aq.dias_total} dias! "
+                                f"{emoji_tipo} Chip '{chip_nome}' {'adaptado' if is_adapt else 'aquecido'} com sucesso após {aq.dias_total} dias! "
                                 f"({descricao_status})"
                             ),
                         ))
@@ -539,16 +633,16 @@ async def processar_aquecimento():
                         continue
                     aq.msgs_hoje = 0
                     aq.msgs_sem_pausa = 0
-                    aq.meta_hoje = get_meta_dia(aq.dia_atual)
+                    aq.meta_hoje = get_meta_adaptacao(aq.dia_atual) if is_adapt else get_meta_dia(aq.dia_atual)
                     aq.inicio_dia_atual = now
                     aq.proximo_envio = now + timedelta(minutes=random.randint(5, 15))
                     db.commit()
-                    logger.info(f"[AQUECIMENTO] #{aq.id} avançou para dia {aq.dia_atual} (meta: {aq.meta_hoje} msgs)")
+                    logger.info(f"[AQUECIMENTO] #{aq.id} avançou para dia {aq.dia_atual} (meta: {aq.meta_hoje} msgs{'- FASE PASSIVA' if aq.meta_hoje == 0 else ''})")
                     continue
 
                 # ── Meta do dia já atingida ───────────────────────────────────
-                # Em manutenção, meta_hoje já é 3-5; em ativo usa get_meta_dia
-                if aq.meta_hoje == 0:
+                # Em manutenção: 3-5; adaptação: usa get_meta_adaptacao; normal: get_meta_dia
+                if aq.meta_hoje == 0 and not is_adapt:
                     aq.meta_hoje = random.randint(3, 5) if is_manutencao else get_meta_dia(aq.dia_atual)
                     db.commit()
                 if aq.msgs_hoje >= aq.meta_hoje:

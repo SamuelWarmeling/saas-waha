@@ -271,10 +271,24 @@ export default function Sessoes() {
                         {st.label}
                       </span>
                       {/* Aquecido badge */}
-                      {sess.is_aquecido && (
+                      {sess.is_aquecido && !sess.is_veterano && (
                         <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
                           style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.3)' }}>
                           🔥 Aquecido
+                        </span>
+                      )}
+                      {/* Veterano badge */}
+                      {sess.is_veterano && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
+                          style={{ background: 'rgba(234,179,8,0.2)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.4)' }}>
+                          ⭐ Veterano
+                        </span>
+                      )}
+                      {/* Em adaptação badge */}
+                      {sess.em_adaptacao && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
+                          style={{ background: 'rgba(157,78,221,0.12)', color: '#c4b5fd', border: '1px solid rgba(157,78,221,0.3)' }}>
+                          ⏳ Em adaptação
                         </span>
                       )}
                       {/* Chip type toggle */}
@@ -300,7 +314,19 @@ export default function Sessoes() {
 
                 <div className="p-6 pt-2 flex-1 space-y-5">
                   {/* Recomendação de limite */}
-                  {sess.is_aquecido ? (
+                  {sess.em_adaptacao ? (
+                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+                      style={{ background: 'rgba(157,78,221,0.08)', border: '1px solid rgba(157,78,221,0.2)' }}>
+                      <span>⏳</span>
+                      <span className="text-purple-300 font-medium">Em adaptação — disparos em massa bloqueados</span>
+                    </div>
+                  ) : sess.is_veterano ? (
+                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+                      style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.25)' }}>
+                      <span>⭐</span>
+                      <span className="text-yellow-300 font-medium">Chip veterano — limite recomendado: <strong>150 msgs/dia</strong></span>
+                    </div>
+                  ) : sess.is_aquecido ? (
                     <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
                       style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }}>
                       <span>🔥</span>

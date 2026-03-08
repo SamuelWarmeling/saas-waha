@@ -323,6 +323,27 @@ def migrate_chip_health_logs():
         logger.error(f"[MIGRATE] Erro em migrate_chip_health_logs: {e}")
 
 
+def migrate_dispatch_slots():
+    """Adiciona chips_disparo_simultaneo em users e 'queued' ao enum campaignstatus."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TYPE campaignstatus ADD VALUE IF NOT EXISTS 'queued'"))
+            conn.commit()
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'users' AND column_name = 'chips_disparo_simultaneo')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Adicionando chips_disparo_simultaneo em users...")
+                conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN chips_disparo_simultaneo INTEGER NOT NULL DEFAULT 3"
+                ))
+                conn.commit()
+                logger.info("[MIGRATE] Coluna chips_disparo_simultaneo adicionada em users.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_dispatch_slots: {e}")
+
+
 def migrate_ban_learning():
     """Cria tabelas ban_records e fuzzy_configs para aprendizado coletivo de bans."""
     try:
@@ -625,6 +646,7 @@ async def lifespan(app: FastAPI):
             migrate_adaptacao()
             migrate_chip_health_logs()
             migrate_ban_learning()
+            migrate_dispatch_slots()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")

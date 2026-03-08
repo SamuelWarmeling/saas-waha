@@ -59,6 +59,7 @@ class DispatchSettingsRequest(BaseModel):
     delay_min: int
     delay_max: int
     limite_diario: int
+    chips_disparo_simultaneo: int = 3
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -168,6 +169,7 @@ def get_dispatch_settings(current_user: models.User = Depends(auth.get_current_u
         "delay_min": current_user.dispatch_delay_min,
         "delay_max": current_user.dispatch_delay_max,
         "limite_diario": current_user.dispatch_daily_limit,
+        "chips_disparo_simultaneo": getattr(current_user, "chips_disparo_simultaneo", 3),
     }
 
 
@@ -180,6 +182,7 @@ def update_dispatch_settings(
     current_user.dispatch_delay_min = data.delay_min
     current_user.dispatch_delay_max = data.delay_max
     current_user.dispatch_daily_limit = data.limite_diario
+    current_user.chips_disparo_simultaneo = max(1, min(10, data.chips_disparo_simultaneo))
     # Sincroniza limite diário em todas as sessões do usuário
     db.query(models.WhatsAppSession).filter(
         models.WhatsAppSession.user_id == current_user.id
@@ -189,6 +192,7 @@ def update_dispatch_settings(
         "delay_min": data.delay_min,
         "delay_max": data.delay_max,
         "limite_diario": data.limite_diario,
+        "chips_disparo_simultaneo": current_user.chips_disparo_simultaneo,
     }
 
 

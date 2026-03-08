@@ -105,6 +105,44 @@ class CampaignProgress(BaseModel):
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+def _chips_ativos_count(user_id: int, db: Session) -> int:
+    """Retorna o número de campanhas em execução ativa para o usuário."""
+    return (
+        db.query(models.Campaign)
+        .filter(
+            models.Campaign.user_id == user_id,
+            models.Campaign.status == models.CampaignStatus.running,
+        )
+        .count()
+    )
+
+
+async def _start_next_queued(user_id: int):
+    """Se houver slot livre, inicia a campanha mais antiga na fila do usuário."""
+    db = SessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if not user:
+            return
+        limite = getattr(user, "chips_disparo_simultaneo", 3)
+        em_uso = _chips_ativos_count(user_id, db)
+        if em_uso >= limite:
+            return
+        queued = (
+            db.query(models.Campaign)
+            .filter(
+                models.Campaign.user_id == user_id,
+                models.Campaign.status == models.CampaignStatus.queued,
+            )
+            .order_by(models.Campaign.created_at.asc())
+            .first()
+        )
+        if queued:
+            asyncio.create_task(send_campaign(queued.id, user_id))
+    finally:
+        db.close()
+
+
 def _load_campaign_q(db: Session):
     return db.query(models.Campaign).options(
         joinedload(models.Campaign.messages),
@@ -367,6 +405,9 @@ async def send_campaign(campaign_id: int, user_id: int):
             campaign.completed_at = datetime.now(timezone.utc)
             db.commit()
 
+        # Libera slot para próxima campanha na fila
+        asyncio.create_task(_start_next_queued(user_id))
+
     finally:
         db.close()
 
@@ -510,6 +551,30 @@ def create_campaign(
 
     c = _load_campaign_q(db).filter(models.Campaign.id == campaign.id).first()
     return _campaign_out(c)
+
+
+@router.get("/slots")
+def get_slots(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Retorna uso atual de slots de disparo simultâneo."""
+    limite = getattr(current_user, "chips_disparo_simultaneo", 3)
+    em_uso = _chips_ativos_count(current_user.id, db)
+    na_fila = (
+        db.query(models.Campaign)
+        .filter(
+            models.Campaign.user_id == current_user.id,
+            models.Campaign.status == models.CampaignStatus.queued,
+        )
+        .count()
+    )
+    return {
+        "em_uso": em_uso,
+        "limite": limite,
+        "disponiveis": max(0, limite - em_uso),
+        "na_fila_count": na_fila,
+    }
 
 
 @router.get("/{campaign_id}", response_model=CampaignOut)
@@ -751,6 +816,16 @@ async def fire_campaign(
     ):
         raise HTTPException(status_code=400, detail=f"Campanha não pode ser disparada (status: {campaign.status})")
     campaign = _resolve_session(campaign, current_user.id, db)
+    limite = getattr(current_user, "chips_disparo_simultaneo", 3)
+    em_uso = _chips_ativos_count(current_user.id, db)
+    if em_uso >= limite:
+        campaign.status = models.CampaignStatus.queued
+        db.commit()
+        return {
+            "message": f"Aguardando slot disponível ({em_uso}/{limite} em uso)",
+            "campaign_id": campaign_id,
+            "queued": True,
+        }
     background_tasks.add_task(send_campaign, campaign_id, current_user.id)
     return {"message": "Disparo iniciado", "campaign_id": campaign_id}
 
@@ -775,6 +850,16 @@ async def start_campaign(
     ):
         raise HTTPException(status_code=400, detail=f"Campanha não pode ser iniciada (status: {campaign.status})")
     campaign = _resolve_session(campaign, current_user.id, db)
+    limite = getattr(current_user, "chips_disparo_simultaneo", 3)
+    em_uso = _chips_ativos_count(current_user.id, db)
+    if em_uso >= limite:
+        campaign.status = models.CampaignStatus.queued
+        db.commit()
+        return {
+            "message": f"Aguardando slot disponível ({em_uso}/{limite} em uso)",
+            "campaign_id": campaign_id,
+            "queued": True,
+        }
     background_tasks.add_task(send_campaign, campaign_id, current_user.id)
     return {"message": "Campanha iniciada", "campaign_id": campaign_id}
 
@@ -812,9 +897,12 @@ def stop_campaign(
         raise HTTPException(status_code=404, detail="Campanha não encontrada")
     if campaign.status in (models.CampaignStatus.completed, models.CampaignStatus.cancelled):
         raise HTTPException(status_code=400, detail="Campanha já finalizada")
+    was_running = campaign.status == models.CampaignStatus.running
     campaign.status = models.CampaignStatus.cancelled
     campaign.completed_at = datetime.now(timezone.utc)
     db.commit()
+    if was_running:
+        asyncio.create_task(_start_next_queued(campaign.user_id))
     return {"message": "Campanha cancelada"}
 
 

@@ -11,12 +11,12 @@ import api from '../api'
 // ── Constantes ─────────────────────────────────────────────────────────────────
 
 const STATUS_LABEL = {
-  draft: 'Rascunho', scheduled: 'Agendada', running: 'Rodando', paused: 'Pausado',
-  completed: 'Concluído', cancelled: 'Cancelado',
+  draft: 'Rascunho', scheduled: 'Agendada', queued: 'Na Fila', running: 'Rodando',
+  paused: 'Pausado', completed: 'Concluído', cancelled: 'Cancelado',
 }
 const STATUS_CLASS = {
-  draft: 'badge-gray', scheduled: 'badge-yellow', running: 'badge-primary',
-  paused: 'badge-yellow', completed: 'badge-green', cancelled: 'badge-red',
+  draft: 'badge-gray', scheduled: 'badge-yellow', queued: 'badge-yellow',
+  running: 'badge-primary', paused: 'badge-yellow', completed: 'badge-green', cancelled: 'badge-red',
 }
 
 const MEDIA_TABS = [
@@ -428,6 +428,7 @@ export default function Campanhas() {
   const [campaigns, setCampaigns] = useState([])
   const [sessions, setSessions] = useState([])
   const [diagnosticos, setDiagnosticos] = useState({})
+  const [slots, setSlots] = useState({ em_uso: 0, limite: 3, disponiveis: 3, na_fila_count: 0 })
   const [showModal, setShowModal] = useState(false)
   const [showDrawer, setShowDrawer] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -438,10 +439,11 @@ export default function Campanhas() {
   const [reportCampaign, setReportCampaign] = useState(null)
 
   const load = useCallback(async () => {
-    const [cRes, sRes, dRes] = await Promise.allSettled([
+    const [cRes, sRes, dRes, slRes] = await Promise.allSettled([
       api.get('/campanhas?page_size=50'),
       api.get('/sessoes'),
       api.get('/chips/diagnostico'),
+      api.get('/campanhas/slots'),
     ])
     if (cRes.status === 'fulfilled') setCampaigns(cRes.value.data)
     else toast.error('Erro ao carregar campanhas')
@@ -452,6 +454,7 @@ export default function Campanhas() {
       for (const d of dRes.value.data) map[d.session_id] = d
       setDiagnosticos(map)
     }
+    if (slRes.status === 'fulfilled') setSlots(slRes.value.data)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -570,8 +573,12 @@ export default function Campanhas() {
 
   async function action(id, endpoint, label) {
     try {
-      await api.post(`/campanhas/${id}/${endpoint}`)
-      toast.success(label)
+      const { data } = await api.post(`/campanhas/${id}/${endpoint}`)
+      if (data?.queued) {
+        toast(data.message, { icon: '⏳' })
+      } else {
+        toast.success(label)
+      }
       load()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro')
@@ -620,7 +627,20 @@ export default function Campanhas() {
           <h1 className="text-2xl font-bold text-surface-50 tracking-tight">Campanhas</h1>
           <p className="text-sm text-surface-400 mt-1">Gerencie seus disparos em massa</p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Slots de disparo */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-700/50 bg-surface-900/40 text-sm">
+            <span className="text-surface-400 font-medium">Slots:</span>
+            <span className={`font-bold ${slots.em_uso >= slots.limite ? 'text-red-400' : slots.em_uso > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+              {slots.em_uso}/{slots.limite}
+            </span>
+            <span className="text-surface-500">em uso</span>
+            {slots.na_fila_count > 0 && (
+              <span className="badge-yellow text-[10px] px-1.5 py-0.5 ml-1">
+                {slots.na_fila_count} na fila
+              </span>
+            )}
+          </div>
           <button onClick={load} className="btn-secondary flex items-center gap-2 shadow-sm px-4">
             <MdRefresh size={18} /> Atualizar
           </button>
@@ -679,6 +699,11 @@ export default function Campanhas() {
                       <span className={`${STATUS_CLASS[c.status] || 'badge-gray'} shadow-sm px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold`}>
                         {STATUS_LABEL[c.status] || c.status}
                       </span>
+                      {c.status === 'queued' && (
+                        <p className="text-[10px] text-yellow-400/80 mt-1 flex items-center gap-1">
+                          ⏳ Aguardando slot
+                        </p>
+                      )}
                     </td>
                     <td className="px-6 py-4 min-w-[160px]">
                       <div className="flex justify-between text-xs font-medium mb-1">

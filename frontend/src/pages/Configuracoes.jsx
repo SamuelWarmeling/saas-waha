@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MdCheckCircle, MdStar, MdAutoAwesome, MdVpnKey, MdVisibility, MdVisibilityOff } from 'react-icons/md'
+import { MdCheckCircle, MdStar, MdAutoAwesome, MdVpnKey, MdVisibility, MdVisibilityOff, MdSpeed } from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
 
@@ -35,6 +35,10 @@ export default function Configuracoes() {
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [loadingPassword, setLoadingPassword] = useState(false)
 
+  // Dispatch slots state
+  const [dispatchCfg, setDispatchCfg] = useState({ chips_disparo_simultaneo: 3 })
+  const [loadingDispatch, setLoadingDispatch] = useState(false)
+
   // IA state
   const [iaConfig, setIaConfig] = useState({ gemini_habilitado: true, tem_chave: false, chave_propria: false, chave_parcial: null, tem_chave_servidor: false })
   const [geminiKey, setGeminiKey] = useState('')
@@ -48,6 +52,11 @@ export default function Configuracoes() {
       setProfile({ name: r.data.name, email: r.data.email })
     })
     api.get('/ia/config').then(r => setIaConfig(r.data)).catch(() => {})
+    api.get('/usuarios/me/configuracoes').then(r => {
+      if (r.data.chips_disparo_simultaneo != null) {
+        setDispatchCfg({ chips_disparo_simultaneo: r.data.chips_disparo_simultaneo })
+      }
+    }).catch(() => {})
   }, [])
 
   async function saveProfile(e) {
@@ -114,6 +123,25 @@ export default function Configuracoes() {
       toast.error(err.response?.data?.detail || 'Erro ao testar conexão')
     } finally {
       setTestingIa(false)
+    }
+  }
+
+  async function saveDispatchCfg(e) {
+    e.preventDefault()
+    setLoadingDispatch(true)
+    try {
+      const curr = await api.get('/usuarios/me/configuracoes')
+      await api.put('/usuarios/me/configuracoes', {
+        delay_min: curr.data.delay_min,
+        delay_max: curr.data.delay_max,
+        limite_diario: curr.data.limite_diario,
+        chips_disparo_simultaneo: dispatchCfg.chips_disparo_simultaneo,
+      })
+      toast.success('Limite de slots atualizado!')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao salvar')
+    } finally {
+      setLoadingDispatch(false)
     }
   }
 
@@ -391,6 +419,59 @@ export default function Configuracoes() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Limites de Disparo Simultâneo */}
+      <div className="glass-card border-t border-surface-800/50">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2.5 rounded-xl bg-primary-500/15 text-primary-400 shadow-[0_0_12px_theme(colors.primary.500/15)]">
+            <MdSpeed className="text-2xl" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-surface-100">Limites de Disparo</h2>
+            <p className="text-sm text-surface-400 mt-0.5">Controle quantas campanhas podem disparar ao mesmo tempo</p>
+          </div>
+        </div>
+
+        <form onSubmit={saveDispatchCfg} className="space-y-5">
+          <div>
+            <label className="label">Chips disparando simultaneamente</label>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min={1}
+                max={10}
+                value={dispatchCfg.chips_disparo_simultaneo}
+                onChange={e => setDispatchCfg(c => ({ ...c, chips_disparo_simultaneo: Number(e.target.value) }))}
+                className="flex-1 accent-primary-500"
+              />
+              <span className="w-10 text-center text-xl font-black text-primary-300">
+                {dispatchCfg.chips_disparo_simultaneo}
+              </span>
+            </div>
+            <p className="text-[11px] text-surface-500 mt-1.5 ml-1">
+              Máximo de campanhas que podem estar <strong className="text-surface-400">em execução ao mesmo tempo</strong>. Campanhas extras são colocadas em fila e iniciadas automaticamente.
+            </p>
+          </div>
+
+          <div className="bg-surface-900/40 border border-surface-800/60 rounded-xl p-4 text-sm text-surface-300 space-y-1.5">
+            <p className="font-medium text-surface-200">Como funciona:</p>
+            <p>• Aquecimento: <span className="text-green-400 font-medium">sem limite</span> — você pode aquecer quantos chips quiser ao mesmo tempo</p>
+            <p>• Disparo: limitado por este valor — quando o limite é atingido, novas campanhas entram na fila</p>
+            <p>• Quando uma campanha termina, a próxima da fila inicia automaticamente</p>
+          </div>
+
+          <div className="pt-2">
+            <button type="submit" disabled={loadingDispatch} className="btn-primary px-6">
+              {loadingDispatch ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  Salvando...
+                </span>
+              ) : 'Salvar Limite'}
+            </button>
+          </div>
+        </form>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-surface-800/50">

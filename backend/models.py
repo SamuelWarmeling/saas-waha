@@ -24,6 +24,7 @@ class SessionStatus(str, enum.Enum):
 class CampaignStatus(str, enum.Enum):
     draft = "draft"
     scheduled = "scheduled"
+    queued = "queued"
     running = "running"
     paused = "paused"
     completed = "completed"
@@ -59,6 +60,7 @@ class User(Base):
     dispatch_delay_min = Column(Integer, default=5, nullable=False, server_default="5")
     dispatch_delay_max = Column(Integer, default=15, nullable=False, server_default="15")
     dispatch_daily_limit = Column(Integer, default=200, nullable=False, server_default="200")
+    chips_disparo_simultaneo = Column(Integer, default=3, nullable=False, server_default="3")
     gemini_api_key = Column(String(200), nullable=True)
     gemini_habilitado = Column(Boolean, default=True, server_default="true", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

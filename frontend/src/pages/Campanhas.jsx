@@ -867,6 +867,20 @@ export default function Campanhas() {
                               {s.phone_number && <span className={`text-[10px] font-mono mt-0.5 ${checked ? 'text-primary-400/80' : 'text-surface-500'}`}>{s.phone_number}</span>}
                             </div>
                           </div>
+                          <div className="flex-shrink-0 ml-2">
+                            {s.is_aquecido ? (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.25)' }}>
+                                🔥 Aquecido
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
+                                title="Chip não aquecido — risco de ban aumentado">
+                                ⚠️ Não aquecido
+                              </span>
+                            )}
+                          </div>
                         </label>
                       )
                     })}
@@ -887,6 +901,20 @@ export default function Campanhas() {
                   ))}
                 </div>
               </div>
+
+              {/* Aviso chips não aquecidos selecionados */}
+              {form.session_ids.length > 0 && form.session_ids.some(id => {
+                const s = sessions.find(s => s.id === id)
+                return s && !s.is_aquecido
+              }) && (
+                <div className="rounded-xl border border-orange-500/30 bg-orange-900/10 px-4 py-3 flex items-start gap-2.5 text-xs">
+                  <span className="text-orange-400 text-base flex-shrink-0">⚠️</span>
+                  <div>
+                    <span className="font-bold text-orange-300">Chip(s) não aquecido(s) selecionado(s)</span>
+                    <span className="text-orange-400/80 ml-1">— risco de ban aumentado. Aqueça os chips antes de disparar em massa.</span>
+                  </div>
+                </div>
+              )}
 
               {/* Preview resumo */}
               <div className="bg-surface-950/80 border border-surface-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-inner">

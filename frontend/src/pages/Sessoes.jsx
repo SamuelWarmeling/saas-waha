@@ -270,6 +270,13 @@ export default function Sessoes() {
                       <span className={`${st.cls} shadow-sm px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold`}>
                         {st.label}
                       </span>
+                      {/* Aquecido badge */}
+                      {sess.is_aquecido && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
+                          style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.3)' }}>
+                          🔥 Aquecido
+                        </span>
+                      )}
                       {/* Chip type toggle */}
                       <button
                         onClick={() => toggleTipoChip(sess)}
@@ -292,6 +299,21 @@ export default function Sessoes() {
                 </div>
 
                 <div className="p-6 pt-2 flex-1 space-y-5">
+                  {/* Recomendação de limite */}
+                  {sess.is_aquecido ? (
+                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+                      style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }}>
+                      <span>🔥</span>
+                      <span className="text-yellow-400 font-medium">Chip aquecido — limite recomendado: <strong>100 msgs/dia</strong></span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+                      style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                      <span>⚠️</span>
+                      <span className="text-red-400/80 font-medium">Não aquecido — limite recomendado: <strong>30 msgs/dia</strong></span>
+                    </div>
+                  )}
+
                   {/* Barra de limite diário */}
                   <div className="bg-surface-900/40 rounded-xl p-3.5 border border-surface-800/60 shadow-inner">
                     <div className="flex justify-between text-xs text-surface-400 font-medium mb-2">

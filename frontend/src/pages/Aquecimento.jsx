@@ -26,6 +26,7 @@ function formatDateTime(iso) {
 function getSaude(aq) {
   if (aq.status === 'cancelado') return { label: 'Cancelado', color: '#ef4444', emoji: '🔴' }
   if (aq.status === 'concluido') return { label: 'Concluído', color: '#22c55e', emoji: '✅' }
+  if (aq.status === 'manutencao') return { label: 'Manutenção', color: '#f59e0b', emoji: '🔧' }
   if (aq.session_status !== 'connected') return { label: 'Chip offline', color: '#ef4444', emoji: '🔴' }
   if (aq.status === 'pausado') return { label: 'Pausado', color: '#f59e0b', emoji: '🟡' }
   return { label: 'Ótima', color: '#22c55e', emoji: '🟢' }
@@ -68,6 +69,7 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
   const [sessionId, setSessionId] = useState(sessoes[0]?.id ?? '')
   const [diasTotal, setDiasTotal] = useState(14)
   const [usarIa, setUsarIa] = useState(true)
+  const [manutencaoAtiva, setManutencaoAtiva] = useState(true)
   const [saving, setSaving] = useState(false)
 
   const sessaoSelecionada = sessoes.find(s => s.id === Number(sessionId))
@@ -78,7 +80,7 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
     if (!sessionId) { toast.error('Selecione um chip'); return }
     setSaving(true)
     try {
-      await api.post('/aquecimento', { session_id: Number(sessionId), dias_total: diasTotal, usar_ia: usarIa })
+      await api.post('/aquecimento', { session_id: Number(sessionId), dias_total: diasTotal, usar_ia: usarIa, manutencao_ativa: manutencaoAtiva })
       toast.success('Aquecimento iniciado!')
       onSave()
     } catch (e) {
@@ -223,6 +225,30 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
             ))}
           </div>
 
+          {/* Toggle Manutenção Pós-conclusão */}
+          <div className="rounded-xl border border-surface-700/40 p-4 flex items-center justify-between gap-4" style={{ background: '#1a1425' }}>
+            <div className="flex items-start gap-3">
+              <span className="text-xl">🔧</span>
+              <div>
+                <p className="text-sm font-semibold text-surface-200">Manter aquecimento pós-conclusão</p>
+                <p className="text-xs text-surface-500 mt-0.5 leading-relaxed">
+                  Após concluir, chip continua recebendo 3-5 msgs/dia para manter histórico ativo e score alto no WhatsApp.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setManutencaoAtiva(v => !v)}
+              className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
+              style={{ background: manutencaoAtiva ? '#f59e0b' : '#374151' }}
+            >
+              <span
+                className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200"
+                style={{ transform: manutencaoAtiva ? 'translateX(20px)' : 'translateX(0)' }}
+              />
+            </button>
+          </div>
+
           {/* Toggle IA Gemini */}
           <div className="rounded-xl border border-surface-700/40 p-4 flex items-center justify-between gap-4" style={{ background: '#1a1425' }}>
             <div className="flex items-start gap-3">
@@ -345,12 +371,13 @@ function ModalLogs({ aq, onClose }) {
 
 // ── Card de Aquecimento ───────────────────────────────────────────────────────
 
-function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar }) {
+function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar, onToggleManutencao }) {
   const saude = getSaude(aq)
   const progressoDia = aq.dias_total > 0 ? Math.min(100, Math.round((aq.dia_atual - 1) / aq.dias_total * 100)) : 0
   const progressoMsgs = aq.meta_hoje > 0 ? Math.min(100, Math.round(aq.msgs_hoje / aq.meta_hoje * 100)) : 0
   const isAtivo = aq.status === 'ativo'
   const isPausado = aq.status === 'pausado'
+  const isManutencao = aq.status === 'manutencao'
   const isFinalizado = ['concluido', 'cancelado'].includes(aq.status)
 
   return (
@@ -380,8 +407,20 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar }) {
         <div className="flex flex-col items-end gap-1">
           {isAtivo && <span className="badge-green text-[10px]">🔥 Aquecendo</span>}
           {isPausado && <span className="badge-yellow text-[10px]">⏸ Pausado</span>}
+          {isManutencao && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+              style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.3)' }}>
+              🔧 Manutenção
+            </span>
+          )}
           {aq.status === 'concluido' && <span className="badge-primary text-[10px]">✅ Concluído</span>}
           {aq.status === 'cancelado' && <span className="badge-red text-[10px]">❌ Cancelado</span>}
+          {(aq.session_is_aquecido || isManutencao) && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+              style={{ background: 'rgba(234,179,8,0.12)', color: '#f59e0b', border: '1px solid rgba(234,179,8,0.25)' }}>
+              🔥 Chip aquecido
+            </span>
+          )}
           {aq.usar_ia && isAtivo && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.3)' }}>
               ✨ Gemini IA
@@ -497,12 +536,38 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar }) {
         </div>
       )}
       {isFinalizado && (
-        <div className="flex pt-1 border-t border-surface-700/30">
+        <div className="flex gap-2 pt-1 border-t border-surface-700/30">
           <button
             onClick={() => onLogs(aq)}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-surface-400 bg-surface-800/40 border border-surface-700/40 hover:text-surface-200 hover:bg-surface-700/40 transition-colors"
           >
             <MdHistory size={14} /> Ver histórico
+          </button>
+          {aq.status === 'concluido' && (
+            <button
+              onClick={() => onToggleManutencao(aq)}
+              title="Ativar manutenção: chip continua recebendo 3-5 msgs/dia"
+              className="px-3 py-2 rounded-xl text-xs font-semibold text-yellow-400/70 bg-yellow-900/10 border border-yellow-500/20 hover:text-yellow-400 hover:bg-yellow-900/20 transition-colors"
+            >
+              🔧 Manutenção
+            </button>
+          )}
+        </div>
+      )}
+      {isManutencao && (
+        <div className="flex gap-2 pt-1 border-t border-surface-700/30">
+          <button
+            onClick={() => onLogs(aq)}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-surface-400 bg-surface-800/40 border border-surface-700/40 hover:text-surface-200 hover:bg-surface-700/40 transition-colors"
+          >
+            <MdHistory size={14} /> Logs
+          </button>
+          <button
+            onClick={() => onToggleManutencao(aq)}
+            title="Desativar manutenção contínua"
+            className="px-3 py-2 rounded-xl text-xs font-semibold text-yellow-400 bg-yellow-900/15 border border-yellow-500/30 hover:bg-yellow-900/25 transition-colors flex items-center gap-1"
+          >
+            ⏹ Parar manutenção
           </button>
         </div>
       )}
@@ -566,6 +631,17 @@ export default function Aquecimento() {
     }
   }
 
+  async function toggleManutencao(aq) {
+    const acao = aq.status === 'manutencao' ? 'Desativar' : 'Ativar'
+    try {
+      await api.put(`/aquecimento/${aq.id}/manutencao`)
+      toast.success(`${acao} manutenção — ${aq.session_name}`)
+      carregar()
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao alterar manutenção')
+    }
+  }
+
   async function cancelar(aq) {
     if (!window.confirm(`Cancelar aquecimento do chip "${aq.session_name}"?`)) return
     try {
@@ -579,6 +655,7 @@ export default function Aquecimento() {
 
   const ativos = aquecimentos.filter(a => a.status === 'ativo')
   const pausados = aquecimentos.filter(a => a.status === 'pausado')
+  const emManutencao = aquecimentos.filter(a => a.status === 'manutencao')
   const finalizados = aquecimentos.filter(a => ['concluido', 'cancelado'].includes(a.status))
   const sessoesConectadas = sessoes.filter(s => s.status === 'connected' || s.status === 'CONNECTED')
 
@@ -684,6 +761,30 @@ export default function Aquecimento() {
                     onRetomar={retomar}
                     onLogs={setModalLogs}
                     onCancelar={cancelar}
+                    onToggleManutencao={toggleManutencao}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Em manutenção */}
+          {emManutencao.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                🔧 Manutenção contínua
+                <span className="text-xs font-normal text-surface-500 normal-case tracking-normal">(3-5 msgs/dia para manter score ativo)</span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+                {emManutencao.map(aq => (
+                  <CardAquecimento
+                    key={aq.id}
+                    aq={aq}
+                    onPausar={pausar}
+                    onRetomar={retomar}
+                    onLogs={setModalLogs}
+                    onCancelar={cancelar}
+                    onToggleManutencao={toggleManutencao}
                   />
                 ))}
               </div>
@@ -703,6 +804,7 @@ export default function Aquecimento() {
                     onRetomar={retomar}
                     onLogs={setModalLogs}
                     onCancelar={cancelar}
+                    onToggleManutencao={toggleManutencao}
                   />
                 ))}
               </div>

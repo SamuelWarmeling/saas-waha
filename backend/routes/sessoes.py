@@ -40,6 +40,7 @@ class SessionOut(BaseModel):
     delay_max: int
     is_active: bool
     tipo_chip: str = "fisico"
+    is_aquecido: bool = False
 
     class Config:
         from_attributes = True

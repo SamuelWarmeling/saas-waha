@@ -331,6 +331,68 @@ export default function Configuracoes() {
         </form>
       </div>
 
+      {/* Limites recomendados */}
+      <div className="glass-card border-t border-surface-800/50">
+        <div className="mb-5">
+          <h2 className="text-lg font-bold text-surface-100">Limites de Disparo por Tipo de Chip</h2>
+          <p className="text-sm text-surface-400 mt-1">Recomendações de segurança para evitar banimentos</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-yellow-500/25 p-5" style={{ background: 'rgba(234,179,8,0.06)' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-2xl">🔥</span>
+              <div>
+                <p className="font-bold text-yellow-300">Chip Aquecido</p>
+                <p className="text-xs text-surface-400 mt-0.5">Passou pelo processo de aquecimento</p>
+              </div>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-surface-400">Limite recomendado</span>
+                <span className="font-bold text-yellow-300">100 msgs/dia</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-surface-400">Delay mínimo</span>
+                <span className="font-bold text-surface-200">5s entre msgs</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-surface-400">Risco de ban</span>
+                <span className="font-bold text-green-400">Baixo</span>
+              </div>
+            </div>
+            <p className="text-xs text-surface-500 mt-4 border-t border-yellow-500/15 pt-3">
+              Ajuste o limite do chip individualmente na página <strong className="text-surface-300">Sessões</strong>.
+            </p>
+          </div>
+          <div className="rounded-xl border border-red-500/20 p-5" style={{ background: 'rgba(239,68,68,0.04)' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <p className="font-bold text-red-300">Chip Não Aquecido</p>
+                <p className="text-xs text-surface-400 mt-0.5">Número novo ou sem histórico de conversas</p>
+              </div>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-surface-400">Limite recomendado</span>
+                <span className="font-bold text-red-300">30 msgs/dia</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-surface-400">Delay mínimo</span>
+                <span className="font-bold text-surface-200">15s entre msgs</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-surface-400">Risco de ban</span>
+                <span className="font-bold text-red-400">Alto</span>
+              </div>
+            </div>
+            <p className="text-xs text-surface-500 mt-4 border-t border-red-500/15 pt-3">
+              Use a página <strong className="text-surface-300">Aquecimento</strong> para preparar o chip antes de disparar.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-surface-800/50">
         {/* Perfil */}
         <div className="glass-card">

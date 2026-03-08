@@ -186,6 +186,8 @@ def _aq_out(aq: models.AquecimentoConfig, db: Session = None):
         if fisicos_disponiveis == 0 and aq.status == models.AquecimentoStatus.ativo:
             saude = "atencao"
 
+    is_manutencao = aq.status == models.AquecimentoStatus.manutencao
+
     return {
         "id": aq.id,
         "user_id": aq.user_id,
@@ -193,6 +195,7 @@ def _aq_out(aq: models.AquecimentoConfig, db: Session = None):
         "session_name": sess.name if sess else "—",
         "session_phone": sess.phone_number if sess else None,
         "session_status": sess.status.value if sess else "disconnected",
+        "session_is_aquecido": getattr(sess, "is_aquecido", False) if sess else False,
         "status": aq.status.value if hasattr(aq.status, "value") else aq.status,
         "tipo_chip": tipo_chip,
         "dia_atual": aq.dia_atual,
@@ -202,6 +205,8 @@ def _aq_out(aq: models.AquecimentoConfig, db: Session = None):
         "progresso_pct": progresso_pct,
         "saude": saude,
         "usar_ia": getattr(aq, "usar_ia", True),
+        "manutencao_ativa": getattr(aq, "manutencao_ativa", True),
+        "is_manutencao": is_manutencao,
         "msgs_recebidas": getattr(aq, "msgs_recebidas", 0),
         "respostas_enviadas": getattr(aq, "respostas_enviadas", 0),
         "fisicos_disponiveis": fisicos_disponiveis,
@@ -217,6 +222,7 @@ class AquecimentoCreate(BaseModel):
     session_id: int
     dias_total: int = 14
     usar_ia: bool = True
+    manutencao_ativa: bool = True
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -281,6 +287,7 @@ def iniciar_aquecimento(
         msgs_sem_pausa=0,
         inicio_dia_atual=now,
         usar_ia=body.usar_ia,
+        manutencao_ativa=body.manutencao_ativa,
     )
     db.add(aq)
     db.commit()
@@ -385,6 +392,36 @@ def cancelar_aquecimento(
     db.commit()
 
 
+@router.put("/{aq_id}/manutencao")
+def toggle_manutencao(
+    aq_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Ativa manutenção contínua num aquecimento concluído ou desativa."""
+    aq = db.query(models.AquecimentoConfig).filter(
+        models.AquecimentoConfig.id == aq_id,
+        models.AquecimentoConfig.user_id == current_user.id,
+    ).first()
+    if not aq:
+        raise HTTPException(status_code=404, detail="Aquecimento não encontrado")
+    if aq.status == models.AquecimentoStatus.manutencao:
+        # Desativar manutenção
+        aq.status = models.AquecimentoStatus.concluido
+        aq.manutencao_ativa = False
+    elif aq.status == models.AquecimentoStatus.concluido:
+        # Reativar manutenção
+        aq.status = models.AquecimentoStatus.manutencao
+        aq.manutencao_ativa = True
+        aq.msgs_hoje = 0
+        aq.meta_hoje = random.randint(3, 5)
+        aq.proximo_envio = datetime.now(timezone.utc) + timedelta(minutes=random.randint(10, 30))
+    else:
+        raise HTTPException(status_code=400, detail="Aquecimento deve estar concluído ou em manutenção")
+    db.commit()
+    return _aq_out(aq, db)
+
+
 @router.get("/{aq_id}/logs")
 def logs_aquecimento(
     aq_id: int,
@@ -433,7 +470,10 @@ async def processar_aquecimento():
 
         ativos = (
             db.query(models.AquecimentoConfig)
-            .filter(models.AquecimentoConfig.status == models.AquecimentoStatus.ativo)
+            .filter(models.AquecimentoConfig.status.in_([
+                models.AquecimentoStatus.ativo,
+                models.AquecimentoStatus.manutencao,
+            ]))
             .all()
         )
 
@@ -454,20 +494,48 @@ async def processar_aquecimento():
                     inicio_br = inicio_br.replace(tzinfo=timezone.utc)
                 inicio_br_local = inicio_br.astimezone(BRAZIL_TZ).date()
 
+                is_manutencao = aq.status == models.AquecimentoStatus.manutencao
+
                 if hoje_br > inicio_br_local:
-                    # Novo dia — avança
+                    if is_manutencao:
+                        # Manutenção — novo dia com meta baixa (3-5 msgs)
+                        aq.msgs_hoje = 0
+                        aq.msgs_sem_pausa = 0
+                        aq.meta_hoje = random.randint(3, 5)
+                        aq.inicio_dia_atual = now
+                        aq.proximo_envio = now + timedelta(minutes=random.randint(15, 45))
+                        db.commit()
+                        logger.info(f"[AQUECIMENTO] #{aq.id} manutenção — novo dia (meta: {aq.meta_hoje} msgs)")
+                        continue
+                    # Aquecimento normal — avança dia
                     aq.dia_atual += 1
                     if aq.dia_atual > aq.dias_total:
-                        aq.status = models.AquecimentoStatus.concluido
+                        # Marcar chip como aquecido
+                        sess_local = aq.session
+                        if sess_local:
+                            sess_local.is_aquecido = True
+                        manutencao = getattr(aq, "manutencao_ativa", True)
+                        if manutencao:
+                            aq.status = models.AquecimentoStatus.manutencao
+                            aq.msgs_hoje = 0
+                            aq.meta_hoje = random.randint(3, 5)
+                            aq.inicio_dia_atual = now
+                            aq.proximo_envio = now + timedelta(minutes=random.randint(30, 60))
+                            descricao_status = "manutenção contínua ativada"
+                        else:
+                            aq.status = models.AquecimentoStatus.concluido
+                            descricao_status = "concluído"
+                        chip_nome = sess_local.name if sess_local else "?"
                         db.add(models.AtividadeLog(
                             user_id=aq.user_id,
                             tipo="aquecimento_concluido",
                             descricao=(
-                                f"✅ Aquecimento do chip '{aq.session.name}' "
-                                f"concluído com sucesso após {aq.dias_total} dias!"
+                                f"🔥 Chip '{chip_nome}' aquecido com sucesso após {aq.dias_total} dias! "
+                                f"({descricao_status})"
                             ),
                         ))
                         db.commit()
+                        logger.info(f"[AQUECIMENTO] #{aq.id} concluído — chip marcado como aquecido ({descricao_status})")
                         continue
                     aq.msgs_hoje = 0
                     aq.msgs_sem_pausa = 0
@@ -479,6 +547,10 @@ async def processar_aquecimento():
                     continue
 
                 # ── Meta do dia já atingida ───────────────────────────────────
+                # Em manutenção, meta_hoje já é 3-5; em ativo usa get_meta_dia
+                if aq.meta_hoje == 0:
+                    aq.meta_hoje = random.randint(3, 5) if is_manutencao else get_meta_dia(aq.dia_atual)
+                    db.commit()
                 if aq.msgs_hoje >= aq.meta_hoje:
                     continue
 
@@ -592,8 +664,9 @@ async def processar_aquecimento():
                         delay = random.randint(10, 40)
 
                     aq.proximo_envio = now + timedelta(minutes=delay)
+                    mode = "manutenção" if is_manutencao else f"dia {aq.dia_atual}"
                     logger.info(
-                        f"[AQUECIMENTO] #{aq.id} físico dia {aq.dia_atual} — "
+                        f"[AQUECIMENTO] #{aq.id} físico {mode} — "
                         f"msg {aq.msgs_hoje}/{aq.meta_hoje} → {destino[:6]}*** "
                         f"(próxima em {delay}min)"
                     )

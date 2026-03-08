@@ -6,6 +6,7 @@ import Contatos from './pages/Contatos'
 import Sessoes from './pages/Sessoes'
 import Grupos from './pages/Grupos'
 import Funil from './pages/Funil'
+import Aquecimento from './pages/Aquecimento'
 import Configuracoes from './pages/Configuracoes'
 import Admin from './pages/Admin'
 import Layout from './components/Layout'
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="sessoes" element={<Sessoes />} />
         <Route path="grupos" element={<Grupos />} />
         <Route path="funil" element={<Funil />} />
+        <Route path="aquecimento" element={<Aquecimento />} />
         <Route path="configuracoes" element={<Configuracoes />} />
         <Route path="admin" element={<Admin />} />
       </Route>

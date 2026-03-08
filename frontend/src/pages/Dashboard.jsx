@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   MdContacts, MdSend, MdPhoneAndroid, MdCampaign, MdHistory,
   MdWarning, MdTrendingUp, MdTrendingDown, MdCheckCircle,
-  MdSchedule, MdBarChart, MdStar, MdFilterAlt,
+  MdSchedule, MdBarChart, MdStar, MdFilterAlt, MdLocalFireDepartment,
 } from 'react-icons/md'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -87,6 +87,7 @@ export default function Dashboard() {
   const [campaigns, setCampaigns] = useState([])
   const [atividades, setAtividades] = useState([])
   const [funnelStats, setFunnelStats] = useState(null)
+  const [aquecStats, setAquecStats] = useState(null)
   const activityRef = useRef(null)
   const sessionsRef = useRef(null)
 
@@ -103,6 +104,7 @@ export default function Dashboard() {
     api.get('/campanhas?page_size=5').then(r => setCampaigns(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     loadAtividades()
     api.get('/funnel/stats').then(r => setFunnelStats(r.data)).catch(() => {})
+    api.get('/aquecimento/stats').then(r => setAquecStats(r.data)).catch(() => {})
 
     // Activity polling: 10s
     activityRef.current = setInterval(loadAtividades, 10000)
@@ -453,6 +455,57 @@ export default function Dashboard() {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+
+          {/* Card Chips Aquecendo */}
+          <div className="glass-card">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-surface-700/50">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(249,115,22,0.2)', color: '#f97316' }}>
+                <MdLocalFireDepartment size={18} />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-surface-100">Chips Aquecendo 🔥</h2>
+                <p className="text-[10px] text-surface-500">Preparação anti-ban</p>
+              </div>
+            </div>
+            {!aquecStats || (aquecStats.total_ativos === 0 && aquecStats.total_concluidos === 0) ? (
+              <div className="py-4 text-center">
+                <p className="text-surface-500 text-xs mb-2">Nenhum chip em aquecimento</p>
+                <button onClick={() => navigate('/aquecimento')} className="text-xs font-semibold text-orange-400 hover:text-orange-300 underline underline-offset-2">
+                  Iniciar aquecimento →
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)' }}>
+                    <div className="text-xl font-bold text-orange-400">{aquecStats.total_ativos}</div>
+                    <div className="text-[10px] text-surface-500">Aquecendo</div>
+                  </div>
+                  <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                    <div className="text-xl font-bold text-emerald-400">{aquecStats.total_concluidos}</div>
+                    <div className="text-[10px] text-surface-500">Concluídos</div>
+                  </div>
+                </div>
+                {aquecStats.total_ativos > 0 && (
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[11px] text-surface-400">Progresso médio</span>
+                      <span className="text-[11px] font-bold text-orange-400">{aquecStats.progresso_medio}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-surface-800/60 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${aquecStats.progresso_medio}%`, background: 'linear-gradient(90deg, #f97316, #ea580c)' }}
+                      />
+                    </div>
+                  </div>
+                )}
+                <button onClick={() => navigate('/aquecimento')} className="w-full text-center text-xs font-semibold text-orange-400 hover:text-orange-300 py-1 transition-colors">
+                  Gerenciar aquecimento →
+                </button>
+              </div>
             )}
           </div>
 

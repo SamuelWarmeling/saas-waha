@@ -347,6 +347,58 @@ class FunnelContato(Base):
     )
 
 
+class AquecimentoStatus(str, enum.Enum):
+    ativo = "ativo"
+    pausado = "pausado"
+    concluido = "concluido"
+    cancelado = "cancelado"
+
+
+class AquecimentoConfig(Base):
+    __tablename__ = "aquecimento_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="CASCADE"), nullable=False)
+    status = Column(SAEnum(AquecimentoStatus), default=AquecimentoStatus.ativo, nullable=False)
+    dia_atual = Column(Integer, default=1, nullable=False)
+    dias_total = Column(Integer, default=14, nullable=False)
+    msgs_hoje = Column(Integer, default=0, nullable=False)
+    meta_hoje = Column(Integer, default=3, nullable=False)
+    msgs_sem_pausa = Column(Integer, default=0, nullable=False)
+    ultima_msg_idx = Column(Integer, nullable=True)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    ultimo_envio = Column(DateTime(timezone=True), nullable=True)
+    proximo_envio = Column(DateTime(timezone=True), nullable=True)
+    inicio_dia_atual = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")
+    session = relationship("WhatsAppSession")
+    logs = relationship("AquecimentoLog", back_populates="aquecimento", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_aquecimento_configs_user_id", "user_id"),
+        Index("ix_aquecimento_configs_status", "status"),
+    )
+
+
+class AquecimentoLog(Base):
+    __tablename__ = "aquecimento_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    aquecimento_id = Column(Integer, ForeignKey("aquecimento_configs.id", ondelete="CASCADE"), nullable=False)
+    telefone_destino = Column(String(20), nullable=False)
+    mensagem = Column(Text, nullable=False)
+    status = Column(String(20), default="enviado", nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    aquecimento = relationship("AquecimentoConfig", back_populates="logs")
+
+    __table_args__ = (
+        Index("ix_aquecimento_logs_aquecimento_id", "aquecimento_id"),
+    )
+
+
 class Group(Base):
     __tablename__ = "groups"
 

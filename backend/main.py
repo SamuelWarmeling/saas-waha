@@ -16,6 +16,7 @@ import models  # noqa: F401 – importa para registrar os models
 from routes import usuarios, sessoes, contatos, campanhas, pagamentos, grupos
 from routes.webhook_waha import router as webhook_router
 from routes.funnel import router as funnel_router, funnel_worker_task
+from routes.aquecimento import router as aquecimento_router, aquecimento_worker_task
 from routes.admin import router as admin_router
 from routes.debug import router as debug_router
 from routes.atividades import router as atividades_router
@@ -241,6 +242,23 @@ def migrate_campaign_contact_ack():
         logger.error(f"[MIGRATE] Erro ao migrar campaign_contacts ack: {e}")
 
 
+def migrate_aquecimento_tables():
+    """Cria o enum aquecimentostatus e tabelas de aquecimento se não existirem."""
+    try:
+        with engine.connect() as conn:
+            exists = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'aquecimentostatus')"
+            )).scalar()
+            if not exists:
+                conn.execute(text(
+                    "CREATE TYPE aquecimentostatus AS ENUM ('ativo', 'pausado', 'concluido', 'cancelado')"
+                ))
+                conn.commit()
+                logger.info("[MIGRATE] Enum aquecimentostatus criado.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao criar enum aquecimentostatus: {e}")
+
+
 def migrate_funnel_tables():
     """Cria tabelas do funil de leads se não existirem (via SQL direto para evitar conflito de enums)."""
     try:
@@ -419,6 +437,7 @@ async def lifespan(app: FastAPI):
             migrate_campaign_scheduled()
             migrate_campaign_contact_ack()
             migrate_campaign_message_media()
+            migrate_aquecimento_tables()
             migrate_funnel_tables()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
@@ -431,11 +450,13 @@ async def lifespan(app: FastAPI):
     task_auto = asyncio.create_task(auto_update_groups_task())
     task_sched = asyncio.create_task(scheduled_campaigns_task())
     task_funnel = asyncio.create_task(funnel_worker_task())
+    task_aquec = asyncio.create_task(aquecimento_worker_task())
     yield
     task_auto.cancel()
     task_sched.cancel()
     task_funnel.cancel()
-    for t in (task_auto, task_sched, task_funnel):
+    task_aquec.cancel()
+    for t in (task_auto, task_sched, task_funnel, task_aquec):
         try:
             await t
         except asyncio.CancelledError:
@@ -479,6 +500,7 @@ app.include_router(debug_router)
 app.include_router(atividades_router)
 app.include_router(dashboard_router)
 app.include_router(funnel_router)
+app.include_router(aquecimento_router)
 
 
 @app.get("/")

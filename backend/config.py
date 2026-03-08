@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Frontend URL (para webhooks/redirects)
     FRONTEND_URL: str = "https://app-saas.xeramr.easypanel.host"
 
+    # Números de aquecimento fixos (fallback, separados por vírgula, ex: "5511999990001,5511999990002")
+    AQUECIMENTO_NUMBERS: str = ""
+
     # URL pública do backend (usada pelo WAHA para buscar arquivos de mídia)
     BACKEND_URL: str = "https://api-saas.xeramr.easypanel.host"
 

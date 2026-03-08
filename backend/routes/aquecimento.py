@@ -178,6 +178,7 @@ def _aq_out(aq: models.AquecimentoConfig):
         "criado_em": aq.criado_em.isoformat() if aq.criado_em else None,
         "ultimo_envio": aq.ultimo_envio.isoformat() if aq.ultimo_envio else None,
         "proximo_envio": aq.proximo_envio.isoformat() if aq.proximo_envio else None,
+        "usar_ia": getattr(aq, "usar_ia", True),
     }
 
 
@@ -186,6 +187,7 @@ def _aq_out(aq: models.AquecimentoConfig):
 class AquecimentoCreate(BaseModel):
     session_id: int
     dias_total: int = 14
+    usar_ia: bool = True
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -249,6 +251,7 @@ def iniciar_aquecimento(
         meta_hoje=get_meta_dia(1),
         msgs_sem_pausa=0,
         inicio_dia_atual=now,
+        usar_ia=body.usar_ia,
     )
     db.add(aq)
     db.commit()
@@ -443,17 +446,44 @@ async def processar_aquecimento():
                     logger.warning(f"[AQUECIMENTO] #{aq.id} sem destinos disponíveis")
                     continue
 
-                # ── Seleciona mensagem (não repete a última) ──────────────────
-                idx = random.randint(0, len(MENSAGENS_AQUECIMENTO) - 1)
-                if aq.ultima_msg_idx is not None and idx == aq.ultima_msg_idx:
-                    idx = (idx + 1) % len(MENSAGENS_AQUECIMENTO)
-                mensagem = MENSAGENS_AQUECIMENTO[idx]
+                # ── Seleciona mensagem (IA ou pool fixo) ─────────────────────
+                usar_ia = getattr(aq, "usar_ia", True)
+                # Busca histórico recente para evitar repetição
+                historico_recente = (
+                    db.query(models.AquecimentoLog.mensagem)
+                    .filter(models.AquecimentoLog.aquecimento_id == aq.id)
+                    .order_by(models.AquecimentoLog.criado_em.desc())
+                    .limit(10)
+                    .all()
+                )
+                historico_msgs = [r[0] for r in historico_recente]
+
+                # Tenta IA; fallback automático se falhar
+                user = aq.user
+                user_key = getattr(user, "gemini_api_key", None) if user else None
+                gemini_habilitado = getattr(user, "gemini_habilitado", True) if user else True
+
+                import ia_service
+                mensagem, gerada_por_ia = await ia_service.gerar_mensagem_aquecimento(
+                    historico=historico_msgs,
+                    user_key=user_key,
+                    gemini_habilitado=usar_ia and gemini_habilitado,
+                )
+
+                # Fallback de índice para o pool quando IA não usada
+                if not gerada_por_ia:
+                    idx = random.randint(0, len(MENSAGENS_AQUECIMENTO) - 1)
+                    if aq.ultima_msg_idx is not None and idx == aq.ultima_msg_idx:
+                        idx = (idx + 1) % len(MENSAGENS_AQUECIMENTO)
+                    mensagem = MENSAGENS_AQUECIMENTO[idx]
+                    aq.ultima_msg_idx = idx
+
                 destino = random.choice(destinos)
 
                 # ── Envia ─────────────────────────────────────────────────────
                 ok = await enviar_msg_aquecimento(session.session_id, destino, mensagem)
 
-                log_status = "enviado" if ok else "erro"
+                log_status = ("enviado_ia" if gerada_por_ia else "enviado") if ok else "erro"
                 db.add(models.AquecimentoLog(
                     aquecimento_id=aq.id,
                     telefone_destino=destino,
@@ -463,7 +493,6 @@ async def processar_aquecimento():
 
                 if ok:
                     aq.msgs_hoje += 1
-                    aq.ultima_msg_idx = idx
                     aq.ultimo_envio = now
                     aq.msgs_sem_pausa = (aq.msgs_sem_pausa or 0) + 1
 

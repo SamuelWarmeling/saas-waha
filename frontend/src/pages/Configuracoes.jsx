@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MdCheckCircle, MdStar } from 'react-icons/md'
+import { MdCheckCircle, MdStar, MdAutoAwesome, MdVpnKey, MdVisibility, MdVisibilityOff } from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
 
@@ -35,11 +35,19 @@ export default function Configuracoes() {
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [loadingPassword, setLoadingPassword] = useState(false)
 
+  // IA state
+  const [iaConfig, setIaConfig] = useState({ gemini_habilitado: true, tem_chave: false, chave_propria: false, chave_parcial: null, tem_chave_servidor: false })
+  const [geminiKey, setGeminiKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [loadingIa, setLoadingIa] = useState(false)
+  const [testingIa, setTestingIa] = useState(false)
+
   useEffect(() => {
     api.get('/usuarios/me').then(r => {
       setUser(r.data)
       setProfile({ name: r.data.name, email: r.data.email })
     })
+    api.get('/ia/config').then(r => setIaConfig(r.data)).catch(() => {})
   }, [])
 
   async function saveProfile(e) {
@@ -71,6 +79,41 @@ export default function Configuracoes() {
       toast.error(err.response?.data?.detail || 'Erro ao alterar senha')
     } finally {
       setLoadingPassword(false)
+    }
+  }
+
+  async function saveIaConfig(e) {
+    e.preventDefault()
+    setLoadingIa(true)
+    try {
+      await api.put('/ia/config', {
+        gemini_api_key: geminiKey || undefined,
+        gemini_habilitado: iaConfig.gemini_habilitado,
+      })
+      const { data } = await api.get('/ia/config')
+      setIaConfig(data)
+      setGeminiKey('')
+      toast.success('Configuração de IA salva!')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao salvar')
+    } finally {
+      setLoadingIa(false)
+    }
+  }
+
+  async function testarIa() {
+    setTestingIa(true)
+    try {
+      const { data } = await api.get('/ia/testar')
+      if (data.ok) {
+        toast.success(`Gemini conectado! Resposta: "${data.resposta}" (${data.modelo})`)
+      } else {
+        toast.error(data.erro || 'Falha na conexão')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao testar conexão')
+    } finally {
+      setTestingIa(false)
     }
   }
 
@@ -174,6 +217,118 @@ export default function Configuracoes() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Inteligência Artificial */}
+      <div className="glass-card border-t border-surface-800/50">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2.5 rounded-xl bg-purple-500/15 text-purple-400 shadow-[0_0_12px_theme(colors.purple.500/15)]">
+            <MdAutoAwesome className="text-2xl" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-surface-100">Inteligência Artificial 🤖</h2>
+            <p className="text-sm text-surface-400 mt-0.5">Google Gemini para gerar mensagens naturais no aquecimento</p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs text-surface-400 font-medium">IA Global</span>
+            <button
+              onClick={() => setIaConfig(c => ({ ...c, gemini_habilitado: !c.gemini_habilitado }))}
+              className={`relative w-11 h-6 rounded-full transition-colors ${iaConfig.gemini_habilitado ? 'bg-purple-500' : 'bg-surface-700'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${iaConfig.gemini_habilitado ? 'translate-x-5' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Status da chave */}
+        <div className="flex flex-wrap gap-3 mb-6">
+          {iaConfig.tem_chave_servidor && (
+            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ background: 'rgba(157,78,221,0.12)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.25)' }}>
+              <MdVpnKey className="text-sm" /> Chave do servidor ativa
+            </span>
+          )}
+          {iaConfig.chave_propria && (
+            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ background: 'rgba(34,197,94,0.12)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }}>
+              <MdVpnKey className="text-sm" /> Sua chave: {iaConfig.chave_parcial}
+            </span>
+          )}
+          {!iaConfig.tem_chave && (
+            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}>
+              Nenhuma chave configurada — usando pool de mensagens
+            </span>
+          )}
+        </div>
+
+        <form onSubmit={saveIaConfig} className="space-y-5">
+          <div>
+            <label className="label flex items-center justify-between">
+              <span>Chave API do Gemini</span>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-purple-400 hover:text-purple-300 font-medium underline underline-offset-2"
+              >
+                Obter chave gratuita em aistudio.google.com →
+              </a>
+            </label>
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={geminiKey}
+                onChange={e => setGeminiKey(e.target.value)}
+                className="input pr-10 placeholder-surface-600"
+                placeholder={iaConfig.chave_propria ? `Chave atual: ${iaConfig.chave_parcial} (deixe vazio para manter)` : 'AIza...'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(s => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-200"
+              >
+                {showKey ? <MdVisibilityOff /> : <MdVisibility />}
+              </button>
+            </div>
+            <p className="text-[11px] text-surface-500 mt-1.5 ml-1">
+              Gemini 1.5 Flash é <span className="text-purple-400 font-medium">gratuito até 15 req/min</span>. Sem cartão de crédito.
+            </p>
+          </div>
+
+          <div className="bg-surface-900/40 border border-surface-800/60 rounded-xl p-4 text-sm text-surface-300 space-y-1.5">
+            <p className="font-medium text-surface-200">Como funciona:</p>
+            <p>• Com IA ativa, cada mensagem de aquecimento é gerada pelo Gemini — única e natural</p>
+            <p>• Sem API key ou com IA desativada, usa o pool de 60+ mensagens pré-definidas</p>
+            <p>• Você pode ativar/desativar por chip individualmente na tela de Aquecimento</p>
+          </div>
+
+          <div className="flex flex-wrap gap-3 pt-2">
+            <button type="submit" disabled={loadingIa} className="btn-primary px-6" style={{ background: 'linear-gradient(135deg, #7c3aed, #9333ea)', borderColor: 'rgba(157,78,221,0.5)' }}>
+              {loadingIa ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  Salvando...
+                </span>
+              ) : 'Salvar Configuração'}
+            </button>
+            <button
+              type="button"
+              onClick={testarIa}
+              disabled={testingIa || !iaConfig.tem_chave}
+              className="btn-secondary px-6 flex items-center gap-2"
+            >
+              {testingIa ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-surface-400 border-t-white rounded-full animate-spin" />
+                  Testando...
+                </>
+              ) : (
+                <>
+                  <MdAutoAwesome className="text-purple-400" />
+                  Testar Conexão
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-surface-800/50">

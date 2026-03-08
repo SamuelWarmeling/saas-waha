@@ -17,6 +17,7 @@ from routes import usuarios, sessoes, contatos, campanhas, pagamentos, grupos
 from routes.webhook_waha import router as webhook_router
 from routes.funnel import router as funnel_router, funnel_worker_task
 from routes.aquecimento import router as aquecimento_router, aquecimento_worker_task
+from routes.ia import router as ia_router
 from routes.admin import router as admin_router
 from routes.debug import router as debug_router
 from routes.atividades import router as atividades_router
@@ -242,6 +243,29 @@ def migrate_campaign_contact_ack():
         logger.error(f"[MIGRATE] Erro ao migrar campaign_contacts ack: {e}")
 
 
+def migrate_ia_user_columns():
+    """Adiciona colunas de IA no modelo User e usar_ia em aquecimento_configs."""
+    try:
+        with engine.connect() as conn:
+            for table, col, dtype, default in [
+                ("users", "gemini_api_key", "VARCHAR(200)", "NULL"),
+                ("users", "gemini_habilitado", "BOOLEAN NOT NULL", "DEFAULT TRUE"),
+                ("aquecimento_configs", "usar_ia", "BOOLEAN NOT NULL", "DEFAULT TRUE"),
+            ]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = '{table}' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em {table}...")
+                    default_clause = f"{default}" if default != "NULL" else ""
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {dtype} {default_clause}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em {table}.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro ao migrar colunas de IA: {e}")
+
+
 def migrate_aquecimento_tables():
     """Cria o enum aquecimentostatus e tabelas de aquecimento se não existirem."""
     try:
@@ -437,6 +461,7 @@ async def lifespan(app: FastAPI):
             migrate_campaign_scheduled()
             migrate_campaign_contact_ack()
             migrate_campaign_message_media()
+            migrate_ia_user_columns()
             migrate_aquecimento_tables()
             migrate_funnel_tables()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
@@ -501,6 +526,7 @@ app.include_router(atividades_router)
 app.include_router(dashboard_router)
 app.include_router(funnel_router)
 app.include_router(aquecimento_router)
+app.include_router(ia_router)
 
 
 @app.get("/")

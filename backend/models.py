@@ -59,6 +59,8 @@ class User(Base):
     dispatch_delay_min = Column(Integer, default=5, nullable=False, server_default="5")
     dispatch_delay_max = Column(Integer, default=15, nullable=False, server_default="15")
     dispatch_daily_limit = Column(Integer, default=200, nullable=False, server_default="200")
+    gemini_api_key = Column(String(200), nullable=True)
+    gemini_habilitado = Column(Boolean, default=True, server_default="true", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -367,6 +369,7 @@ class AquecimentoConfig(Base):
     meta_hoje = Column(Integer, default=3, nullable=False)
     msgs_sem_pausa = Column(Integer, default=0, nullable=False)
     ultima_msg_idx = Column(Integer, nullable=True)
+    usar_ia = Column(Boolean, default=True, server_default="true", nullable=False)
     criado_em = Column(DateTime(timezone=True), server_default=func.now())
     ultimo_envio = Column(DateTime(timezone=True), nullable=True)
     proximo_envio = Column(DateTime(timezone=True), nullable=True)

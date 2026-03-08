@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # Números de aquecimento fixos (fallback, separados por vírgula, ex: "5511999990001,5511999990002")
     AQUECIMENTO_NUMBERS: str = ""
 
+    # Google Gemini IA
+    GEMINI_API_KEY: str = ""
+    GEMINI_ENABLED: bool = True
+
     # URL pública do backend (usada pelo WAHA para buscar arquivos de mídia)
     BACKEND_URL: str = "https://api-saas.xeramr.easypanel.host"
 

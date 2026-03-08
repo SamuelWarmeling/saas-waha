@@ -67,6 +67,7 @@ const PLANOS = [
 function ModalIniciar({ sessoes, onSave, onClose }) {
   const [sessionId, setSessionId] = useState(sessoes[0]?.id ?? '')
   const [diasTotal, setDiasTotal] = useState(14)
+  const [usarIa, setUsarIa] = useState(true)
   const [saving, setSaving] = useState(false)
 
   const sessaoSelecionada = sessoes.find(s => s.id === Number(sessionId))
@@ -75,7 +76,7 @@ function ModalIniciar({ sessoes, onSave, onClose }) {
     if (!sessionId) { toast.error('Selecione um chip'); return }
     setSaving(true)
     try {
-      await api.post('/aquecimento', { session_id: Number(sessionId), dias_total: diasTotal })
+      await api.post('/aquecimento', { session_id: Number(sessionId), dias_total: diasTotal, usar_ia: usarIa })
       toast.success('Aquecimento iniciado!')
       onSave()
     } catch (e) {
@@ -183,6 +184,30 @@ function ModalIniciar({ sessoes, onSave, onClose }) {
             ))}
           </div>
 
+          {/* Toggle IA Gemini */}
+          <div className="rounded-xl border border-surface-700/40 p-4 flex items-center justify-between gap-4" style={{ background: '#1a1425' }}>
+            <div className="flex items-start gap-3">
+              <span className="text-xl">✨</span>
+              <div>
+                <p className="text-sm font-semibold text-surface-200">Usar IA Gemini para mensagens</p>
+                <p className="text-xs text-surface-500 mt-0.5 leading-relaxed">
+                  Gera mensagens únicas e naturais com IA. Requer chave configurada em <strong>Configurações &gt; IA</strong>.
+                  Fallback automático para pool fixo se indisponível.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setUsarIa(v => !v)}
+              className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
+              style={{ background: usarIa ? '#9D4EDD' : '#374151' }}
+            >
+              <span
+                className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200"
+                style={{ transform: usarIa ? 'translateX(20px)' : 'translateX(0)' }}
+              />
+            </button>
+          </div>
+
           {/* Aviso */}
           <div className="rounded-xl border border-red-500/20 p-4 flex gap-3" style={{ background: 'rgba(239,68,68,0.06)' }}>
             <MdWarning size={18} className="text-red-400 flex-shrink-0 mt-0.5" />
@@ -256,9 +281,15 @@ function ModalLogs({ aq, onClose }) {
                     <td className="py-2.5 px-3 font-mono text-surface-400">{l.telefone_destino}</td>
                     <td className="py-2.5 text-surface-300 max-w-[220px] truncate">{l.mensagem}</td>
                     <td className="py-2.5 text-center">
-                      <span className={l.status === 'enviado' ? 'badge-green' : 'badge-red'}>
-                        {l.status === 'enviado' ? '✓ enviado' : '✗ erro'}
-                      </span>
+                      {l.status === 'enviado_ia' ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.3)' }}>
+                          ✨ IA
+                        </span>
+                      ) : l.status === 'enviado' ? (
+                        <span className="badge-green">✓ pool</span>
+                      ) : (
+                        <span className="badge-red">✗ erro</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -299,6 +330,11 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar }) {
           {isPausado && <span className="badge-yellow text-[10px]">⏸ Pausado</span>}
           {aq.status === 'concluido' && <span className="badge-primary text-[10px]">✅ Concluído</span>}
           {aq.status === 'cancelado' && <span className="badge-red text-[10px]">❌ Cancelado</span>}
+          {aq.usar_ia && isAtivo && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.3)' }}>
+              ✨ Gemini IA
+            </span>
+          )}
         </div>
       </div>
 

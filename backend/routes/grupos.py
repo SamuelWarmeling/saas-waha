@@ -2,6 +2,7 @@
 Rotas para gerenciar grupos e extrair membros
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
@@ -179,6 +180,40 @@ async def extract_selected(
 
 
 # ── Endpoints de grupos (DB) ──────────────────────────────────────────────────
+@router.delete("/cleanup")
+def cleanup_small_groups(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Deleta grupos com 0 ou 1 membro e limpa group_members órfãos."""
+    small_groups = db.query(models.Group).filter(
+        models.Group.user_id == current_user.id,
+        models.Group.member_count <= 1,
+    ).all()
+
+    deleted_count = len(small_groups)
+    for group in small_groups:
+        db.delete(group)  # CASCADE deleta GroupMembers vinculados
+    db.flush()
+
+    # Safety net: limpa GroupMembers cujo grupo não existe mais
+    result = db.execute(
+        text("DELETE FROM group_members WHERE group_id NOT IN (SELECT id FROM groups)")
+    )
+    orphaned_count = result.rowcount
+
+    db.commit()
+
+    return {
+        "deleted_groups": deleted_count,
+        "orphaned_members_cleaned": orphaned_count,
+        "message": (
+            f"{deleted_count} grupo(s) com 0 ou 1 membro removido(s). "
+            f"{orphaned_count} membro(s) órfão(s) limpos."
+        ),
+    }
+
+
 @router.get("", response_model=GroupListOut)
 def list_groups(
     session_id: Optional[int] = None,
@@ -187,8 +222,11 @@ def list_groups(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Lista grupos extraídos (salvos no banco)."""
-    query = db.query(models.Group).filter(models.Group.user_id == current_user.id)
+    """Lista grupos extraídos (salvos no banco). Retorna apenas grupos com >= 2 membros."""
+    query = db.query(models.Group).filter(
+        models.Group.user_id == current_user.id,
+        models.Group.member_count >= 2,  # ignora grupos com < 2 membros
+    )
 
     if session_id:
         query = query.filter(models.Group.session_id == session_id)

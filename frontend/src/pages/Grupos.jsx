@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import {
   MdGroup, MdRefresh, MdDelete, MdPeople, MdCheckBox, MdCheckBoxOutlineBlank,
   MdIndeterminateCheckBox, MdClose, MdDownload, MdAutorenew, MdSchedule,
-  MdSearch, MdCampaign, MdFilterList, MdOutlineCampaign,
+  MdSearch, MdCampaign, MdFilterList, MdOutlineCampaign, MdCleaningServices,
 } from 'react-icons/md'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -86,6 +86,7 @@ export default function Grupos() {
   const [dbGroups, setDbGroups] = useState([])
   const [dbTotal, setDbTotal] = useState(0)
   const [autoUpdateLoading, setAutoUpdateLoading] = useState({})
+  const [cleaning, setCleaning] = useState(false)
 
   // ── Modal de contatos ────────────────────────────────────────────────────────
   const [showMemberModal, setShowMemberModal] = useState(false)
@@ -290,6 +291,20 @@ export default function Grupos() {
     }
   }
 
+  const cleanupSmallGroups = async () => {
+    if (!confirm('Deletar todos os grupos com 0 ou 1 membro? Esta ação não pode ser desfeita.')) return
+    setCleaning(true)
+    try {
+      const { data } = await api.delete('/grupos/cleanup')
+      toast.success(data.message)
+      loadDbGroups()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao limpar grupos')
+    } finally {
+      setCleaning(false)
+    }
+  }
+
   const toggleGroup = (id) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleAll = () => selectedIds.size === wahaGroups.length ? setSelectedIds(new Set()) : setSelectedIds(new Set(wahaGroups.map(g => g.id)))
 
@@ -443,12 +458,24 @@ export default function Grupos() {
       {/* Grupos processados (banco) */}
       {selectedSession && dbGroups.length > 0 && (
         <div className="glass-card overflow-hidden p-0">
-          <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/30">
+          <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/30 flex items-center justify-between flex-wrap gap-3">
             <h2 className="text-sm font-semibold text-surface-100 flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center"><MdCheckBox size={18} /></div>
               Grupos processados
               <span className="ml-2 text-xs font-medium text-surface-500 bg-surface-800 px-2 py-0.5 rounded-full">{dbTotal} salvos</span>
             </h2>
+            <button
+              onClick={cleanupSmallGroups}
+              disabled={cleaning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400 border border-red-500/25 bg-red-900/10 hover:bg-red-900/25 hover:border-red-500/40 transition-all disabled:opacity-50"
+              title="Deletar grupos com 0 ou 1 membro"
+            >
+              {cleaning
+                ? <div className="w-3.5 h-3.5 border-2 border-red-400/30 border-t-red-400 rounded-full animate-spin" />
+                : <MdCleaningServices size={15} />
+              }
+              Limpar grupos vazios
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

@@ -52,10 +52,13 @@ async def fetch_groups_from_waha(session_id_waha: str) -> list:
         group_id = g.get("id", "")
         if not group_id:
             continue
+        size = g.get("size") or len(g.get("participants", []))
+        if size < 2:
+            continue  # ignora grupos com menos de 2 participantes
         result.append({
             "id": group_id,
             "name": g.get("subject") or g.get("name") or "Sem nome",
-            "size": g.get("size") or len(g.get("participants", [])),
+            "size": size,
         })
 
     return result
@@ -96,6 +99,7 @@ async def extract_selected_groups(
     skipped_admin = 0
     skipped_nonbr = 0
     skipped_invalid = 0
+    skipped_small = 0
 
     for group_id_waha in group_ids_waha:
         group_info = all_groups.get(group_id_waha)
@@ -204,6 +208,20 @@ async def extract_selected_groups(
             extracted_members += 1
             group_member_count += 1
 
+        # ── FILTRO: ignorar grupos com menos de 2 membros válidos ───────────
+        if group_member_count < 2:
+            logger.info(
+                f"[GRUPOS] Grupo {group_name!r} ignorado: apenas "
+                f"{group_member_count} membro(s) válido(s) após filtros"
+            )
+            db.query(models.GroupMember).filter(
+                models.GroupMember.group_id == group_obj.id
+            ).delete()
+            db.delete(group_obj)
+            db.flush()
+            skipped_small += 1
+            continue
+
         group_obj.member_count = group_member_count
         group_obj.last_extracted_at = datetime.now(timezone.utc)
 
@@ -212,7 +230,8 @@ async def extract_selected_groups(
     logger.info(
         f"[GRUPOS] Extração concluída: {extracted_groups} grupos novos, "
         f"{extracted_members} membros salvos | ignorados: "
-        f"{skipped_admin} admins, {skipped_nonbr} não-BR, {skipped_invalid} inválidos"
+        f"{skipped_admin} admins, {skipped_nonbr} não-BR, {skipped_invalid} inválidos, "
+        f"{skipped_small} grupos com < 2 membros"
     )
 
     db.add(models.AtividadeLog(
@@ -221,7 +240,8 @@ async def extract_selected_groups(
         descricao=(
             f"Extração seletiva: {len(group_ids_waha)} grupos selecionados, "
             f"{extracted_members} membros salvos "
-            f"({skipped_admin} admins, {skipped_nonbr} não-BR ignorados)"
+            f"({skipped_admin} admins, {skipped_nonbr} não-BR ignorados, "
+            f"{skipped_small} grupos pequenos ignorados)"
         ),
     ))
     db.commit()
@@ -232,4 +252,5 @@ async def extract_selected_groups(
         "skipped_admin": skipped_admin,
         "skipped_nonbr": skipped_nonbr,
         "skipped_invalid": skipped_invalid,
+        "skipped_small": skipped_small,
     }

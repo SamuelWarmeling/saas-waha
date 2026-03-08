@@ -503,6 +503,39 @@ class ChipHealthLog(Base):
     )
 
 
+class Lista(Base):
+    """Lista/tag de contatos criada pelo usuário."""
+    __tablename__ = "listas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    nome = Column(String(100), nullable=False)
+    cor = Column(String(20), default="#7c3aed", nullable=False, server_default="'#7c3aed'")
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_listas_user_id", "user_id"),
+    )
+
+
+class ContatoLista(Base):
+    """Associação entre contato e lista."""
+    __tablename__ = "contato_listas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    contato_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False)
+    lista_id = Column(Integer, ForeignKey("listas.id", ondelete="CASCADE"), nullable=False)
+    adicionado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("contato_id", "lista_id", name="uq_contato_lista"),
+        Index("ix_contato_listas_lista_id", "lista_id"),
+        Index("ix_contato_listas_contato_id", "contato_id"),
+    )
+
+
 class FuzzyConfig(Base):
     """Thresholds globais do sistema fuzzy, ajustados por aprendizado coletivo."""
     __tablename__ = "fuzzy_configs"

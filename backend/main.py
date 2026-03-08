@@ -14,6 +14,7 @@ from database import engine, Base, get_db
 import models  # noqa: F401 – importa para registrar os models
 
 from routes import usuarios, sessoes, contatos, campanhas, pagamentos, grupos
+from routes.listas import router as listas_router
 from routes.chips import router as chips_router
 from routes.webhook_waha import router as webhook_router
 from routes.funnel import router as funnel_router, funnel_worker_task
@@ -321,6 +322,50 @@ def migrate_chip_health_logs():
                 logger.info("[MIGRATE] Tabela chip_health_logs criada.")
     except Exception as e:
         logger.error(f"[MIGRATE] Erro em migrate_chip_health_logs: {e}")
+
+
+def migrate_listas():
+    """Cria tabelas listas e contato_listas para o sistema de listas de contatos."""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'listas')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela listas...")
+                conn.execute(text("""
+                    CREATE TABLE listas (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        nome VARCHAR(100) NOT NULL,
+                        cor VARCHAR(20) NOT NULL DEFAULT '#7c3aed',
+                        criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """))
+                conn.execute(text("CREATE INDEX ix_listas_user_id ON listas (user_id)"))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela listas criada.")
+
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'contato_listas')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela contato_listas...")
+                conn.execute(text("""
+                    CREATE TABLE contato_listas (
+                        id SERIAL PRIMARY KEY,
+                        contato_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                        lista_id INTEGER NOT NULL REFERENCES listas(id) ON DELETE CASCADE,
+                        adicionado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        CONSTRAINT uq_contato_lista UNIQUE (contato_id, lista_id)
+                    )
+                """))
+                conn.execute(text("CREATE INDEX ix_contato_listas_lista_id ON contato_listas (lista_id)"))
+                conn.execute(text("CREATE INDEX ix_contato_listas_contato_id ON contato_listas (contato_id)"))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela contato_listas criada.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_listas: {e}")
 
 
 def migrate_dispatch_slots():
@@ -647,6 +692,7 @@ async def lifespan(app: FastAPI):
             migrate_chip_health_logs()
             migrate_ban_learning()
             migrate_dispatch_slots()
+            migrate_listas()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
@@ -725,6 +771,7 @@ app.include_router(funnel_router)
 app.include_router(aquecimento_router)
 app.include_router(ia_router)
 app.include_router(chips_router)
+app.include_router(listas_router)
 
 
 @app.get("/")

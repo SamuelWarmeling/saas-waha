@@ -6,6 +6,50 @@ import {
 import toast from 'react-hot-toast'
 import api from '../api'
 
+// ── Gauge de Score Fuzzy ───────────────────────────────────────────────────────
+function ScoreGauge({ diag }) {
+  if (!diag) return null
+  const { score, label, razao } = diag
+  const color = label === 'HIGH' ? '#22c55e' : label === 'MED' ? '#f59e0b' : label === 'OFFLINE' || label === 'BLOCKED' ? '#6b7280' : '#ef4444'
+  const bg    = label === 'HIGH' ? 'rgba(34,197,94,0.08)'   : label === 'MED' ? 'rgba(245,158,11,0.08)'  : label === 'OFFLINE' || label === 'BLOCKED' ? 'rgba(107,114,128,0.08)' : 'rgba(239,68,68,0.08)'
+  const bdr   = label === 'HIGH' ? 'rgba(34,197,94,0.2)'    : label === 'MED' ? 'rgba(245,158,11,0.2)'   : label === 'OFFLINE' || label === 'BLOCKED' ? 'rgba(107,114,128,0.2)'  : 'rgba(239,68,68,0.2)'
+
+  // SVG arc: circunferência = 2πr ≈ 100 para r=15.9155
+  const dash = `${score} 100`
+
+  return (
+    <div title={razao}
+      className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl"
+      style={{ background: bg, border: `1px solid ${bdr}` }}>
+      {/* Mini gauge circular */}
+      <svg width="32" height="32" viewBox="0 0 36 36">
+        {/* Trilha de fundo */}
+        <path
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+          fill="none" stroke="#1e1e2e" strokeWidth="3.5"
+        />
+        {/* Arco do score */}
+        <path
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+          fill="none" stroke={color} strokeWidth="3.5"
+          strokeDasharray={dash} strokeLinecap="round"
+        />
+        <text x="18" y="20.5" textAnchor="middle"
+          style={{ fontSize: '8px', fontWeight: 900, fill: color }}>
+          {score}
+        </text>
+      </svg>
+      {/* Label */}
+      <div>
+        <p className="text-[11px] font-black leading-none" style={{ color }}>
+          {label === 'OFFLINE' ? 'OFFLINE' : label === 'BLOCKED' ? 'BLOQ.' : label}
+        </p>
+        <p className="text-[9px] text-surface-500 mt-0.5 max-w-[80px] truncate leading-none" title={razao}>{razao}</p>
+      </div>
+    </div>
+  )
+}
+
 const STATUS_CONFIG = {
   connected: { label: 'Conectado', cls: 'badge-green' },
   connecting: { label: 'Conectando', cls: 'badge-yellow' },
@@ -61,6 +105,7 @@ function SessionIdBadge({ sessionId }) {
 
 export default function Sessoes() {
   const [sessions, setSessions] = useState([])
+  const [diagnosticos, setDiagnosticos] = useState({})
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [qrSession, setQrSession] = useState(null)
@@ -68,8 +113,16 @@ export default function Sessoes() {
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get('/sessoes')
-      setSessions(data)
+      const [sessRes, diagRes] = await Promise.allSettled([
+        api.get('/sessoes'),
+        api.get('/chips/diagnostico'),
+      ])
+      if (sessRes.status === 'fulfilled') setSessions(sessRes.value.data)
+      if (diagRes.status === 'fulfilled') {
+        const map = {}
+        for (const d of diagRes.value.data) map[d.session_id] = d
+        setDiagnosticos(map)
+      }
     } catch {
       toast.error('Erro ao carregar sessões')
     }
@@ -362,6 +415,9 @@ export default function Sessoes() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Score Fuzzy */}
+                  <ScoreGauge diag={diagnosticos[sess.id]} />
 
                 </div>
 

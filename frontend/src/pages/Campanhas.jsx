@@ -427,6 +427,7 @@ function ReportModal({ campaign, onClose }) {
 export default function Campanhas() {
   const [campaigns, setCampaigns] = useState([])
   const [sessions, setSessions] = useState([])
+  const [diagnosticos, setDiagnosticos] = useState({})
   const [showModal, setShowModal] = useState(false)
   const [showDrawer, setShowDrawer] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -437,14 +438,20 @@ export default function Campanhas() {
   const [reportCampaign, setReportCampaign] = useState(null)
 
   const load = useCallback(async () => {
-    const [cRes, sRes] = await Promise.allSettled([
+    const [cRes, sRes, dRes] = await Promise.allSettled([
       api.get('/campanhas?page_size=50'),
       api.get('/sessoes'),
+      api.get('/chips/diagnostico'),
     ])
     if (cRes.status === 'fulfilled') setCampaigns(cRes.value.data)
     else toast.error('Erro ao carregar campanhas')
     if (sRes.status === 'fulfilled') setSessions(sRes.value.data)
     else toast.error('Erro ao carregar sessões')
+    if (dRes.status === 'fulfilled') {
+      const map = {}
+      for (const d of dRes.value.data) map[d.session_id] = d
+      setDiagnosticos(map)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -856,50 +863,73 @@ export default function Campanhas() {
                     {connectedSessions.map(s => {
                       const checked = form.session_ids.includes(s.id)
                       const isAdaptacao = !!s.em_adaptacao
+                      const diag = diagnosticos[s.id]
+                      const scoreColor = diag?.label === 'HIGH' ? '#22c55e' : diag?.label === 'MED' ? '#f59e0b' : '#ef4444'
+                      const scoreBg    = diag?.label === 'HIGH' ? 'rgba(34,197,94,0.12)' : diag?.label === 'MED' ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)'
+                      const scoreBdr   = diag?.label === 'HIGH' ? 'rgba(34,197,94,0.3)'  : diag?.label === 'MED' ? 'rgba(245,158,11,0.3)'  : 'rgba(239,68,68,0.3)'
                       return (
                         <label key={s.id}
                           onClick={() => !isAdaptacao && toggleSession(s.id)}
-                          title={isAdaptacao ? 'Em adaptação — disponível para campanhas após concluir os 7 dias' : undefined}
-                          className={`flex justify-between items-center p-3.5 rounded-xl border transition-all ${
+                          title={isAdaptacao ? 'Em adaptação — disponível para campanhas após concluir os 7 dias' : diag?.razao}
+                          className={`flex flex-col p-3.5 rounded-xl border transition-all gap-2 ${
                             isAdaptacao
                               ? 'border-purple-500/20 bg-purple-900/5 cursor-not-allowed opacity-60'
                               : checked
                                 ? 'border-primary-500/50 bg-primary-900/20 cursor-pointer'
                                 : 'border-surface-700 bg-surface-900/30 hover:border-surface-500 cursor-pointer'
                           }`}>
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${checked && !isAdaptacao ? 'bg-primary-500 border-primary-500' : 'bg-surface-900 border-surface-600'}`}>
-                              {checked && !isAdaptacao && <MdPlayArrow className="text-white text-xs" />}
+                          {/* Linha superior: checkbox + nome + badges */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center ${checked && !isAdaptacao ? 'bg-primary-500 border-primary-500' : 'bg-surface-900 border-surface-600'}`}>
+                                {checked && !isAdaptacao && <MdPlayArrow className="text-white text-xs" />}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className={`text-sm font-bold truncate ${checked && !isAdaptacao ? 'text-primary-300' : 'text-surface-300'}`}>{s.name}</span>
+                                {s.phone_number && <span className={`text-[10px] font-mono mt-0.5 ${checked && !isAdaptacao ? 'text-primary-400/80' : 'text-surface-500'}`}>{s.phone_number}</span>}
+                              </div>
                             </div>
-                            <div className="flex flex-col min-w-0">
-                              <span className={`text-sm font-bold truncate ${checked && !isAdaptacao ? 'text-primary-300' : 'text-surface-300'}`}>{s.name}</span>
-                              {s.phone_number && <span className={`text-[10px] font-mono mt-0.5 ${checked && !isAdaptacao ? 'text-primary-400/80' : 'text-surface-500'}`}>{s.phone_number}</span>}
+                            <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                              {isAdaptacao ? (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                  style={{ background: 'rgba(157,78,221,0.15)', color: '#c4b5fd', border: '1px solid rgba(157,78,221,0.25)' }}>
+                                  ⏳ Em adaptação
+                                </span>
+                              ) : s.is_veterano ? (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                  style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.25)' }}>
+                                  ⭐ Veterano
+                                </span>
+                              ) : s.is_aquecido ? (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                  style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.25)' }}>
+                                  🔥 Aquecido
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                  style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
+                                  ⚠️ Não aquecido
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <div className="flex-shrink-0 ml-2 flex flex-col items-end gap-1">
-                            {isAdaptacao ? (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-                                style={{ background: 'rgba(157,78,221,0.15)', color: '#c4b5fd', border: '1px solid rgba(157,78,221,0.25)' }}>
-                                ⏳ Em adaptação
+                          {/* Linha inferior: score fuzzy */}
+                          {diag && !isAdaptacao && (
+                            <div className="flex items-center gap-2 px-2 py-1 rounded-lg"
+                              style={{ background: scoreBg, border: `1px solid ${scoreBdr}` }}>
+                              <svg width="20" height="20" viewBox="0 0 36 36" className="flex-shrink-0">
+                                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                  fill="none" stroke="#1e1e2e" strokeWidth="4" />
+                                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                  fill="none" stroke={scoreColor} strokeWidth="4"
+                                  strokeDasharray={`${diag.score} 100`} strokeLinecap="round" />
+                              </svg>
+                              <span className="text-[11px] font-black" style={{ color: scoreColor }}>
+                                {diag.score} {diag.label}
                               </span>
-                            ) : s.is_veterano ? (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-                                style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.25)' }}>
-                                ⭐ Veterano
-                              </span>
-                            ) : s.is_aquecido ? (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-                                style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.25)' }}>
-                                🔥 Aquecido
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-                                style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
-                                title="Chip não aquecido — risco de ban aumentado">
-                                ⚠️ Não aquecido
-                              </span>
-                            )}
-                          </div>
+                              <span className="text-[10px] text-surface-500 truncate">{diag.razao}</span>
+                            </div>
+                          )}
                         </label>
                       )
                     })}

@@ -257,6 +257,12 @@ async def send_campaign(campaign_id: int, user_id: int):
             db.commit()
             return
 
+        # Pré-carrega objetos de sessão para seleção fuzzy (atualizado in-memory a cada envio)
+        from fuzzy_chip import selecionar_chip_inteligente
+        sessoes_candidatas = db.query(models.WhatsAppSession).filter(
+            models.WhatsAppSession.id.in_(session_ids)
+        ).all()
+
         # Contatos pendentes
         pending = (
             db.query(models.CampaignContact)
@@ -303,16 +309,8 @@ async def send_campaign(campaign_id: int, user_id: int):
                     msg_copy.text = msg.text.replace("{nome}", contact.name or "Cliente")
                     msg = msg_copy
 
-                # Escolher sessão disponível
-                available = random.sample(session_ids, len(session_ids))
-                used_session = None
-                for sid in available:
-                    s = db.query(models.WhatsAppSession).filter(
-                        models.WhatsAppSession.id == sid
-                    ).first()
-                    if s and s.status == models.SessionStatus.connected:
-                        used_session = s
-                        break
+                # Seleção fuzzy: escolhe o chip com melhor score de saúde
+                used_session = selecionar_chip_inteligente(sessoes_candidatas)
 
                 if not used_session:
                     cc.status = models.ContactStatus.failed

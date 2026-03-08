@@ -14,6 +14,7 @@ from database import engine, Base, get_db
 import models  # noqa: F401 – importa para registrar os models
 
 from routes import usuarios, sessoes, contatos, campanhas, pagamentos, grupos
+from routes.chips import router as chips_router
 from routes.webhook_waha import router as webhook_router
 from routes.funnel import router as funnel_router, funnel_worker_task
 from routes.aquecimento import router as aquecimento_router, aquecimento_worker_task
@@ -599,6 +600,7 @@ app.include_router(dashboard_router)
 app.include_router(funnel_router)
 app.include_router(aquecimento_router)
 app.include_router(ia_router)
+app.include_router(chips_router)
 
 
 @app.get("/")

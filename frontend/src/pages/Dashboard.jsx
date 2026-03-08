@@ -21,6 +21,8 @@ const tipoConfig = {
   grupo_auto_atualizado:    { emoji: '🔄', bg: 'bg-indigo-500/15',  ring: 'ring-indigo-500/30' },
   funnel_respondeu:         { emoji: '💬', bg: 'bg-emerald-500/15', ring: 'ring-emerald-500/30' },
   funnel_mensagem_enviada:  { emoji: '🎯', bg: 'bg-purple-500/15',  ring: 'ring-purple-500/30' },
+  chip_risco:               { emoji: '⚠️', bg: 'bg-red-500/15',    ring: 'ring-red-500/30' },
+  chip_banido:              { emoji: '🚨', bg: 'bg-red-800/20',    ring: 'ring-red-600/30' },
 }
 
 function formatRelativo(isoString) {
@@ -88,8 +90,10 @@ export default function Dashboard() {
   const [atividades, setAtividades] = useState([])
   const [funnelStats, setFunnelStats] = useState(null)
   const [aquecStats, setAquecStats] = useState(null)
+  const [chipRiscos, setChipRiscos] = useState([])
   const activityRef = useRef(null)
   const sessionsRef = useRef(null)
+  const riscosRef   = useRef(null)
 
   const loadStats = useCallback(() => {
     api.get('/dashboard/stats').then(r => setStats(r.data)).catch(() => {})
@@ -105,15 +109,21 @@ export default function Dashboard() {
     loadAtividades()
     api.get('/funnel/stats').then(r => setFunnelStats(r.data)).catch(() => {})
     api.get('/aquecimento/stats').then(r => setAquecStats(r.data)).catch(() => {})
+    api.get('/chips/risco').then(r => setChipRiscos(Array.isArray(r.data) ? r.data : [])).catch(() => {})
 
     // Activity polling: 10s
     activityRef.current = setInterval(loadAtividades, 10000)
     // Session/stats polling: 30s
     sessionsRef.current = setInterval(loadStats, 30000)
+    // Risk polling: 5 min
+    riscosRef.current = setInterval(() => {
+      api.get('/chips/risco').then(r => setChipRiscos(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    }, 5 * 60 * 1000)
 
     return () => {
       clearInterval(activityRef.current)
       clearInterval(sessionsRef.current)
+      clearInterval(riscosRef.current)
     }
   }, [loadStats, loadAtividades])
 
@@ -138,6 +148,35 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+
+      {/* ── Banners de risco de ban ──────────────────────────────────────────── */}
+      {chipRiscos.filter(r => r.risco > 60).map(r => (
+        <div key={r.session_id}
+          className="rounded-2xl border border-red-500/40 bg-red-950/30 px-5 py-4 flex flex-wrap items-center gap-4"
+          style={{ boxShadow: '0 0 30px rgba(239,68,68,0.1)' }}>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center flex-shrink-0">
+              <MdWarning size={22} />
+            </div>
+            <div className="min-w-0">
+              <p className="font-bold text-red-300 text-sm">
+                {r.risco > 80
+                  ? `🚨 Chip "${r.session_name}" em risco iminente de ban!`
+                  : `⚠️ Chip "${r.session_name}" em risco de ban!`}
+              </p>
+              <p className="text-xs text-red-400/70 mt-0.5">
+                Score de risco: {r.risco}% — {r.risco > 80 ? 'Pare os disparos agora!' : 'Considere reduzir os disparos.'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/sessoes')}
+            className="flex-shrink-0 px-4 py-2 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 text-sm font-bold hover:bg-red-500/35 transition-all"
+          >
+            Ver chips →
+          </button>
+        </div>
+      ))}
 
       {/* ── Banner de alerta de chips desconectados ─────────────────────────── */}
       {hasDisconnected && (

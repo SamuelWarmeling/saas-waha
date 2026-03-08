@@ -50,6 +50,35 @@ function ScoreGauge({ diag }) {
   )
 }
 
+// ── Barra de risco de ban ──────────────────────────────────────────────────────
+function RiscoBar({ ri }) {
+  if (!ri || ri.risco <= 30) return null   // chip seguro: não polui o UI
+  const { risco, label } = ri
+  const color = risco <= 60 ? '#f59e0b' : risco <= 80 ? '#ef4444' : '#dc2626'
+  const bg    = risco <= 60 ? 'rgba(245,158,11,0.08)'  : risco <= 80 ? 'rgba(239,68,68,0.08)'  : 'rgba(220,38,38,0.12)'
+  const bdr   = risco <= 60 ? 'rgba(245,158,11,0.2)'   : risco <= 80 ? 'rgba(239,68,68,0.2)'   : 'rgba(220,38,38,0.35)'
+  const emoji = risco <= 60 ? '🟡' : risco <= 80 ? '🔴' : '🚨'
+
+  return (
+    <div className="rounded-xl p-2.5" style={{ background: bg, border: `1px solid ${bdr}` }}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] font-bold" style={{ color }}>
+          {emoji} Risco de Ban: {risco}%
+        </span>
+        <span className={`text-[10px] font-black uppercase tracking-wider ${risco > 60 ? 'animate-pulse' : ''}`}
+          style={{ color }}>
+          {label}
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-surface-800/60 overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${risco}%`, background: `linear-gradient(90deg, ${color}88, ${color})` }}
+        />
+      </div>
+    </div>
+  )
+}
+
 const STATUS_CONFIG = {
   connected: { label: 'Conectado', cls: 'badge-green' },
   connecting: { label: 'Conectando', cls: 'badge-yellow' },
@@ -106,6 +135,7 @@ function SessionIdBadge({ sessionId }) {
 export default function Sessoes() {
   const [sessions, setSessions] = useState([])
   const [diagnosticos, setDiagnosticos] = useState({})
+  const [riscos, setRiscos] = useState({})
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [qrSession, setQrSession] = useState(null)
@@ -129,6 +159,21 @@ export default function Sessoes() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Polling de risco de ban a cada 5 minutos
+  useEffect(() => {
+    const fetchRiscos = async () => {
+      try {
+        const { data } = await api.get('/chips/risco')
+        const map = {}
+        for (const r of data) map[r.session_id] = r
+        setRiscos(map)
+      } catch {}
+    }
+    fetchRiscos()
+    const id = setInterval(fetchRiscos, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
 
   // Polling de status para sessões conectando
   useEffect(() => {
@@ -278,6 +323,14 @@ export default function Sessoes() {
                 key={sess.id}
                 className="glass-card space-y-5 p-0 overflow-hidden flex flex-col transition-all hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)] group"
               >
+                {/* Banner ban iminente */}
+                {riscos[sess.id]?.risco > 80 && (
+                  <div className="px-4 py-2.5 text-center text-xs font-black uppercase tracking-widest animate-pulse"
+                    style={{ background: 'rgba(220,38,38,0.18)', color: '#f87171', borderBottom: '1px solid rgba(220,38,38,0.3)' }}>
+                    🚨 BAN IMINENTE — Pare os disparos imediatamente!
+                  </div>
+                )}
+
                 {/* Header do card */}
                 <div className={`p-6 border-b ${
                   sess.status === 'connected'
@@ -342,6 +395,17 @@ export default function Sessoes() {
                         <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
                           style={{ background: 'rgba(157,78,221,0.12)', color: '#c4b5fd', border: '1px solid rgba(157,78,221,0.3)' }}>
                           ⏳ Em adaptação
+                        </span>
+                      )}
+                      {/* Risco de ban badge */}
+                      {riscos[sess.id]?.risco > 60 && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold animate-pulse"
+                          style={{
+                            background: riscos[sess.id].risco > 80 ? 'rgba(220,38,38,0.18)' : 'rgba(239,68,68,0.12)',
+                            color: riscos[sess.id].risco > 80 ? '#f87171' : '#fca5a5',
+                            border: riscos[sess.id].risco > 80 ? '1px solid rgba(220,38,38,0.4)' : '1px solid rgba(239,68,68,0.3)',
+                          }}>
+                          ⚠️ {riscos[sess.id].risco > 80 ? 'BAN IMINENTE' : 'ATENÇÃO'}
                         </span>
                       )}
                       {/* Chip type toggle */}
@@ -418,6 +482,9 @@ export default function Sessoes() {
 
                   {/* Score Fuzzy */}
                   <ScoreGauge diag={diagnosticos[sess.id]} />
+
+                  {/* Risco de Ban */}
+                  <RiscoBar ri={riscos[sess.id]} />
 
                 </div>
 

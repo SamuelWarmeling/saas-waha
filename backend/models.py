@@ -483,6 +483,24 @@ class BanRecord(Base):
     )
 
 
+class ChipHealthLog(Base):
+    """Log de eventos ACK por chip — base para detecção precoce de ban."""
+    __tablename__ = "chip_health_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="CASCADE"), nullable=False)
+    # ack: -1=erro, 0=pendente, 1=enviado, 2=entregue, 3=lido, 99=mensagem recebida (pool)
+    ack = Column(Integer, nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    session = relationship("WhatsAppSession")
+
+    __table_args__ = (
+        Index("ix_chip_health_logs_session_id", "session_id"),
+        Index("ix_chip_health_logs_criado_em", "criado_em"),
+    )
+
+
 class FuzzyConfig(Base):
     """Thresholds globais do sistema fuzzy, ajustados por aprendizado coletivo."""
     __tablename__ = "fuzzy_configs"

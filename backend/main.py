@@ -292,6 +292,37 @@ def migrate_pos_aquecimento():
         logger.error(f"[MIGRATE] Erro em migrate_pos_aquecimento: {e}")
 
 
+def migrate_chip_health_logs():
+    """Cria tabela chip_health_logs para detecção precoce de ban por sinais ACK."""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                "WHERE table_name = 'chip_health_logs')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela chip_health_logs...")
+                conn.execute(text("""
+                    CREATE TABLE chip_health_logs (
+                        id SERIAL PRIMARY KEY,
+                        session_id INTEGER NOT NULL
+                            REFERENCES whatsapp_sessions(id) ON DELETE CASCADE,
+                        ack INTEGER NOT NULL,
+                        criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """))
+                conn.execute(text(
+                    "CREATE INDEX ix_chip_health_logs_session_id ON chip_health_logs (session_id)"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX ix_chip_health_logs_criado_em ON chip_health_logs (criado_em)"
+                ))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela chip_health_logs criada.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_chip_health_logs: {e}")
+
+
 def migrate_ban_learning():
     """Cria tabelas ban_records e fuzzy_configs para aprendizado coletivo de bans."""
     try:
@@ -592,6 +623,7 @@ async def lifespan(app: FastAPI):
             migrate_chip_virtual()
             migrate_pos_aquecimento()
             migrate_adaptacao()
+            migrate_chip_health_logs()
             migrate_ban_learning()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)

@@ -3,7 +3,7 @@ import random
 
 from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import httpx
 from database import get_db, SessionLocal
 from config import settings
@@ -251,6 +251,10 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
             or None
         )
 
+        # ── Registro de mensagem recebida (sinal anti-ban) ───────────────────
+        db.add(models.ChipHealthLog(session_id=sess.id, ack=99))
+        db.commit()
+
         is_new = upsert_contact(db, sess.user_id, phone, name)
         print(f"Contato:     {'NOVO' if is_new else 'EXISTENTE'} | nome={name!r}")
         print("===============")
@@ -331,15 +335,96 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
                 )
                 print(f"[VIRTUAL] Chip virtual {sess.session_id} recebeu de {phone[:6]}*** — auto-resposta agendada (2-8min)")
 
-    # ── message.ack (entregue / lido) ─────────────────────────────────────────
+    # ── message.ack (entregue / lido / erro) ──────────────────────────────────
     elif event in ("message.ack", "message_ack") and sess:
-        ack = payload.get("ack") or payload.get("status") or 0
+        ack_val = payload.get("ack") or payload.get("status") or 0
         msg_key = payload.get("key") or {}
         waha_msg_id = msg_key.get("id") if isinstance(msg_key, dict) else None
         if not waha_msg_id:
             waha_msg_id = payload.get("id")
 
-        if waha_msg_id and ack in (2, 3):
+        # ── Registrar ACK no health log ───────────────────────────────────────
+        db.add(models.ChipHealthLog(session_id=sess.id, ack=ack_val))
+        db.commit()
+
+        # ── ACK=-1 (erro de entrega): avaliar risco e acionar ações automáticas
+        if ack_val == -1:
+            from fuzzy_chip import calcular_risco_ban
+            try:
+                risco_info  = calcular_risco_ban(sess, db)
+                risco_score = risco_info["risco"]
+                now_ts      = datetime.now(timezone.utc)
+
+                # Anti-spam: só cria alerta se não houve um nos últimos 30 minutos
+                ultimo_alerta = (
+                    db.query(models.AtividadeLog)
+                    .filter(
+                        models.AtividadeLog.user_id   == sess.user_id,
+                        models.AtividadeLog.tipo      == "chip_risco",
+                        models.AtividadeLog.descricao.like(f"%{sess.name}%"),
+                        models.AtividadeLog.criado_em >= now_ts - timedelta(minutes=30),
+                    )
+                    .first()
+                )
+
+                if risco_score > 80 and not ultimo_alerta:
+                    # Pausa aquecimento ativo
+                    aq = (
+                        db.query(models.AquecimentoConfig)
+                        .filter(
+                            models.AquecimentoConfig.session_id == sess.id,
+                            models.AquecimentoConfig.status     == models.AquecimentoStatus.ativo,
+                        )
+                        .first()
+                    )
+                    if aq:
+                        aq.status = models.AquecimentoStatus.pausado
+                        db.commit()
+
+                    # Pausa campanhas ativas que usam este chip
+                    campanhas_ativas = (
+                        db.query(models.Campaign)
+                        .join(models.CampaignSession,
+                              models.Campaign.id == models.CampaignSession.campaign_id)
+                        .filter(
+                            models.CampaignSession.session_id == sess.id,
+                            models.Campaign.status == models.CampaignStatus.running,
+                        )
+                        .all()
+                    )
+                    for camp in campanhas_ativas:
+                        camp.status = models.CampaignStatus.paused
+                    if campanhas_ativas:
+                        db.commit()
+
+                    db.add(models.AtividadeLog(
+                        user_id=sess.user_id,
+                        tipo="chip_risco",
+                        descricao=(
+                            f"🚨 BAN IMINENTE: Chip '{sess.name}' risco {risco_score}%! "
+                            f"Campanhas e aquecimento pausados automaticamente."
+                        ),
+                    ))
+                    db.commit()
+                    print(f"[RISCO-BAN] 🚨 {sess.name} risco={risco_score} — tudo pausado")
+
+                elif risco_score > 60 and not ultimo_alerta:
+                    db.add(models.AtividadeLog(
+                        user_id=sess.user_id,
+                        tipo="chip_risco",
+                        descricao=(
+                            f"⚠️ ATENÇÃO: Chip '{sess.name}' com risco de ban {risco_score}%. "
+                            f"Considere reduzir os disparos."
+                        ),
+                    ))
+                    db.commit()
+                    print(f"[RISCO-BAN] ⚠️ {sess.name} risco={risco_score} — alerta criado")
+
+            except Exception as _exc:
+                print(f"[RISCO-BAN] Erro ao calcular risco: {_exc}")
+
+        # ── Atualizar status de entrega na campanha ───────────────────────────
+        if waha_msg_id and ack_val in (2, 3):
             cc = (
                 db.query(models.CampaignContact)
                 .filter(models.CampaignContact.waha_message_id == str(waha_msg_id))
@@ -347,9 +432,9 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
             )
             if cc:
                 now_ts = datetime.now(timezone.utc)
-                if ack >= 2 and not cc.delivered_at:
+                if ack_val >= 2 and not cc.delivered_at:
                     cc.delivered_at = now_ts
-                if ack >= 3 and not cc.read_at:
+                if ack_val >= 3 and not cc.read_at:
                     cc.read_at = now_ts
                 db.commit()
 

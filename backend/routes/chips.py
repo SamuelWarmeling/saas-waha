@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import auth
 import models
 from database import get_db
-from fuzzy_chip import calcular_saude_chip, _FUZZY_CONFIG
+from fuzzy_chip import calcular_saude_chip, calcular_risco_ban, _FUZZY_CONFIG
 
 router = APIRouter(prefix="/api/chips", tags=["Chips"])
 
@@ -24,6 +24,23 @@ def diagnostico_chips(
         .all()
     )
     return [calcular_saude_chip(s) for s in sessoes]
+
+
+@router.get("/risco")
+def risco_chips(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Retorna score de risco de ban (0-100) para todas as sessões ativas do usuário."""
+    sessoes = (
+        db.query(models.WhatsAppSession)
+        .filter(
+            models.WhatsAppSession.user_id  == current_user.id,
+            models.WhatsAppSession.is_active == True,
+        )
+        .all()
+    )
+    return [calcular_risco_ban(s, db) for s in sessoes]
 
 
 @router.get("/inteligencia")

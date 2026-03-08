@@ -18,7 +18,7 @@ Score 0-100 baseado em: taxa de uso diário, nível de aquecimento, status de co
 """
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict
 
 import models
@@ -33,6 +33,10 @@ _FUZZY_CONFIG: dict = {
     "total_bans":             0,
     "ultima_recalibracao": None,
 }
+
+# ── Cache de risco de ban por sessão (TTL = 5 min) ─────────────────────────────
+_RISCO_CACHE: Dict[int, dict] = {}  # session_id → {"risco": int, "ts": datetime}
+_RISCO_CACHE_TTL = 300               # 5 minutos
 
 
 # ── Funções de pertinência ─────────────────────────────────────────────────────
@@ -186,6 +190,16 @@ def calcular_saude_chip(sess: models.WhatsAppSession, db=None) -> dict:
     else:
         razao = f"Capacidade parcial ({restante} msgs restantes)"
 
+    # Override baseado no cache de risco de ban (sem DB query no hot path)
+    _rc = _RISCO_CACHE.get(sess.id)
+    if _rc and (datetime.now(timezone.utc) - _rc["ts"]).total_seconds() < _RISCO_CACHE_TTL:
+        _r = _rc["risco"]
+        if _r > 80:
+            return _build_result(0, "BLOCKED", f"🚨 Risco de ban iminente ({_r}%) — chip pausado", sess)
+        elif _r > 60:
+            label = "LOW"
+            razao  = f"⚠️ Risco de ban elevado ({_r}%) — em modo precaução"
+
     return _build_result(score, label, razao, sess, extra={
         "taxa_uso_pct":        round(taxa * 100),
         "capacidade_restante": restante,
@@ -213,6 +227,101 @@ def selecionar_chip_inteligente(
     sessoes_list = [c[0] for c in candidatos]
     pesos        = [float(c[1]) for c in candidatos]
     return random.choices(sessoes_list, weights=pesos, k=1)[0]
+
+
+# ── Detecção precoce de ban por sinais ACK ─────────────────────────────────────
+
+def calcular_risco_ban(sess: models.WhatsAppSession, db) -> dict:
+    """
+    Calcula score de risco de ban (0-100) a partir de 4 sinais:
+
+      S1 – % msgs com ack=-1 nas últimas 2h:             peso 40
+      S2 – horas sem receber mensagem do pool (ack=99):   peso 25
+      S3 – sessão desconectada atualmente:                peso 20
+      S4 – taxa de entrega < 80% nas últimas 2h:          peso 15
+
+    Labels:  0-30 🟢 SAFE | 31-60 🟡 ATENCAO | 61-80 🔴 PERIGO | 81-100 🚨 IMINENTE
+    Atualiza _RISCO_CACHE para uso em calcular_saude_chip sem DB query.
+    """
+    now    = datetime.now(timezone.utc)
+    h2_ago = now - timedelta(hours=2)
+
+    # Logs de ACK das últimas 2h (excluindo ack=99 = mensagem recebida)
+    logs_2h = (
+        db.query(models.ChipHealthLog)
+        .filter(
+            models.ChipHealthLog.session_id == sess.id,
+            models.ChipHealthLog.criado_em  >= h2_ago,
+            models.ChipHealthLog.ack        != 99,
+        )
+        .all()
+    )
+    total_2h = len(logs_2h)
+    erro_2h  = sum(1 for l in logs_2h if l.ack == -1)
+
+    # S1 – % ack=-1 (peso 40)
+    s1_pct = (erro_2h / total_2h * 100) if total_2h > 0 else 0.0
+    s1     = s1_pct * 0.40
+
+    # S2 – horas sem receber mensagem do pool (ack=99, peso 25)
+    last_recv = (
+        db.query(models.ChipHealthLog)
+        .filter(
+            models.ChipHealthLog.session_id == sess.id,
+            models.ChipHealthLog.ack        == 99,
+        )
+        .order_by(models.ChipHealthLog.criado_em.desc())
+        .first()
+    )
+    if last_recv:
+        recv_ts = last_recv.criado_em
+        if recv_ts.tzinfo is None:
+            recv_ts = recv_ts.replace(tzinfo=timezone.utc)
+        horas_sem_recv = (now - recv_ts).total_seconds() / 3600.0
+    else:
+        created    = sess.created_at
+        if created and created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        chip_age_h = (now - created).total_seconds() / 3600.0 if created else 0.0
+        # Chip novo < 48h que nunca recebeu: normal; chip antigo: suspeito
+        horas_sem_recv = 0.0 if chip_age_h < 48 else min(chip_age_h, 48.0)
+    s2 = min(1.0, horas_sem_recv / 24.0) * 25.0
+
+    # S3 – sessão desconectada (peso 20)
+    s3 = 20.0 if sess.status != models.SessionStatus.connected else 0.0
+
+    # S4 – taxa de entrega < 80% (peso 15)
+    sent_2h      = [l for l in logs_2h if l.ack >= 0]
+    delivered_2h = [l for l in sent_2h if l.ack >= 2]
+    delivery_rate = (len(delivered_2h) / len(sent_2h)) if sent_2h else 1.0
+    s4 = max(0.0, ((0.80 - delivery_rate) / 0.80) * 15.0) if delivery_rate < 0.80 else 0.0
+
+    risco = round(min(100.0, s1 + s2 + s3 + s4))
+    label = (
+        "SAFE"     if risco <= 30 else
+        "ATENCAO"  if risco <= 60 else
+        "PERIGO"   if risco <= 80 else
+        "IMINENTE"
+    )
+    emoji = {"SAFE": "🟢", "ATENCAO": "🟡", "PERIGO": "🔴", "IMINENTE": "🚨"}[label]
+
+    # Atualiza cache em memória (usado por calcular_saude_chip sem DB)
+    _RISCO_CACHE[sess.id] = {"risco": risco, "ts": now}
+
+    return {
+        "session_id":   sess.id,
+        "session_name": sess.name,
+        "phone_number": sess.phone_number,
+        "risco":        risco,
+        "label":        label,
+        "emoji":        emoji,
+        "sinais": {
+            "erro_ack_pct":   round(s1_pct, 1),
+            "horas_sem_recv": round(horas_sem_recv, 1),
+            "desconectado":   sess.status != models.SessionStatus.connected,
+            "taxa_entrega":   round(delivery_rate * 100, 1),
+        },
+    }
 
 
 # ── Aprendizado coletivo de bans ───────────────────────────────────────────────

@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
-import { MdAdd, MdPlayArrow, MdPause, MdStop, MdDelete, MdRefresh, MdClose, MdInfo } from 'react-icons/md'
+import {
+  MdAdd, MdPlayArrow, MdPause, MdStop, MdDelete, MdRefresh, MdClose, MdInfo,
+  MdAccessTime, MdSettings, MdShield, MdSchedule, MdFilterList,
+} from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
 
@@ -19,6 +22,20 @@ const EMPTY_FORM = {
   ordem_mensagens: 'aleatorio',
 }
 
+const EMPTY_ADVANCED = {
+  delay_min: 5,
+  delay_max: 15,
+  max_per_chip_per_day: 200,
+  stop_on_disconnect: true,
+  business_hours_only: false,
+  business_hours_start: '08:00',
+  business_hours_end: '18:00',
+  skip_unnamed_contacts: false,
+  no_duplicates: true,
+}
+
+// ── Sub-componentes ────────────────────────────────────────────────────────────
+
 function ProgressBar({ percent }) {
   return (
     <div className="w-full bg-surface-950 border border-surface-800 shadow-inner rounded-full h-2 mt-1.5 overflow-hidden">
@@ -26,18 +43,58 @@ function ProgressBar({ percent }) {
         className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-primary-600 to-primary-400 shadow-[0_0_10px_theme(colors.primary.500/50)] relative"
         style={{ width: `${Math.min(percent, 100)}%` }}
       >
-        <div className="absolute top-0 left-0 w-full h-full bg-white/20"></div>
+        <div className="absolute top-0 left-0 w-full h-full bg-white/20" />
       </div>
     </div>
   )
 }
 
+function Toggle({ checked, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none ${
+        checked ? 'bg-primary-500 border-primary-500' : 'bg-surface-700 border-surface-700'
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+          checked ? 'translate-x-4' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  )
+}
+
+function DrawerSection({ icon: Icon, title, children }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 pb-2 border-b border-white/10">
+        <div className="w-6 h-6 rounded-md bg-primary-500/20 text-primary-400 flex items-center justify-center flex-shrink-0">
+          <Icon size={14} />
+        </div>
+        <span className="text-xs font-bold text-surface-300 uppercase tracking-widest">{title}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ── Componente principal ───────────────────────────────────────────────────────
+
 export default function Campanhas() {
   const [campaigns, setCampaigns] = useState([])
   const [sessions, setSessions] = useState([])
   const [showModal, setShowModal] = useState(false)
+  const [showDrawer, setShowDrawer] = useState(false)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [adv, setAdv] = useState(EMPTY_ADVANCED)
+  // staging: drawer edits only committed on "Salvar configurações"
+  const [drawerDraft, setDrawerDraft] = useState(EMPTY_ADVANCED)
 
   const load = useCallback(async () => {
     const [cRes, sRes] = await Promise.allSettled([
@@ -102,7 +159,20 @@ export default function Campanhas() {
     }))
   }
 
-  // ── Criar campanha ────────────────────────────────────────────────────────
+  // ── Drawer helpers ─────────────────────────────────────────────────────────
+
+  function openDrawer() {
+    setDrawerDraft({ ...adv })
+    setShowDrawer(true)
+  }
+
+  function saveDrawer() {
+    setAdv({ ...drawerDraft })
+    setShowDrawer(false)
+    toast.success('Configurações salvas')
+  }
+
+  // ── Criar campanha ─────────────────────────────────────────────────────────
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -117,10 +187,20 @@ export default function Campanhas() {
         messages: form.messages.filter(m => m.trim()),
         session_ids: form.session_ids,
         ordem_mensagens: form.ordem_mensagens,
+        delay_min: Number(adv.delay_min),
+        delay_max: Number(adv.delay_max),
+        max_per_chip_per_day: Number(adv.max_per_chip_per_day),
+        stop_on_disconnect: adv.stop_on_disconnect,
+        business_hours_only: adv.business_hours_only,
+        business_hours_start: adv.business_hours_start,
+        business_hours_end: adv.business_hours_end,
+        skip_unnamed_contacts: adv.skip_unnamed_contacts,
+        no_duplicates: adv.no_duplicates,
       })
       toast.success('Campanha criada!')
       setShowModal(false)
       setForm(EMPTY_FORM)
+      setAdv(EMPTY_ADVANCED)
       load()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao criar campanha')
@@ -150,11 +230,22 @@ export default function Campanhas() {
     }
   }
 
+  // ── Derived ────────────────────────────────────────────────────────────────
+
   const connectedSessions = sessions.filter(s =>
     ['connected', 'working'].includes((s.status || '').toLowerCase())
   )
   const msgCount = form.messages.filter(m => m.trim()).length
   const chipCount = form.session_ids.length
+
+  // Badge resumo das configurações avançadas
+  const advBadgeParts = [
+    `${adv.delay_min}-${adv.delay_max}s delay`,
+    adv.business_hours_only ? 'Horário comercial' : null,
+    `${adv.max_per_chip_per_day}/dia`,
+  ].filter(Boolean)
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
@@ -209,9 +300,9 @@ export default function Campanhas() {
                         {c.name}
                       </div>
                       <div className="text-[11px] text-surface-500 mt-1 uppercase tracking-wider font-medium flex items-center gap-1.5">
-                        <span className="w-4 h-4 rounded-full bg-surface-800 border border-surface-700 font-bold flex items-center justify-center text-surface-400">{c.messages?.length ?? 1} </span> msg
+                        <span className="w-4 h-4 rounded-full bg-surface-800 border border-surface-700 font-bold flex items-center justify-center text-surface-400">{c.messages?.length ?? 1}</span> msg
                         <span className="text-surface-700">|</span>
-                        <span className="w-4 h-4 rounded-full bg-surface-800 border border-surface-700 font-bold flex items-center justify-center text-surface-400">{c.session_ids?.length ?? 1} </span> chip
+                        <span className="w-4 h-4 rounded-full bg-surface-800 border border-surface-700 font-bold flex items-center justify-center text-surface-400">{c.session_ids?.length ?? 1}</span> chip
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -230,8 +321,8 @@ export default function Campanhas() {
                     </td>
                     <td className="px-6 py-4 text-xs font-medium">
                       <div className="flex flex-col gap-1">
-                        <span className="flex items-center gap-1.5 text-primary-400/90"><div className="w-1.5 h-1.5 rounded-full bg-primary-500"></div> {c.success_count} concluídos</span>
-                        <span className="flex items-center gap-1.5 text-red-400/90"><div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> {c.fail_count} falhas</span>
+                        <span className="flex items-center gap-1.5 text-primary-400/90"><div className="w-1.5 h-1.5 rounded-full bg-primary-500" /> {c.success_count} concluídos</span>
+                        <span className="flex items-center gap-1.5 text-red-400/90"><div className="w-1.5 h-1.5 rounded-full bg-red-500" /> {c.fail_count} falhas</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -280,10 +371,12 @@ export default function Campanhas() {
         </div>
       </div>
 
-      {/* Modal Nova Campanha */}
+      {/* ── Modal Nova Campanha ─────────────────────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto animate-[fadeIn_0.2s_ease-out]">
           <div className="glass-card w-full max-w-lg my-8 p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border-surface-600/50 animate-[slideIn_0.3s_ease-out]">
+
+            {/* Header */}
             <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/50 flex items-center justify-between">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center">
@@ -292,7 +385,7 @@ export default function Campanhas() {
                 Nova Campanha
               </h2>
               <button
-                onClick={() => { setShowModal(false); setForm(EMPTY_FORM) }}
+                onClick={() => { setShowModal(false); setForm(EMPTY_FORM); setAdv(EMPTY_ADVANCED) }}
                 className="w-8 h-8 rounded-full bg-surface-800 flex items-center justify-center text-surface-400 hover:text-white hover:bg-surface-700 transition-colors"
                 title="Fechar"
               >
@@ -301,6 +394,7 @@ export default function Campanhas() {
             </div>
 
             <form onSubmit={handleCreate} className="p-6 space-y-6">
+
               {/* Nome */}
               <div>
                 <label className="label">Nome da campanha</label>
@@ -342,7 +436,7 @@ export default function Campanhas() {
                       <textarea
                         value={msg}
                         onChange={e => updateMessage(i, e.target.value)}
-                        placeholder={`Conteúdo da mensagem...`}
+                        placeholder="Conteúdo da mensagem..."
                         required
                         rows={3}
                         className="input resize-none pl-9 pr-10 min-h-[80px]"
@@ -360,6 +454,7 @@ export default function Campanhas() {
                     </div>
                   ))}
                 </div>
+
                 {/* Ordem de envio */}
                 <div className="mt-4 space-y-3">
                   <p className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Ordem de envio</p>
@@ -386,11 +481,7 @@ export default function Campanhas() {
                                   border: '1px solid rgba(157,78,221,0.4)',
                                   boxShadow: '0 0 12px rgba(157,78,221,0.15)',
                                 }
-                              : {
-                                  color: '#64748b',
-                                  background: 'transparent',
-                                  border: '1px solid transparent',
-                                }
+                              : { color: '#64748b', background: 'transparent', border: '1px solid transparent' }
                           }
                         >
                           <span className="text-base leading-none">{opt.icon}</span>
@@ -439,10 +530,11 @@ export default function Campanhas() {
                       return (
                         <label
                           key={s.id}
+                          onClick={() => toggleSession(s.id)}
                           className={`flex justify-between items-center p-3.5 rounded-xl border cursor-pointer transition-all ${checked
-                              ? 'border-primary-500/50 bg-primary-900/20 shadow-[0_0_15px_theme(colors.primary.900/30)]'
-                              : 'border-surface-700 bg-surface-900/30 hover:border-surface-500 hover:bg-surface-800'
-                            }`}
+                            ? 'border-primary-500/50 bg-primary-900/20 shadow-[0_0_15px_theme(colors.primary.900/30)]'
+                            : 'border-surface-700 bg-surface-900/30 hover:border-surface-500 hover:bg-surface-800'
+                          }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${checked ? 'bg-primary-500 border-primary-500' : 'bg-surface-900 border-surface-600'}`}>
@@ -462,33 +554,56 @@ export default function Campanhas() {
                 )}
               </div>
 
+              {/* Botão Configurações Avançadas */}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={openDrawer}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/10 bg-surface-800/50 hover:bg-surface-700/60 hover:border-primary-500/30 text-surface-400 hover:text-primary-300 transition-all text-sm font-medium group"
+                >
+                  <MdSettings size={16} className="group-hover:rotate-45 transition-transform duration-300" />
+                  Configurações Avançadas
+                </button>
+                {/* Badge resumo */}
+                <div className="flex flex-wrap gap-1.5">
+                  {advBadgeParts.map((part, i) => (
+                    <span
+                      key={i}
+                      className="text-[10px] font-semibold px-2 py-1 rounded-full border border-primary-500/25 bg-primary-900/15 text-primary-400/80 tracking-wide"
+                    >
+                      {part}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
               {/* Preview Resumo */}
               <div className="bg-surface-950/80 border border-surface-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-inner">
                 <div className="flex items-center gap-4">
                   <div className="text-center">
                     <div className="text-xl font-black text-primary-400 leading-none">{msgCount}</div>
-                    <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Msg{(msgCount !== 1) ? 's' : ''}</div>
+                    <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Msg{msgCount !== 1 ? 's' : ''}</div>
                   </div>
-                  <div className="w-[1px] h-8 bg-surface-800"></div>
+                  <div className="w-[1px] h-8 bg-surface-800" />
                   <div className="text-center">
                     <div className="text-xl font-black text-primary-400 leading-none">{chipCount}</div>
-                    <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Chip{(chipCount !== 1) ? 's' : ''}</div>
+                    <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Chip{chipCount !== 1 ? 's' : ''}</div>
                   </div>
                 </div>
-
                 {chipCount > 0 && msgCount > 0 ? (
                   <p className="text-[11px] text-surface-400 font-medium leading-relaxed max-w-[220px]">
-                    Cada cliente receberá <strong className="text-surface-200">1</strong> mensagem diferente de forma aleatória enviada por <strong className="text-surface-200">1</strong> chip aleatório.
+                    Cada cliente receberá <strong className="text-surface-200">1</strong> mensagem de forma aleatória enviada por <strong className="text-surface-200">1</strong> chip aleatório.
                   </p>
                 ) : (
                   <p className="text-[11px] text-red-400/80 font-medium">Preencha as mensagens e selecione os chips.</p>
                 )}
               </div>
 
+              {/* Rodapé */}
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => { setShowModal(false); setForm(EMPTY_FORM) }}
+                  onClick={() => { setShowModal(false); setForm(EMPTY_FORM); setAdv(EMPTY_ADVANCED) }}
                   className="btn-secondary flex-1 py-3"
                 >
                   Cancelar
@@ -509,6 +624,186 @@ export default function Campanhas() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ── Drawer Configurações Avançadas ─────────────────────────────────── */}
+      {showModal && (
+        <>
+          {/* Overlay do drawer */}
+          <div
+            className={`fixed inset-0 z-[60] transition-opacity duration-300 ${showDrawer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+            style={{ background: 'rgba(0,0,0,0.55)' }}
+            onClick={() => setShowDrawer(false)}
+          />
+
+          {/* Painel */}
+          <div
+            className="fixed top-0 right-0 h-full z-[61] flex flex-col"
+            style={{
+              width: 400,
+              background: 'linear-gradient(160deg, #1a1228 0%, #120d1e 100%)',
+              borderLeft: '1px solid rgba(157,78,221,0.2)',
+              boxShadow: '-20px 0 60px rgba(0,0,0,0.6)',
+              transform: showDrawer ? 'translateX(0)' : 'translateX(100%)',
+              transition: 'transform 0.32s cubic-bezier(0.4,0,0.2,1)',
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(157,78,221,0.2)' }}>
+                  <MdSettings size={18} className="text-primary-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white leading-tight">Configurações de Disparo</h3>
+                  <p className="text-[10px] text-surface-500 mt-0.5">Ajuste fino do comportamento</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDrawer(false)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-surface-500 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <MdClose size={16} />
+              </button>
+            </div>
+
+            {/* Conteúdo com scroll */}
+            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-7">
+
+              {/* Delay */}
+              <DrawerSection icon={MdAccessTime} title="Delay entre mensagens">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Mínimo (s)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={drawerDraft.delay_min}
+                      onChange={e => setDrawerDraft(d => ({ ...d, delay_min: e.target.value }))}
+                      className="input text-sm py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Máximo (s)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={drawerDraft.delay_max}
+                      onChange={e => setDrawerDraft(d => ({ ...d, delay_max: e.target.value }))}
+                      className="input text-sm py-2"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-surface-500 mt-2 leading-relaxed">
+                  Aguardará entre{' '}
+                  <span className="text-primary-400 font-semibold">{drawerDraft.delay_min}s</span>
+                  {' '}e{' '}
+                  <span className="text-primary-400 font-semibold">{drawerDraft.delay_max}s</span>
+                  {' '}entre cada envio.
+                </p>
+              </DrawerSection>
+
+              {/* Limite de segurança */}
+              <DrawerSection icon={MdShield} title="Limite de segurança">
+                <div>
+                  <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Máx. disparos por chip por dia</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={drawerDraft.max_per_chip_per_day}
+                    onChange={e => setDrawerDraft(d => ({ ...d, max_per_chip_per_day: e.target.value }))}
+                    className="input text-sm py-2"
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <div>
+                    <p className="text-xs font-medium text-surface-300">Parar se chip desconectar</p>
+                    <p className="text-[11px] text-surface-500 mt-0.5">Interrompe a campanha automaticamente</p>
+                  </div>
+                  <Toggle
+                    checked={drawerDraft.stop_on_disconnect}
+                    onChange={v => setDrawerDraft(d => ({ ...d, stop_on_disconnect: v }))}
+                  />
+                </div>
+              </DrawerSection>
+
+              {/* Horário de envio */}
+              <DrawerSection icon={MdSchedule} title="Horário de envio">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-surface-300">Apenas horário comercial</p>
+                    <p className="text-[11px] text-surface-500 mt-0.5">Pausa fora do intervalo definido</p>
+                  </div>
+                  <Toggle
+                    checked={drawerDraft.business_hours_only}
+                    onChange={v => setDrawerDraft(d => ({ ...d, business_hours_only: v }))}
+                  />
+                </div>
+                {drawerDraft.business_hours_only && (
+                  <div className="grid grid-cols-2 gap-3 mt-1">
+                    <div>
+                      <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Início</label>
+                      <input
+                        type="time"
+                        value={drawerDraft.business_hours_start}
+                        onChange={e => setDrawerDraft(d => ({ ...d, business_hours_start: e.target.value }))}
+                        className="input text-sm py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider mb-1.5 block">Fim</label>
+                      <input
+                        type="time"
+                        value={drawerDraft.business_hours_end}
+                        onChange={e => setDrawerDraft(d => ({ ...d, business_hours_end: e.target.value }))}
+                        className="input text-sm py-2"
+                      />
+                    </div>
+                  </div>
+                )}
+              </DrawerSection>
+
+              {/* Filtros de contato */}
+              <DrawerSection icon={MdFilterList} title="Filtros de contato">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-surface-300">Ignorar sem nome salvo</p>
+                    <p className="text-[11px] text-surface-500 mt-0.5">Pula contatos sem nome no cadastro</p>
+                  </div>
+                  <Toggle
+                    checked={drawerDraft.skip_unnamed_contacts}
+                    onChange={v => setDrawerDraft(d => ({ ...d, skip_unnamed_contacts: v }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <div>
+                    <p className="text-xs font-medium text-surface-300">Evitar duplicatas</p>
+                    <p className="text-[11px] text-surface-500 mt-0.5">Envia apenas uma vez por contato</p>
+                  </div>
+                  <Toggle
+                    checked={drawerDraft.no_duplicates}
+                    onChange={v => setDrawerDraft(d => ({ ...d, no_duplicates: v }))}
+                  />
+                </div>
+              </DrawerSection>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-white/10 flex-shrink-0">
+              <button
+                type="button"
+                onClick={saveDrawer}
+                className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all"
+                style={{
+                  background: 'linear-gradient(135deg, #9d4edd, #6a0dad)',
+                  boxShadow: '0 4px 20px rgba(157,78,221,0.35)',
+                }}
+              >
+                Salvar configurações
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

@@ -119,13 +119,49 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
     if event == "session.status":
         status_raw = payload.get("status", "")
         status_map = {
-            "CONNECTED": models.SessionStatus.connected,
-            "WORKING":   models.SessionStatus.connected,
+            "CONNECTED":    models.SessionStatus.connected,
+            "WORKING":      models.SessionStatus.connected,
             "SCAN_QR_CODE": models.SessionStatus.connecting,
-            "STOPPED":   models.SessionStatus.disconnected,
-            "FAILED":    models.SessionStatus.error,
+            "STOPPED":      models.SessionStatus.disconnected,
+            "FAILED":       models.SessionStatus.error,
+            "BANNED":       models.SessionStatus.error,
         }
         new_status = status_map.get(status_raw)
+
+        # ── Ban detectado: registrar aprendizado ANTES de alterar status ──
+        if status_raw == "BANNED" and sess:
+            from fuzzy_chip import registrar_ban
+            try:
+                registrar_ban(sess, db)
+                print(f"[BAN] Chip '{sess.name}' banido — contexto registrado para aprendizado.")
+            except Exception as _exc:
+                print(f"[BAN] Erro ao registrar ban: {_exc}")
+
+            # Pausa aquecimento ativo
+            aq_ativo = (
+                db.query(models.AquecimentoConfig)
+                .filter(
+                    models.AquecimentoConfig.session_id == sess.id,
+                    models.AquecimentoConfig.status == models.AquecimentoStatus.ativo,
+                )
+                .first()
+            )
+            if aq_ativo:
+                aq_ativo.status = models.AquecimentoStatus.pausado
+                db.commit()
+                print(f"[BAN] Aquecimento #{aq_ativo.id} pausado automaticamente.")
+
+            # Log de atividade para o usuário
+            db.add(models.AtividadeLog(
+                user_id=sess.user_id,
+                tipo="chip_banido",
+                descricao=(
+                    f"🚨 Chip '{sess.name}' foi BANIDO pelo WhatsApp! "
+                    f"Aquecimento pausado automaticamente. Verifique o uso deste chip."
+                ),
+            ))
+            db.commit()
+
         if sess and new_status:
             sess.status = new_status
             if new_status == models.SessionStatus.connected:

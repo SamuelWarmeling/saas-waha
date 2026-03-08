@@ -292,6 +292,61 @@ def migrate_pos_aquecimento():
         logger.error(f"[MIGRATE] Erro em migrate_pos_aquecimento: {e}")
 
 
+def migrate_ban_learning():
+    """Cria tabelas ban_records e fuzzy_configs para aprendizado coletivo de bans."""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                "WHERE table_name = 'ban_records')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela ban_records...")
+                conn.execute(text("""
+                    CREATE TABLE ban_records (
+                        id SERIAL PRIMARY KEY,
+                        session_id INTEGER REFERENCES whatsapp_sessions(id) ON DELETE SET NULL,
+                        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        tipo_chip VARCHAR(10),
+                        liquidez_momento FLOAT,
+                        valor_esperado_momento FLOAT,
+                        risco_momento FLOAT,
+                        score_momento FLOAT,
+                        action_momento VARCHAR(10),
+                        msgs_enviadas_hoje INTEGER,
+                        dias_de_vida INTEGER,
+                        criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """))
+                conn.execute(text(
+                    "CREATE INDEX ix_ban_records_user_id ON ban_records (user_id)"
+                ))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela ban_records criada.")
+
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                "WHERE table_name = 'fuzzy_configs')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela fuzzy_configs...")
+                conn.execute(text("""
+                    CREATE TABLE fuzzy_configs (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        high_threshold FLOAT NOT NULL DEFAULT 70.0,
+                        med_threshold FLOAT NOT NULL DEFAULT 40.0,
+                        peso_risco FLOAT NOT NULL DEFAULT 0.0,
+                        total_bans_calibracao INTEGER NOT NULL DEFAULT 0,
+                        atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela fuzzy_configs criada.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_ban_learning: {e}")
+
+
 def migrate_adaptacao():
     """Adiciona is_veterano, em_adaptacao em whatsapp_sessions e origem_chip em aquecimento_configs."""
     try:
@@ -537,9 +592,24 @@ async def lifespan(app: FastAPI):
             migrate_chip_virtual()
             migrate_pos_aquecimento()
             migrate_adaptacao()
+            migrate_ban_learning()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
+            # Carrega thresholds fuzzy salvos no banco para o cache em memória
+            try:
+                from fuzzy_chip import carregar_config_fuzzy
+                db_gen = get_db()
+                _db = next(db_gen)
+                try:
+                    carregar_config_fuzzy(_db)
+                finally:
+                    try:
+                        db_gen.close()
+                    except Exception:
+                        pass
+            except Exception as _e:
+                logger.warning(f"[STARTUP] Erro ao carregar config fuzzy: {_e}")
         except Exception as e:
             logger.error(f"[STARTUP] Erro ao criar tabelas: {e}")
     else:

@@ -456,3 +456,43 @@ class GroupMember(Base):
         Index("ix_group_members_group_id", "group_id"),
         Index("ix_group_members_contact_id", "contact_id"),
     )
+
+
+class BanRecord(Base):
+    """Registra contexto de cada ban detectado para aprendizado coletivo."""
+    __tablename__ = "ban_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    tipo_chip = Column(String(10), nullable=True)           # fisico/virtual
+    liquidez_momento = Column(Float, nullable=True)         # taxa de uso × 100 (0-100)
+    valor_esperado_momento = Column(Float, nullable=True)   # score fuzzy no momento
+    risco_momento = Column(Float, nullable=True)            # 100 - score
+    score_momento = Column(Float, nullable=True)            # score fuzzy (0-100)
+    action_momento = Column(String(10), nullable=True)      # HIGH/MED/LOW/OFFLINE/BLOCKED
+    msgs_enviadas_hoje = Column(Integer, nullable=True)
+    dias_de_vida = Column(Integer, nullable=True)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    session = relationship("WhatsAppSession")
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_ban_records_user_id", "user_id"),
+    )
+
+
+class FuzzyConfig(Base):
+    """Thresholds globais do sistema fuzzy, ajustados por aprendizado coletivo."""
+    __tablename__ = "fuzzy_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)  # NULL = global
+    high_threshold = Column(Float, default=70.0, nullable=False)
+    med_threshold = Column(Float, default=40.0, nullable=False)
+    peso_risco = Column(Float, default=0.0, nullable=False)
+    total_bans_calibracao = Column(Integer, default=0, nullable=False)
+    atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")

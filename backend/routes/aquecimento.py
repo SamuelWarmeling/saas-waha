@@ -553,8 +553,11 @@ async def processar_aquecimento():
         now_br = now.astimezone(BRAZIL_TZ)
         hora_br = now_br.hour
 
+        logger.info(f"🔥 Aquecimento worker rodando... hora BR={hora_br:02d}:{now_br.minute:02d}")
+
         # Só envia entre 08:00 e 20:00 horário de Brasília
         if hora_br < 8 or hora_br >= 20:
+            logger.info(f"🔥 Fora do horário permitido (08-20h BR), pulando.")
             return
 
         ativos = (
@@ -565,6 +568,8 @@ async def processar_aquecimento():
             ]))
             .all()
         )
+
+        logger.info(f"🔥 Processando {len(ativos)} chips em aquecimento")
 
         for aq in ativos:
             try:
@@ -646,6 +651,7 @@ async def processar_aquecimento():
                     aq.meta_hoje = random.randint(3, 5) if is_manutencao else get_meta_dia(aq.dia_atual)
                     db.commit()
                 if aq.msgs_hoje >= aq.meta_hoje:
+                    logger.info(f"🔥 #{aq.id} meta do dia atingida ({aq.msgs_hoje}/{aq.meta_hoje}), aguardando amanhã")
                     continue
 
                 # ── Verifica próximo envio ────────────────────────────────────
@@ -654,15 +660,18 @@ async def processar_aquecimento():
                     if pe.tzinfo is None:
                         pe = pe.replace(tzinfo=timezone.utc)
                     if now < pe:
+                        espera = int((pe - now).total_seconds() // 60)
+                        logger.info(f"🔥 #{aq.id} aguardando proximo_envio (faltam ~{espera}min)")
                         continue  # ainda não está na hora
 
                 # ── Busca sessão ──────────────────────────────────────────────
                 session = aq.session
                 if not session or session.status != models.SessionStatus.connected:
-                    logger.warning(f"[AQUECIMENTO] #{aq.id} sessão offline, pulando")
+                    logger.warning(f"🔥 #{aq.id} sessão offline (status={session.status.value if session else 'None'}), pulando")
                     continue
 
                 tipo_chip = getattr(session, "tipo_chip", "fisico")
+                logger.info(f"🔥 #{aq.id} processando chip {tipo_chip} '{session.name}' dia={aq.dia_atual} msgs={aq.msgs_hoje}/{aq.meta_hoje}")
 
                 # ════════════════════════════════════════════════════════
                 # CHIP VIRTUAL — só responde, nunca inicia
@@ -781,14 +790,16 @@ async def processar_aquecimento():
 
 async def aquecimento_worker_task():
     """Background task que roda o aquecimento a cada 5 minutos."""
-    logger.info("[AQUECIMENTO] Worker iniciado.")
+    logger.info("🔥 Aquecimento worker iniciado.")
+    # Aguarda 30s no startup para o banco estar pronto, depois roda imediatamente
+    await asyncio.sleep(30)
     while True:
         try:
-            await asyncio.sleep(300)  # 5 minutos
-            logger.info("[AQUECIMENTO] Verificando aquecimentos ativos...")
             await processar_aquecimento()
+            await asyncio.sleep(300)  # 5 minutos
         except asyncio.CancelledError:
-            logger.info("[AQUECIMENTO] Worker cancelado.")
+            logger.info("🔥 Aquecimento worker cancelado.")
             break
         except Exception as e:
-            logger.error(f"[AQUECIMENTO] Erro inesperado: {e}")
+            logger.error(f"🔥 Aquecimento worker erro inesperado: {e}")
+            await asyncio.sleep(60)  # espera 1min antes de tentar novamente após erro

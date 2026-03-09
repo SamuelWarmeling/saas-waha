@@ -9,15 +9,30 @@ export default function Header({ onMenuOpen }) {
     api.get('/usuarios/me').then(r => setUser(r.data)).catch(() => { })
   }, [])
 
-  const isPlanActive = user?.plan_expires_at
-    ? new Date(user.plan_expires_at) > new Date()
-    : false
+  const isAdmin = user?.is_admin ?? false
+  const isPlanActive = !!(
+    user?.is_active &&
+    user?.plan_expires_at &&
+    new Date(user.plan_expires_at) > new Date()
+  )
 
   const planLabel = {
     starter: 'Starter',
     pro: 'Pro',
     business: 'Business',
   }
+
+  const badgeStyle = isAdmin
+    ? { background: 'rgba(157,78,221,0.18)', color: '#c084fc', border: '1px solid rgba(157,78,221,0.5)', boxShadow: '0 0 12px rgba(157,78,221,0.2)' }
+    : isPlanActive
+      ? { background: 'rgba(34,197,94,0.12)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.35)', boxShadow: '0 0 12px rgba(34,197,94,0.15)' }
+      : { background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }
+
+  const badgeLabel = isAdmin
+    ? '★ Admin'
+    : isPlanActive
+      ? `Plano ${planLabel[user.plan] || user.plan}`
+      : 'Plano expirado'
 
   return (
     <header
@@ -60,24 +75,8 @@ export default function Header({ onMenuOpen }) {
         {/* Plano: oculto no mobile */}
         {user && (
           <div className="hidden md:flex items-center gap-2">
-            <span
-              className="text-xs px-2.5 py-1 rounded-full font-semibold"
-              style={
-                isPlanActive
-                  ? {
-                      background: 'rgba(157,78,221,0.12)',
-                      color: '#b07de6',
-                      border: '1px solid rgba(157,78,221,0.35)',
-                      boxShadow: '0 0 12px rgba(157,78,221,0.15)',
-                    }
-                  : {
-                      background: 'rgba(239,68,68,0.12)',
-                      color: '#f87171',
-                      border: '1px solid rgba(239,68,68,0.3)',
-                    }
-              }
-            >
-              {isPlanActive ? `Plano ${planLabel[user.plan] || user.plan}` : 'Plano expirado'}
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={badgeStyle}>
+              {badgeLabel}
             </span>
           </div>
         )}

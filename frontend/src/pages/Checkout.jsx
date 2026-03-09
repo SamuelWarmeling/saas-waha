@@ -155,6 +155,7 @@ function RegistrationForm() {
     if (form.password.length < 8) return setError('A senha deve ter no mínimo 8 caracteres.')
     if (form.password !== form.confirmPassword) return setError('As senhas não coincidem.')
 
+    console.log('INICIANDO CADASTRO')
     setLoading(true)
     try {
       const res = await api.post('/auth/cadastro', {
@@ -164,6 +165,8 @@ function RegistrationForm() {
         password: form.password,
       })
 
+      console.log('RESPOSTA:', JSON.stringify(res.data))
+
       const { checkout_url, redirect, access_token, refresh_token, user } = res.data
 
       // Salva tokens (necessário para polling ou acesso ao dashboard)
@@ -172,13 +175,16 @@ function RegistrationForm() {
       if (user) localStorage.setItem('user', JSON.stringify(user))
 
       if (checkout_url) {
-        // Stripe configurado: redireciona para pagamento
+        console.log('REDIRECIONANDO PARA:', checkout_url)
+        alert('Cadastro OK! Redirecionando para pagamento...')
         window.location.href = checkout_url
       } else {
-        // Sem Stripe ou fallback: vai direto para dashboard com trial ativo
+        console.log('REDIRECIONANDO PARA:', redirect || '/dashboard')
+        alert('Cadastro OK! Redirecionando...')
         window.location.href = redirect || '/dashboard'
       }
     } catch (err) {
+      console.log('ERRO:', err.message, err.response?.data)
       // SEMPRE mostrar o erro — nunca deixar tela preta
       const msg = err.response?.data?.detail || err.message || 'Erro ao criar conta. Tente novamente.'
       setError(msg)

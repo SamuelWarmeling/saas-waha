@@ -147,6 +147,7 @@ function RegistrationForm() {
     e.preventDefault()
     setError('')
 
+    // Validações locais
     if (!form.name.trim()) return setError('Informe seu nome completo.')
     if (!form.email.trim()) return setError('Informe seu e-mail.')
     if (!form.cpf || form.cpf.replace(/\D/g, '').length !== 11) return setError('Informe um CPF completo.')
@@ -156,7 +157,6 @@ function RegistrationForm() {
 
     setLoading(true)
     try {
-      // POST /api/auth/cadastro → retorna {checkout_url, access_token, refresh_token, user}
       const res = await api.post('/auth/cadastro', {
         name: form.name.trim(),
         email: form.email.trim(),
@@ -164,18 +164,24 @@ function RegistrationForm() {
         password: form.password,
       })
 
-      const { checkout_url, access_token, refresh_token, user } = res.data
+      const { checkout_url, redirect, access_token, refresh_token, user } = res.data
 
-      // Salva tokens para polling na página de sucesso
-      localStorage.setItem('access_token', access_token)
-      localStorage.setItem('refresh_token', refresh_token)
-      localStorage.setItem('user', JSON.stringify(user))
+      // Salva tokens (necessário para polling ou acesso ao dashboard)
+      if (access_token) localStorage.setItem('access_token', access_token)
+      if (refresh_token) localStorage.setItem('refresh_token', refresh_token)
+      if (user) localStorage.setItem('user', JSON.stringify(user))
 
-      // Redireciona para o checkout do Stripe
-      window.location.href = checkout_url
+      if (checkout_url) {
+        // Stripe configurado: redireciona para pagamento
+        window.location.href = checkout_url
+      } else {
+        // Sem Stripe ou fallback: vai direto para dashboard com trial ativo
+        navigate(redirect || '/dashboard')
+      }
     } catch (err) {
-      const msg = err.response?.data?.detail
-      setError(msg || 'Erro ao criar conta. Tente novamente.')
+      // SEMPRE mostrar o erro — nunca deixar tela preta
+      const msg = err.response?.data?.detail || err.message || 'Erro ao criar conta. Tente novamente.'
+      setError(msg)
       setLoading(false)
     }
   }
@@ -296,7 +302,7 @@ function RegistrationForm() {
           {loading ? (
             <span className="flex items-center justify-center gap-2">
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-              Redirecionando para pagamento seguro...
+              Criando sua conta...
             </span>
           ) : (
             'Criar conta e começar trial grátis →'

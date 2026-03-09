@@ -233,17 +233,11 @@ def reenviar_codigo(data: ReenviarCodigoRequest, db: Session = Depends(get_db)):
 @router.post("/cadastro")
 def cadastro_com_stripe(data: CadastroRequest, request: Request, db: Session = Depends(get_db)):
     """
-    Cria usuário inativo, abre Stripe Checkout Session com trial de 7 dias e
-    retorna checkout_url + tokens (para polling de status após o pagamento).
+    Cria conta e inicia trial de 7 dias.
+    - Com Stripe configurado: redireciona para Stripe Checkout (cartão obrigatório).
+    - Sem Stripe ou se Stripe falhar: ativa direto no dashboard (fallback).
+    Nunca retorna erro 5xx que deixe o usuário sem feedback.
     """
-    # Verificar STRIPE configurado
-    if not settings.STRIPE_SECRET_KEY:
-        logger.error("[STRIPE] STRIPE_SECRET_KEY não configurada!")
-        raise HTTPException(
-            status_code=503,
-            detail="Serviço de pagamento não configurado. Entre em contato com o suporte.",
-        )
-
     ip = _get_ip(request)
     hoje = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -266,30 +260,39 @@ def cadastro_com_stripe(data: CadastroRequest, request: Request, db: Session = D
         _registrar_tentativa(db, ip, "email_bloqueado", f"Email temporário: {data.email}")
         raise HTTPException(status_code=400, detail="Use um e-mail permanente para criar sua conta.")
 
-    # 4. Email duplicado
-    if db.query(models.User).filter(models.User.email == data.email).first():
-        raise HTTPException(status_code=400, detail="E-mail já cadastrado")
+    # 4. Email duplicado — se usuário existe mas está inativo (Stripe falhou antes), permite recadastro
+    usuario_existente = db.query(models.User).filter(models.User.email == data.email).first()
+    if usuario_existente:
+        if usuario_existente.is_active:
+            raise HTTPException(status_code=400, detail="E-mail já cadastrado")
+        # Usuário inativo: limpa e recria abaixo (fluxo anterior falhou)
+        db.delete(usuario_existente)
+        db.commit()
 
     # 5. CPF
     cpf_limpo = re.sub(r'\D', '', data.cpf)
     if not _validar_cpf(cpf_limpo):
         raise HTTPException(status_code=400, detail="CPF inválido. Verifique os dígitos informados.")
-    if db.query(models.User).filter(models.User.cpf == cpf_limpo).first():
+    cpf_existente = db.query(models.User).filter(models.User.cpf == cpf_limpo).first()
+    if cpf_existente and cpf_existente.is_active:
         _registrar_tentativa(db, ip, "cpf_duplicado", f"CPF já cadastrado (email: {data.email})")
         raise HTTPException(status_code=400, detail="Este CPF já possui uma conta cadastrada.")
+    elif cpf_existente and not cpf_existente.is_active:
+        db.delete(cpf_existente)
+        db.commit()
 
     # 6. Senha
     if len(data.password) < 8:
         raise HTTPException(status_code=400, detail="Senha deve ter no mínimo 8 caracteres")
 
-    # ── Cria usuário com is_active=False ─────────────────────────────────────
+    # ── Cria usuário (inativo por enquanto) ───────────────────────────────────
     user = models.User(
         name=data.name,
         email=data.email,
         password_hash=auth.hash_password(data.password),
         cpf=cpf_limpo,
-        email_verificado=True,   # verificado via Stripe (cartão real)
-        is_active=False,          # ativa após checkout.session.completed
+        email_verificado=True,
+        is_active=False,
         plan=models.PlanType.starter,
         plan_expires_at=None,
     )
@@ -304,49 +307,68 @@ def cadastro_com_stripe(data: CadastroRequest, request: Request, db: Session = D
         db.add(models.CadastroIP(ip=ip, data=hoje, contagem=1))
     db.commit()
 
-    # ── Stripe: cria customer + checkout session ──────────────────────────────
-    try:
-        import stripe
-        stripe.api_key = settings.STRIPE_SECRET_KEY
+    # ── Tenta Stripe se configurado ───────────────────────────────────────────
+    stripe_ok = bool(settings.STRIPE_SECRET_KEY and settings.STRIPE_PRICE_ID)
+    if stripe_ok:
+        try:
+            import stripe as _stripe
+            _stripe.api_key = settings.STRIPE_SECRET_KEY
 
-        customer = stripe.Customer.create(
-            email=user.email,
-            name=user.name,
-            metadata={"user_id": str(user.id)},
-        )
-        user.stripe_customer_id = customer.id
-        db.commit()
+            customer = _stripe.Customer.create(
+                email=user.email,
+                name=user.name,
+                metadata={"user_id": str(user.id)},
+            )
+            user.stripe_customer_id = customer.id
+            db.commit()
 
-        checkout_session = stripe.checkout.Session.create(
-            customer=customer.id,
-            payment_method_types=["card"],
-            line_items=[{
-                "price": settings.STRIPE_PRICE_ID,
-                "quantity": 1,
-            }],
-            mode="subscription",
-            subscription_data={
-                "trial_period_days": 7,
-                "metadata": {"user_id": str(user.id)},
-            },
-            metadata={"user_id": str(user.id)},
-            success_url=f"{settings.FRONTEND_URL}/pagamento/sucesso",
-            cancel_url=f"{settings.FRONTEND_URL}/checkout",
-        )
-    except Exception as e:
-        logger.error(f"[STRIPE] Erro ao criar checkout session: {e}")
-        # Não remove o usuário — pode ser reaproveitado
-        raise HTTPException(
-            status_code=502,
-            detail="Erro ao iniciar pagamento. Tente novamente ou entre em contato com o suporte.",
-        )
+            checkout_session = _stripe.checkout.Session.create(
+                customer=customer.id,
+                payment_method_types=["card"],
+                line_items=[{"price": settings.STRIPE_PRICE_ID, "quantity": 1}],
+                mode="subscription",
+                subscription_data={
+                    "trial_period_days": 7,
+                    "metadata": {"user_id": str(user.id)},
+                },
+                metadata={"user_id": str(user.id)},
+                success_url=f"{settings.FRONTEND_URL}/pagamento/sucesso",
+                cancel_url=f"{settings.FRONTEND_URL}/checkout",
+            )
 
-    # ── Emite tokens imediatamente (para polling de status) ───────────────────
+            # Tokens para polling na página de sucesso
+            access_token = auth.create_access_token({"sub": str(user.id)})
+            refresh_token = auth.create_refresh_token({"sub": str(user.id)})
+            return {
+                "checkout_url": checkout_session.url,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
+                "user": _user_out(user),
+            }
+
+        except Exception as e:
+            logger.error(f"[STRIPE] Erro ao criar checkout — usando fallback direto: {e}")
+            # Fallback: ativa sem Stripe (segue abaixo)
+
+    else:
+        logger.warning("[STRIPE] Não configurado (STRIPE_SECRET_KEY/PRICE_ID vazios) — ativando direto")
+
+    # ── Fallback: ativa direto com trial de 7 dias ────────────────────────────
+    now = datetime.now(timezone.utc)
+    user.is_active = True
+    user.trial_ativo = True
+    user.trial_expira_em = now + timedelta(days=7)
+    user.plan_expires_at = now + timedelta(days=7)
+    db.commit()
+    db.refresh(user)
+
     access_token = auth.create_access_token({"sub": str(user.id)})
     refresh_token = auth.create_refresh_token({"sub": str(user.id)})
 
     return {
-        "checkout_url": checkout_session.url,
+        "redirect": "/dashboard",
+        "trial": True,
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",

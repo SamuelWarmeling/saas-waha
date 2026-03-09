@@ -139,6 +139,7 @@ export default function Sessoes() {
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [qrSession, setQrSession] = useState(null)
+  const [tipoModal, setTipoModal] = useState(null) // { id, name, required }
   const [form, setForm] = useState({ name: '' })
 
   const load = useCallback(async () => {
@@ -241,6 +242,7 @@ export default function Sessoes() {
           setQrSession(null)
           toast.success(`Sessão "${qrSession.name}" conectada!`)
           load()
+          setTipoModal({ id: qrSession.id, name: qrSession.name, required: true })
           return
         }
         setQrSession(prev => ({ ...prev, qr: data.qr, status: data.status }))
@@ -271,11 +273,11 @@ export default function Sessoes() {
     }
   }
 
-  async function toggleTipoChip(sess) {
-    const novo = sess.tipo_chip === 'virtual' ? 'fisico' : 'virtual'
+  async function definirTipoChip(sessId, tipo) {
     try {
-      await api.patch(`/sessoes/${sess.id}/tipo-chip`, { tipo_chip: novo })
-      toast.success(`Chip definido como ${novo === 'virtual' ? '💻 Virtual' : '📱 Físico'}`)
+      await api.patch(`/sessoes/${sessId}/tipo-chip`, { tipo_chip: tipo })
+      toast.success(`Chip definido como ${tipo === 'virtual' ? '💻 Virtual' : '📱 Físico'}`)
+      setTipoModal(null)
       load()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao alterar tipo')
@@ -298,6 +300,21 @@ export default function Sessoes() {
           </button>
         </div>
       </div>
+
+      {/* Aviso: nenhum chip virtual no pool de aquecimento */}
+      {sessions.length > 0 && !sessions.some(s => s.tipo_chip === 'virtual' && s.status === 'connected') && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm"
+          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}>
+          <span className="text-lg flex-shrink-0">⚠️</span>
+          <div>
+            <p className="text-yellow-300 font-semibold">Nenhum chip virtual conectado no pool de aquecimento</p>
+            <p className="text-yellow-500/80 text-xs mt-0.5">
+              Chips físicos precisam de pelo menos 1 chip virtual para trocar mensagens e aquecer.
+              Conecte um chip virtual ou defina um dos chips existentes como <strong>Virtual</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Grid de sessões */}
       {sessions.length === 0 ? (
@@ -408,12 +425,10 @@ export default function Sessoes() {
                           ⚠️ {riscos[sess.id].risco > 80 ? 'BAN IMINENTE' : 'ATENÇÃO'}
                         </span>
                       )}
-                      {/* Chip type toggle */}
+                      {/* Chip type badge — clicável para trocar */}
                       <button
-                        onClick={() => toggleTipoChip(sess)}
-                        title={sess.tipo_chip === 'virtual'
-                          ? 'Chip Virtual: só responde mensagens. Clique para mudar para Físico.'
-                          : 'Chip Físico: inicia conversas. Clique para mudar para Virtual.'}
+                        onClick={() => setTipoModal({ id: sess.id, name: sess.name, required: false })}
+                        title="Clique para alterar o tipo deste chip"
                         className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-bold transition-all ${
                           sess.tipo_chip === 'virtual'
                             ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25'
@@ -524,6 +539,60 @@ export default function Sessoes() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Modal: Tipo do Chip (obrigatório ao conectar, opcional via badge) */}
+      {tipoModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="glass-card w-full max-w-sm p-0 overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.6)] border-surface-600/50 animate-[slideIn_0.3s_ease-out]">
+            <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/80 text-center">
+              <h2 className="text-lg font-bold text-white">Qual é o tipo deste chip?</h2>
+              <p className="text-sm text-surface-400 mt-1 font-mono">{tipoModal.name}</p>
+              {tipoModal.required && (
+                <p className="text-xs text-yellow-400/80 mt-2">⚠️ Escolha obrigatória para o aquecimento funcionar corretamente</p>
+              )}
+            </div>
+
+            <div className="p-6 space-y-3">
+              <button
+                onClick={() => definirTipoChip(tipoModal.id, 'fisico')}
+                className="w-full flex items-center gap-4 px-5 py-4 rounded-xl text-left transition-all border"
+                style={{ background: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.25)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(34,197,94,0.15)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(34,197,94,0.08)'}
+              >
+                <span className="text-3xl">📱</span>
+                <div>
+                  <p className="text-white font-bold">Físico</p>
+                  <p className="text-xs text-surface-400 mt-0.5">Tem chip SIM real. Inicia conversas no aquecimento.</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => definirTipoChip(tipoModal.id, 'virtual')}
+                className="w-full flex items-center gap-4 px-5 py-4 rounded-xl text-left transition-all border"
+                style={{ background: 'rgba(59,130,246,0.08)', borderColor: 'rgba(59,130,246,0.25)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.15)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(59,130,246,0.08)'}
+              >
+                <span className="text-3xl">💻</span>
+                <div>
+                  <p className="text-white font-bold">Virtual</p>
+                  <p className="text-xs text-surface-400 mt-0.5">Número VoIP / virtual. Recebe mensagens no aquecimento.</p>
+                </div>
+              </button>
+
+              {!tipoModal.required && (
+                <button
+                  onClick={() => setTipoModal(null)}
+                  className="w-full btn-secondary py-2.5 text-sm mt-1"
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

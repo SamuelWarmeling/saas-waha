@@ -53,6 +53,12 @@ class BanirIPBody(BaseModel):
     motivo: Optional[str] = None
 
 
+class AtivarPlanoBody(BaseModel):
+    email: str
+    plan: str = "pro"
+    dias: Optional[int] = None  # None = vitalício (2099)
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 @router.get("/usuarios", response_model=List[UserAdminOut])
 def list_users(
@@ -137,6 +143,43 @@ def toggle_user_active(
     user.is_active = body.is_active
     db.commit()
     return {"ok": True, "is_active": user.is_active}
+
+
+@router.post("/ativar-plano")
+def ativar_plano_por_email(
+    body: AtivarPlanoBody,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(auth.require_admin),
+):
+    """Ativa conta + plano por e-mail. dias=None = vitalício (expira em 2099)."""
+    if body.plan not in PLANS:
+        raise HTTPException(status_code=400, detail=f"Plano inválido. Opções: {list(PLANS.keys())}")
+
+    user = db.query(models.User).filter(models.User.email == body.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail=f"Usuário '{body.email}' não encontrado")
+
+    if body.dias is None:
+        expires = datetime(2099, 12, 31, tzinfo=timezone.utc)
+    else:
+        expires = datetime.now(timezone.utc) + timedelta(days=body.dias)
+
+    user.is_active = True
+    user.trial_ativo = False
+    user.trial_expira_em = None
+    user.plan = models.PlanType(body.plan)
+    user.plan_expires_at = expires
+    user.chips_disparo_simultaneo = PLANS[body.plan].get("max_sessions", 3)
+    db.commit()
+
+    return {
+        "ok": True,
+        "email": user.email,
+        "plan": user.plan.value,
+        "plan_expires_at": user.plan_expires_at.isoformat(),
+        "is_active": user.is_active,
+        "chips_disparo_simultaneo": user.chips_disparo_simultaneo,
+    }
 
 
 # ── Segurança Anti-Abuso ───────────────────────────────────────────────────────

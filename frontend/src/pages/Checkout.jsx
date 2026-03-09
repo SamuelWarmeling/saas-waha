@@ -176,7 +176,7 @@ function RegistrationForm() {
         window.location.href = checkout_url
       } else {
         // Sem Stripe ou fallback: vai direto para dashboard com trial ativo
-        navigate(redirect || '/dashboard')
+        window.location.href = redirect || '/dashboard'
       }
     } catch (err) {
       // SEMPRE mostrar o erro — nunca deixar tela preta

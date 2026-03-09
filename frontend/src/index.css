@@ -6,6 +6,15 @@
   body {
     background-color: #0B0914;
     @apply text-surface-50 font-sans antialiased min-h-screen;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Evitar zoom automático no iOS */
+  @media (max-width: 768px) {
+    input, textarea, select {
+      font-size: 16px !important;
+    }
   }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: #0B0914; }
@@ -37,17 +46,17 @@
     background: linear-gradient(135deg, #9D4EDD, #6A0DAD);
     @apply text-white font-semibold px-4 py-2 rounded-lg transition-all
            shadow-lg shadow-primary-900/40 hover:shadow-[0_0_20px_rgba(157,78,221,0.4)]
-           hover:-translate-y-px
+           hover:-translate-y-px min-h-[44px]
            disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0
            border border-primary-500/30;
   }
   .btn-secondary {
     @apply bg-surface-800 hover:bg-surface-700 text-surface-100 font-medium px-4 py-2
-           rounded-lg transition-colors border border-surface-600/50;
+           rounded-lg transition-colors border border-surface-600/50 min-h-[44px];
   }
   .btn-danger {
     @apply bg-red-600 hover:bg-red-500 text-white font-medium px-4 py-2 rounded-lg
-           transition-colors shadow-lg shadow-red-900/20 border border-red-500/20;
+           transition-colors shadow-lg shadow-red-900/20 border border-red-500/20 min-h-[44px];
   }
 
   /* Legacy Card */

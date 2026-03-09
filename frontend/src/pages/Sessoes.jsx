@@ -110,14 +110,14 @@ function SessionIdBadge({ sessionId }) {
 
   return (
     <div
-      className="inline-flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md"
+      className="inline-flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md max-w-full overflow-hidden"
       style={{
         background: 'rgba(88,28,135,0.2)',
         border: '1px solid rgba(107,33,168,0.45)',
       }}
     >
-      <span className="text-[10px] text-surface-500 select-none">ID:</span>
-      <span className="font-mono text-[11px] text-primary-400 tracking-wide">{sessionId}</span>
+      <span className="text-[10px] text-surface-500 select-none flex-shrink-0">ID:</span>
+      <span className="font-mono text-[11px] text-primary-400 tracking-wide truncate max-w-[120px] sm:max-w-[200px]">{sessionId}</span>
       <button
         onClick={copy}
         title="Copiar ID"
@@ -290,11 +290,11 @@ export default function Sessoes() {
           <p className="text-sm text-surface-400 mt-1">Gerencie suas conexões de números</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button onClick={load} className="btn-secondary flex items-center gap-2 px-4 shadow-sm">
-            <MdRefresh size={18} /> Atualizar
+          <button onClick={load} className="btn-secondary flex items-center gap-2 px-3 md:px-4 shadow-sm">
+            <MdRefresh size={18} /> <span className="hidden sm:inline">Atualizar</span>
           </button>
-          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2 px-5">
-            <MdAdd size={20} /> Nova Sessão
+          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2 px-3 md:px-5">
+            <MdAdd size={20} /> <span className="hidden sm:inline">Nova Sessão</span>
           </button>
         </div>
       </div>

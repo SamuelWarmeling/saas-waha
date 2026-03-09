@@ -352,8 +352,8 @@ export default function Checkout() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 items-start">
-            <PlanSummary />
-            <RegistrationForm />
+            <div className="order-2 md:order-1"><PlanSummary /></div>
+            <div className="order-1 md:order-2"><RegistrationForm /></div>
           </div>
         </div>
       </div>

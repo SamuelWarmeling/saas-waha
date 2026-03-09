@@ -641,19 +641,19 @@ export default function Campanhas() {
               </span>
             )}
           </div>
-          <button onClick={load} className="btn-secondary flex items-center gap-2 shadow-sm px-4">
-            <MdRefresh size={18} /> Atualizar
+          <button onClick={load} className="btn-secondary flex items-center gap-2 shadow-sm px-3 md:px-4">
+            <MdRefresh size={18} /> <span className="hidden sm:inline">Atualizar</span>
           </button>
-          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2 px-5 shadow-lg shadow-primary-900/20">
-            <MdAdd size={20} /> Nova Campanha
+          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2 px-3 md:px-5 shadow-lg shadow-primary-900/20">
+            <MdAdd size={20} /> <span className="hidden sm:inline">Nova Campanha</span>
           </button>
         </div>
       </div>
 
       {/* Table */}
       <div className="glass-card overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm" style={{ minWidth: 680 }}>
             <thead className="bg-surface-900/50">
               <tr className="text-left text-surface-400 border-b border-surface-700/50">
                 <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Propriedades</th>

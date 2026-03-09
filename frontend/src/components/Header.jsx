@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { MdNotifications, MdPerson } from 'react-icons/md'
+import { MdNotifications, MdPerson, MdMenu } from 'react-icons/md'
 import api from '../api'
 
-export default function Header() {
+export default function Header({ onMenuOpen }) {
   const [user, setUser] = useState(null)
 
   useEffect(() => {
@@ -21,7 +21,7 @@ export default function Header() {
 
   return (
     <header
-      className="h-16 flex items-center justify-between px-6 sticky top-0 z-20"
+      className="h-16 flex items-center justify-between px-4 md:px-6 sticky top-0 z-20"
       style={{
         background: 'rgba(26,22,37,0.85)',
         backdropFilter: 'blur(20px)',
@@ -30,10 +30,36 @@ export default function Header() {
         boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
       }}
     >
-      <div />
-      <div className="flex items-center gap-4">
+      {/* Esquerda: hamburguer (mobile) */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuOpen}
+          className="md:hidden w-10 h-10 flex items-center justify-center rounded-xl text-surface-300 hover:text-white transition-colors"
+          style={{ border: '1px solid rgba(157,78,221,0.15)' }}
+          aria-label="Abrir menu"
+        >
+          <MdMenu className="text-2xl" />
+        </button>
+        {/* Logo visível só no mobile */}
+        <span
+          className="md:hidden font-bold text-sm tracking-wide"
+          style={{
+            background: 'linear-gradient(90deg, #ffffff, #b07de6)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
+          WahaSaaS
+        </span>
+        {/* Div vazia no desktop para manter justify-between */}
+        <div className="hidden md:block" />
+      </div>
+
+      {/* Direita */}
+      <div className="flex items-center gap-2 md:gap-4">
+        {/* Plano: oculto no mobile */}
         {user && (
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
             <span
               className="text-xs px-2.5 py-1 rounded-full font-semibold"
               style={
@@ -55,8 +81,10 @@ export default function Header() {
             </span>
           </div>
         )}
+
+        {/* Notificações: oculto no mobile */}
         <button
-          className="relative w-10 h-10 flex items-center justify-center rounded-xl text-surface-400 transition-all"
+          className="hidden md:flex relative w-10 h-10 items-center justify-center rounded-xl text-surface-400 transition-all"
           style={{ border: '1px solid rgba(157,78,221,0.15)' }}
           onMouseEnter={e => {
             e.currentTarget.style.background = 'rgba(157,78,221,0.1)'
@@ -73,8 +101,10 @@ export default function Header() {
             style={{ background: '#9D4EDD', boxShadow: '0 0 8px #9D4EDD' }}
           />
         </button>
+
+        {/* Avatar */}
         <div
-          className="flex items-center gap-3 rounded-xl px-4 py-2 cursor-pointer transition-all"
+          className="flex items-center gap-2 md:gap-3 rounded-xl px-2 md:px-4 py-2 cursor-pointer transition-all"
           style={{
             background: 'rgba(26,22,37,0.6)',
             border: '1px solid rgba(157,78,221,0.2)',
@@ -83,12 +113,12 @@ export default function Header() {
           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(26,22,37,0.6)' }}
         >
           <div
-            className="w-6 h-6 rounded-full flex items-center justify-center text-white shadow-sm"
+            className="w-7 h-7 md:w-6 md:h-6 rounded-full flex items-center justify-center text-white shadow-sm"
             style={{ background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)' }}
           >
             <MdPerson className="text-sm" />
           </div>
-          <span className="text-sm font-medium text-surface-200">{user?.name || '...'}</span>
+          <span className="hidden md:block text-sm font-medium text-surface-200">{user?.name || '...'}</span>
         </div>
       </div>
     </header>

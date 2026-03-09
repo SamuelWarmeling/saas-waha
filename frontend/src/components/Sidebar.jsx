@@ -25,7 +25,7 @@ function getIsAdmin() {
   }
 }
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate()
   const isAdmin = getIsAdmin()
 
@@ -36,7 +36,12 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="w-60 flex flex-col relative z-10"
+      className={`
+        fixed md:static inset-y-0 left-0 z-50 md:z-10
+        w-60 flex-shrink-0 flex flex-col
+        transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}
       style={{
         background: '#1A1625',
         borderRight: '1px solid rgba(157,78,221,0.2)',
@@ -74,6 +79,7 @@ export default function Sidebar() {
           <NavLink
             key={to}
             to={to}
+            onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                 isActive
@@ -105,6 +111,7 @@ export default function Sidebar() {
         {isAdmin && (
           <NavLink
             to="/admin"
+            onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 mt-2 ${
                 isActive ? 'text-primary-400' : 'text-surface-400 hover:text-surface-100'

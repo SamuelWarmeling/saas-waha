@@ -490,14 +490,14 @@ export default function Grupos() {
               Limpar grupos vazios
             </button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-sm" style={{ minWidth: 600 }}>
               <thead className="bg-surface-900/50 border-b border-surface-700/50">
                 <tr>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Nome</th>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Membros</th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Última extração</th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider">Auto-atualização</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider hidden md:table-cell">Última extração</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-surface-400 uppercase tracking-wider hidden lg:table-cell">Auto-atualização</th>
                   <th className="px-6 py-3.5 text-right text-xs font-semibold text-surface-400 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
@@ -518,13 +518,13 @@ export default function Grupos() {
                         </div>
                       </td>
                       <td className="px-6 py-4"><span className="badge-primary px-2.5 py-1">{grupo.member_count} membros</span></td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 hidden md:table-cell">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-xs text-surface-300 font-medium flex items-center gap-1"><MdSchedule size={13} className="text-surface-500" />{horasAtras(grupo.last_extracted_at) || '–'}</span>
                           {proxima && <span className="text-[11px] text-green-400/80 font-medium">Próxima: {proxima}</span>}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 hidden lg:table-cell">
                         <div className="flex items-center gap-2">
                           {autoUpdateLoading[grupo.id] && <div className="w-4 h-4 border-2 border-primary-500/30 border-t-primary-400 rounded-full animate-spin" />}
                           <select

@@ -213,7 +213,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Stats grid (6 cards) ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
         <Stats
           title="Total de Contatos"
           value={stats ? stats.total_contatos.toLocaleString('pt-BR') : '–'}
@@ -247,7 +247,7 @@ export default function Dashboard() {
           </div>
           <div className="flex-1 min-w-0 py-1">
             <p className="text-sm font-medium text-surface-400 tracking-wide">Contatos Hoje</p>
-            <p className="text-2xl font-bold text-surface-50 mt-1 tracking-tight">{stats ? contatosHoje.toLocaleString('pt-BR') : '–'}</p>
+            <p className="text-xl md:text-2xl font-bold text-surface-50 mt-1 tracking-tight">{stats ? contatosHoje.toLocaleString('pt-BR') : '–'}</p>
             {stats && (
               <p className={`text-xs font-semibold mt-1.5 flex items-center gap-1 ${contatosDiff >= 0 ? 'text-primary-400' : 'text-red-400'}`}>
                 {contatosDiff >= 0 ? '+' : ''}{contatosDiff} vs ontem
@@ -298,7 +298,8 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={240}>
+            <div className="h-[180px] sm:h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradEnv" x1="0" y1="0" x2="0" y2="1">
@@ -326,6 +327,7 @@ export default function Dashboard() {
                 />
               </AreaChart>
             </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Gráfico DDDs */}
@@ -381,27 +383,27 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="overflow-x-auto -mx-5 px-5">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm" style={{ minWidth: 480 }}>
                   <thead>
                     <tr className="text-left text-surface-400 border-b border-surface-700/50">
                       <th className="pb-3 font-medium whitespace-nowrap">Nome</th>
                       <th className="pb-3 font-medium px-4">Status</th>
-                      <th className="pb-3 font-medium text-right px-4">Contatos</th>
-                      <th className="pb-3 font-medium text-right px-4">Enviados</th>
+                      <th className="pb-3 font-medium text-right px-4 hidden sm:table-cell">Contatos</th>
+                      <th className="pb-3 font-medium text-right px-4 hidden sm:table-cell">Enviados</th>
                       <th className="pb-3 font-medium text-right">Sucesso</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-surface-800/50">
                     {campaigns.map(c => (
                       <tr key={c.id} className="hover:bg-surface-800/30 transition-colors">
-                        <td className="py-3.5 text-surface-100 font-medium whitespace-nowrap">{c.name}</td>
+                        <td className="py-3.5 text-surface-100 font-medium whitespace-nowrap max-w-[120px] truncate">{c.name}</td>
                         <td className="py-3.5 px-4">
                           <span className={statusColor[c.status] || 'badge-gray'}>
                             {statusLabel[c.status] || c.status}
                           </span>
                         </td>
-                        <td className="py-3.5 text-surface-400 text-right px-4">{c.total_contacts.toLocaleString('pt-BR')}</td>
-                        <td className="py-3.5 text-surface-400 text-right px-4">{c.sent_count.toLocaleString('pt-BR')}</td>
+                        <td className="py-3.5 text-surface-400 text-right px-4 hidden sm:table-cell">{c.total_contacts.toLocaleString('pt-BR')}</td>
+                        <td className="py-3.5 text-surface-400 text-right px-4 hidden sm:table-cell">{c.sent_count.toLocaleString('pt-BR')}</td>
                         <td className="py-3.5 text-primary-400 font-medium text-right">
                           {c.total_contacts > 0 ? Math.round((c.success_count / c.total_contacts) * 100) : 0}%
                         </td>

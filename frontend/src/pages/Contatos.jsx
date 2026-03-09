@@ -768,14 +768,14 @@ export default function Contatos() {
           <p className="text-sm text-surface-400 mt-1">{total.toLocaleString('pt-BR')} contatos encontrados</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => setShowImportModal(true)} className="btn-secondary flex items-center gap-2 text-sm px-4">
-            <MdUpload size={16}/> Importar CSV
+          <button onClick={() => setShowImportModal(true)} className="btn-secondary flex items-center gap-2 text-sm px-3 md:px-4">
+            <MdUpload size={16}/> <span className="hidden sm:inline">Importar CSV</span>
           </button>
-          <button onClick={handleExport} className="btn-secondary flex items-center gap-2 text-sm px-4">
-            <MdDownload size={16}/> Exportar
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-2 text-sm px-3 md:px-4">
+            <MdDownload size={16}/> <span className="hidden sm:inline">Exportar</span>
           </button>
-          <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2 text-sm px-4">
-            <MdAdd size={18}/> Novo Contato
+          <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2 text-sm px-3 md:px-4">
+            <MdAdd size={18}/> <span className="hidden sm:inline">Novo Contato</span>
           </button>
         </div>
       </div>
@@ -943,8 +943,8 @@ export default function Contatos() {
                 <div className="w-8 h-8 border-2 border-primary-400/30 border-t-primary-400 rounded-full animate-spin"/>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-sm" style={{ minWidth: 560 }}>
                   <thead className="bg-surface-900/50">
                     <tr className="text-left text-surface-400 border-b border-surface-700/50">
                       <th className="px-4 py-3 w-10">

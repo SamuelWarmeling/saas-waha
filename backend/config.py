@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     # URL pública do backend (usada pelo WAHA para buscar arquivos de mídia)
     BACKEND_URL: str = "https://api-saas.xeramr.easypanel.host"
 
+    # SMTP (email de verificação)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASS: str = ""
+    SMTP_FROM: str = "noreply@wahasaas.com"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

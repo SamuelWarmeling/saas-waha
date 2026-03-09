@@ -100,18 +100,46 @@ function PlanSummary() {
   )
 }
 
+// ── CPF helpers ────────────────────────────────────────────────────────────────
+
+function maskCPF(value) {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4')
+}
+
+function validarCPF(cpf) {
+  const c = cpf.replace(/\D/g, '')
+  if (c.length !== 11 || /^(\d)\1{10}$/.test(c)) return false
+  let soma = 0
+  for (let i = 0; i < 9; i++) soma += parseInt(c[i]) * (10 - i)
+  let d1 = (soma * 10 % 11) % 10
+  if (d1 !== parseInt(c[9])) return false
+  soma = 0
+  for (let i = 0; i < 10; i++) soma += parseInt(c[i]) * (11 - i)
+  let d2 = (soma * 10 % 11) % 10
+  return d2 === parseInt(c[10])
+}
+
 // ── Registration Form (right column) ──────────────────────────────────────────
 
 function RegistrationForm() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
+  const [form, setForm] = useState({ name: '', email: '', cpf: '', password: '', confirmPassword: '' })
   const [showPass, setShowPass] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const handleChange = (e) => {
-    setForm((f) => ({ ...f, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    if (name === 'cpf') {
+      setForm((f) => ({ ...f, cpf: maskCPF(value) }))
+    } else {
+      setForm((f) => ({ ...f, [name]: value }))
+    }
     if (error) setError('')
   }
 
@@ -121,42 +149,26 @@ function RegistrationForm() {
 
     if (!form.name.trim()) return setError('Informe seu nome completo.')
     if (!form.email.trim()) return setError('Informe seu e-mail.')
+    if (!form.cpf || form.cpf.replace(/\D/g, '').length !== 11) return setError('Informe um CPF completo.')
+    if (!validarCPF(form.cpf)) return setError('CPF inválido. Verifique os dígitos.')
     if (form.password.length < 8) return setError('A senha deve ter no mínimo 8 caracteres.')
     if (form.password !== form.confirmPassword) return setError('As senhas não coincidem.')
 
     setLoading(true)
     try {
-      // 1. Register user
+      // 1. Registrar — retorna {status: "aguardando_verificacao", email}
       await api.post('/api/usuarios/registro', {
-        email: form.email.trim(),
-        password: form.password,
         name: form.name.trim(),
+        email: form.email.trim(),
+        cpf: form.cpf,
+        password: form.password,
       })
 
-      // 2. Login to get token
-      const loginData = new URLSearchParams()
-      loginData.append('username', form.email.trim())
-      loginData.append('password', form.password)
-      const loginRes = await api.post('/api/usuarios/login', loginData, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      })
-      const { access_token, refresh_token } = loginRes.data
-      localStorage.setItem('access_token', access_token)
-      localStorage.setItem('refresh_token', refresh_token)
-
-      // 3. Create payment preference
-      const prefRes = await api.post('/api/pagamentos/criar-preferencia', { plano: 'pro' })
-      const { init_point } = prefRes.data
-
-      // 4. Redirect to Mercado Pago
-      window.location.href = init_point
+      // 2. Redirecionar para verificação de email
+      navigate(`/verificar-email?email=${encodeURIComponent(form.email.trim())}`)
     } catch (err) {
       const msg = err.response?.data?.detail
-      if (msg === 'Email já cadastrado') {
-        setError('Este e-mail já está cadastrado. Tente fazer login.')
-      } else {
-        setError(msg || 'Erro ao criar conta. Tente novamente.')
-      }
+      setError(msg || 'Erro ao criar conta. Tente novamente.')
       setLoading(false)
     }
   }
@@ -201,6 +213,23 @@ function RegistrationForm() {
             required
             className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-600"
           />
+        </div>
+
+        {/* CPF */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1.5">CPF</label>
+          <input
+            type="text"
+            name="cpf"
+            value={form.cpf}
+            onChange={handleChange}
+            placeholder="000.000.000-00"
+            inputMode="numeric"
+            maxLength={14}
+            required
+            className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-600"
+          />
+          <p className="text-gray-600 text-xs mt-1">Usado apenas para identificação única da conta</p>
         </div>
 
         {/* Password */}

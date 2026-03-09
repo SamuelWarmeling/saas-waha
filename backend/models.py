@@ -63,6 +63,8 @@ class User(Base):
     chips_disparo_simultaneo = Column(Integer, default=3, nullable=False, server_default="3")
     gemini_api_key = Column(String(200), nullable=True)
     gemini_habilitado = Column(Boolean, default=True, server_default="true", nullable=False)
+    cpf = Column(String(11), unique=True, nullable=True, index=True)
+    email_verificado = Column(Boolean, default=False, nullable=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -533,6 +535,67 @@ class ContatoLista(Base):
         UniqueConstraint("contato_id", "lista_id", name="uq_contato_lista"),
         Index("ix_contato_listas_lista_id", "lista_id"),
         Index("ix_contato_listas_contato_id", "contato_id"),
+    )
+
+
+class EmailVerificacao(Base):
+    """Código de verificação de e-mail enviado após o cadastro."""
+    __tablename__ = "email_verificacoes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    codigo = Column(String(6), nullable=False)
+    expira_em = Column(DateTime(timezone=True), nullable=False)
+    tentativas = Column(Integer, default=0, nullable=False, server_default="0")
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_email_verificacoes_user_id", "user_id"),
+    )
+
+
+class CadastroIP(Base):
+    """Rate limit de cadastros por IP (máx 3 por dia)."""
+    __tablename__ = "cadastro_ips"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ip = Column(String(45), nullable=False, index=True)
+    data = Column(String(10), nullable=False)  # YYYY-MM-DD
+    contagem = Column(Integer, default=1, nullable=False, server_default="1")
+
+    __table_args__ = (
+        UniqueConstraint("ip", "data", name="uq_cadastro_ip_data"),
+    )
+
+
+class IPBanido(Base):
+    """IPs banidos manualmente pelo admin."""
+    __tablename__ = "ips_banidos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ip = Column(String(45), unique=True, nullable=False, index=True)
+    motivo = Column(String(255), nullable=True)
+    banido_em = Column(DateTime(timezone=True), server_default=func.now())
+    banido_por = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    admin = relationship("User", foreign_keys=[banido_por])
+
+
+class TentativaSuspeita(Base):
+    """Log de tentativas de cadastro bloqueadas por proteções anti-abuso."""
+    __tablename__ = "tentativas_suspeitas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ip = Column(String(45), nullable=True, index=True)
+    tipo = Column(String(30), nullable=False)  # email_bloqueado | cpf_duplicado | rate_limit | ip_banido
+    detalhe = Column(String(500), nullable=True)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_tentativas_suspeitas_ip", "ip"),
+        Index("ix_tentativas_suspeitas_criado_em", "criado_em"),
     )
 
 

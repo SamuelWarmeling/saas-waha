@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, desc
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
@@ -46,6 +46,11 @@ class ChangePlanBody(BaseModel):
 
 class ToggleActiveBody(BaseModel):
     is_active: bool
+
+
+class BanirIPBody(BaseModel):
+    ip: str
+    motivo: Optional[str] = None
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -132,3 +137,98 @@ def toggle_user_active(
     user.is_active = body.is_active
     db.commit()
     return {"ok": True, "is_active": user.is_active}
+
+
+# ── Segurança Anti-Abuso ───────────────────────────────────────────────────────
+
+@router.get("/seguranca/ips")
+def listar_ips_cadastros(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(auth.require_admin),
+):
+    """Retorna IPs com maior contagem de cadastros (possível abuso)."""
+    registros = (
+        db.query(models.CadastroIP)
+        .order_by(desc(models.CadastroIP.contagem))
+        .limit(100)
+        .all()
+    )
+    banidos = {b.ip for b in db.query(models.IPBanido).all()}
+    return [
+        {
+            "ip": r.ip,
+            "data": r.data,
+            "contagem": r.contagem,
+            "banido": r.ip in banidos,
+        }
+        for r in registros
+    ]
+
+
+@router.get("/seguranca/tentativas")
+def listar_tentativas(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(auth.require_admin),
+):
+    """Retorna as 200 tentativas suspeitas mais recentes."""
+    tentativas = (
+        db.query(models.TentativaSuspeita)
+        .order_by(desc(models.TentativaSuspeita.criado_em))
+        .limit(200)
+        .all()
+    )
+    return [
+        {
+            "id": t.id,
+            "ip": t.ip,
+            "tipo": t.tipo,
+            "detalhe": t.detalhe,
+            "criado_em": t.criado_em,
+        }
+        for t in tentativas
+    ]
+
+
+@router.get("/seguranca/banidos")
+def listar_ips_banidos(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(auth.require_admin),
+):
+    banidos = db.query(models.IPBanido).order_by(desc(models.IPBanido.banido_em)).all()
+    return [
+        {
+            "id": b.id,
+            "ip": b.ip,
+            "motivo": b.motivo,
+            "banido_em": b.banido_em,
+        }
+        for b in banidos
+    ]
+
+
+@router.post("/seguranca/banir")
+def banir_ip(
+    body: BanirIPBody,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(auth.require_admin),
+):
+    existing = db.query(models.IPBanido).filter(models.IPBanido.ip == body.ip).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="IP já está banido")
+    db.add(models.IPBanido(ip=body.ip, motivo=body.motivo, banido_por=admin.id))
+    db.commit()
+    return {"ok": True, "ip": body.ip}
+
+
+@router.delete("/seguranca/banir/{ip}")
+def desbanir_ip(
+    ip: str,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(auth.require_admin),
+):
+    banido = db.query(models.IPBanido).filter(models.IPBanido.ip == ip).first()
+    if not banido:
+        raise HTTPException(status_code=404, detail="IP não está banido")
+    db.delete(banido)
+    db.commit()
+    return {"ok": True, "ip": ip}

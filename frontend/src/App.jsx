@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import LandingPage from './pages/LandingPage'
 import Checkout from './pages/Checkout'
+import VerificarEmail from './pages/VerificarEmail'
 import Dashboard from './pages/Dashboard'
 import Campanhas from './pages/Campanhas'
 import Contatos from './pages/Contatos'
@@ -24,6 +25,7 @@ export default function App() {
       {/* Public routes */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/checkout" element={<Checkout />} />
+      <Route path="/verificar-email" element={<VerificarEmail />} />
       <Route path="/login" element={<Login />} />
 
       {/* Protected app routes */}

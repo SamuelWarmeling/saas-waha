@@ -15,6 +15,7 @@ import models  # noqa: F401 – importa para registrar os models
 
 from routes import usuarios, sessoes, contatos, campanhas, pagamentos, grupos
 from routes.listas import router as listas_router
+from routes.auth_verificacao import router as auth_verificacao_router
 from routes.chips import router as chips_router
 from routes.webhook_waha import router as webhook_router
 from routes.funnel import router as funnel_router, funnel_worker_task
@@ -322,6 +323,121 @@ def migrate_chip_health_logs():
                 logger.info("[MIGRATE] Tabela chip_health_logs criada.")
     except Exception as e:
         logger.error(f"[MIGRATE] Erro em migrate_chip_health_logs: {e}")
+
+
+def migrate_anti_abuso():
+    """Cria tabelas e colunas do sistema anti-abuso de trial."""
+    try:
+        with engine.connect() as conn:
+            # Coluna cpf em users
+            for col, dtype, default in [
+                ("cpf", "VARCHAR(11)", "NULL"),
+                ("email_verificado", "BOOLEAN NOT NULL", "DEFAULT FALSE"),
+            ]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = 'users' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em users...")
+                    default_clause = f"DEFAULT {default.replace('DEFAULT ', '')}" if default != "NULL" else ""
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {dtype} {default_clause}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em users.")
+
+            # Unique index em cpf (nullable, então UNIQUE parcial ou apenas unique constraint)
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'users' AND indexname = 'ix_users_cpf')"
+            ))
+            if not result.scalar():
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX ix_users_cpf ON users (cpf) WHERE cpf IS NOT NULL"
+                ))
+                conn.commit()
+                logger.info("[MIGRATE] Índice único ix_users_cpf criado.")
+
+            # Tabela email_verificacoes
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'email_verificacoes')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela email_verificacoes...")
+                conn.execute(text("""
+                    CREATE TABLE email_verificacoes (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        codigo VARCHAR(6) NOT NULL,
+                        expira_em TIMESTAMP WITH TIME ZONE NOT NULL,
+                        tentativas INTEGER NOT NULL DEFAULT 0,
+                        criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """))
+                conn.execute(text(
+                    "CREATE INDEX ix_email_verificacoes_user_id ON email_verificacoes (user_id)"
+                ))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela email_verificacoes criada.")
+
+            # Tabela cadastro_ips
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'cadastro_ips')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela cadastro_ips...")
+                conn.execute(text("""
+                    CREATE TABLE cadastro_ips (
+                        id SERIAL PRIMARY KEY,
+                        ip VARCHAR(45) NOT NULL,
+                        data VARCHAR(10) NOT NULL,
+                        contagem INTEGER NOT NULL DEFAULT 1,
+                        CONSTRAINT uq_cadastro_ip_data UNIQUE (ip, data)
+                    )
+                """))
+                conn.execute(text("CREATE INDEX ix_cadastro_ips_ip ON cadastro_ips (ip)"))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela cadastro_ips criada.")
+
+            # Tabela ips_banidos
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ips_banidos')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela ips_banidos...")
+                conn.execute(text("""
+                    CREATE TABLE ips_banidos (
+                        id SERIAL PRIMARY KEY,
+                        ip VARCHAR(45) NOT NULL UNIQUE,
+                        motivo VARCHAR(255),
+                        banido_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        banido_por INTEGER REFERENCES users(id) ON DELETE SET NULL
+                    )
+                """))
+                conn.execute(text("CREATE INDEX ix_ips_banidos_ip ON ips_banidos (ip)"))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela ips_banidos criada.")
+
+            # Tabela tentativas_suspeitas
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tentativas_suspeitas')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela tentativas_suspeitas...")
+                conn.execute(text("""
+                    CREATE TABLE tentativas_suspeitas (
+                        id SERIAL PRIMARY KEY,
+                        ip VARCHAR(45),
+                        tipo VARCHAR(30) NOT NULL,
+                        detalhe VARCHAR(500),
+                        criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """))
+                conn.execute(text("CREATE INDEX ix_tentativas_suspeitas_ip ON tentativas_suspeitas (ip)"))
+                conn.execute(text("CREATE INDEX ix_tentativas_suspeitas_criado_em ON tentativas_suspeitas (criado_em)"))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela tentativas_suspeitas criada.")
+
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_anti_abuso: {e}")
 
 
 def migrate_listas():
@@ -693,6 +809,7 @@ async def lifespan(app: FastAPI):
             migrate_ban_learning()
             migrate_dispatch_slots()
             migrate_listas()
+            migrate_anti_abuso()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
@@ -772,6 +889,7 @@ app.include_router(aquecimento_router)
 app.include_router(ia_router)
 app.include_router(chips_router)
 app.include_router(listas_router)
+app.include_router(auth_verificacao_router)
 
 
 @app.get("/")

@@ -74,7 +74,7 @@ class CadastroRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
-    cpf: str
+    cpf: Optional[str] = None
 
 
 class VerificarEmailRequest(BaseModel):
@@ -269,17 +269,20 @@ def cadastro_com_stripe(data: CadastroRequest, request: Request, db: Session = D
         db.delete(usuario_existente)
         db.commit()
 
-    # 5. CPF
-    cpf_limpo = re.sub(r'\D', '', data.cpf)
-    if not _validar_cpf(cpf_limpo):
-        raise HTTPException(status_code=400, detail="CPF inválido. Verifique os dígitos informados.")
-    cpf_existente = db.query(models.User).filter(models.User.cpf == cpf_limpo).first()
-    if cpf_existente and cpf_existente.is_active:
-        _registrar_tentativa(db, ip, "cpf_duplicado", f"CPF já cadastrado (email: {data.email})")
-        raise HTTPException(status_code=400, detail="Este CPF já possui uma conta cadastrada.")
-    elif cpf_existente and not cpf_existente.is_active:
-        db.delete(cpf_existente)
-        db.commit()
+    # 5. CPF (opcional)
+    cpf_limpo = None
+    if data.cpf:
+        cpf_limpo = re.sub(r'\D', '', data.cpf)
+        if cpf_limpo and not _validar_cpf(cpf_limpo):
+            raise HTTPException(status_code=400, detail="CPF inválido. Verifique os dígitos informados.")
+        if cpf_limpo:
+            cpf_existente = db.query(models.User).filter(models.User.cpf == cpf_limpo).first()
+            if cpf_existente and cpf_existente.is_active:
+                _registrar_tentativa(db, ip, "cpf_duplicado", f"CPF já cadastrado (email: {data.email})")
+                raise HTTPException(status_code=400, detail="Este CPF já possui uma conta cadastrada.")
+            elif cpf_existente and not cpf_existente.is_active:
+                db.delete(cpf_existente)
+                db.commit()
 
     # 6. Senha
     if len(data.password) < 8:

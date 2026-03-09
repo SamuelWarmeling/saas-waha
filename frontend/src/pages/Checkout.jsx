@@ -185,8 +185,14 @@ function RegistrationForm() {
       }
     } catch (err) {
       console.log('ERRO:', err.message, err.response?.data)
-      // SEMPRE mostrar o erro — nunca deixar tela preta
-      const msg = err.response?.data?.detail || err.message || 'Erro ao criar conta. Tente novamente.'
+      // FastAPI 422 retorna detail como ARRAY — nunca setar objeto no estado (React error #31)
+      const rawDetail = err.response?.data?.detail
+      const msg = Array.isArray(rawDetail)
+        ? rawDetail.map(d => d.msg || JSON.stringify(d)).join(' | ')
+        : (typeof rawDetail === 'string' ? rawDetail : null)
+          || err.response?.data?.message
+          || err.message
+          || 'Erro ao criar conta. Tente novamente.'
       setError(msg)
       setLoading(false)
     }

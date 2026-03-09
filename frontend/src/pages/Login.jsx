@@ -17,12 +17,16 @@ export default function Login() {
     setLoading(true)
     try {
       if (mode === 'register') {
-        const { data } = await api.post('/usuarios/registro', form)
-        localStorage.setItem('access_token', data.access_token)
-        localStorage.setItem('refresh_token', data.refresh_token)
-        localStorage.setItem('user', JSON.stringify(data.user))
+        const { data } = await api.post('/auth/cadastro', {
+          name: form.name,
+          email: form.email,
+          password: form.password,
+        })
+        if (data.access_token) localStorage.setItem('access_token', data.access_token)
+        if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token)
+        if (data.user) localStorage.setItem('user', JSON.stringify(data.user))
         toast.success('Conta criada! Trial de 7 dias ativo.')
-        navigate('/dashboard')
+        window.location.href = data.checkout_url || data.redirect || '/dashboard'
       } else {
         const params = new URLSearchParams()
         params.append('username', form.email)
@@ -37,7 +41,11 @@ export default function Login() {
         navigate('/dashboard')
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Erro ao autenticar')
+      const rawDetail = err.response?.data?.detail
+      const msg = Array.isArray(rawDetail)
+        ? rawDetail.map(d => d.msg || JSON.stringify(d)).join(' | ')
+        : (typeof rawDetail === 'string' ? rawDetail : null) || err.message || 'Erro ao autenticar'
+      toast.error(msg)
     } finally {
       setLoading(false)
     }

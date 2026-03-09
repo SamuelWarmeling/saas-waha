@@ -16,6 +16,7 @@ import models  # noqa: F401 – importa para registrar os models
 from routes import usuarios, sessoes, contatos, campanhas, pagamentos, grupos
 from routes.listas import router as listas_router
 from routes.auth_verificacao import router as auth_verificacao_router
+from routes.stripe_webhook import router as stripe_webhook_router
 from routes.chips import router as chips_router
 from routes.webhook_waha import router as webhook_router
 from routes.funnel import router as funnel_router, funnel_worker_task
@@ -323,6 +324,30 @@ def migrate_chip_health_logs():
                 logger.info("[MIGRATE] Tabela chip_health_logs criada.")
     except Exception as e:
         logger.error(f"[MIGRATE] Erro em migrate_chip_health_logs: {e}")
+
+
+def migrate_stripe_columns():
+    """Adiciona colunas do Stripe e trial na tabela users."""
+    try:
+        with engine.connect() as conn:
+            for col, dtype, default in [
+                ("stripe_customer_id", "VARCHAR(100)", "NULL"),
+                ("stripe_subscription_id", "VARCHAR(100)", "NULL"),
+                ("trial_ativo", "BOOLEAN NOT NULL", "DEFAULT FALSE"),
+                ("trial_expira_em", "TIMESTAMP WITH TIME ZONE", "NULL"),
+            ]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = 'users' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em users...")
+                    default_clause = f"DEFAULT {default.replace('DEFAULT ', '')}" if default != "NULL" else ""
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {dtype} {default_clause}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em users.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_stripe_columns: {e}")
 
 
 def migrate_anti_abuso():
@@ -810,6 +835,7 @@ async def lifespan(app: FastAPI):
             migrate_dispatch_slots()
             migrate_listas()
             migrate_anti_abuso()
+            migrate_stripe_columns()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
@@ -890,6 +916,7 @@ app.include_router(ia_router)
 app.include_router(chips_router)
 app.include_router(listas_router)
 app.include_router(auth_verificacao_router)
+app.include_router(stripe_webhook_router)
 
 
 @app.get("/")

@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     MP_PUBLIC_KEY: str = ""
     MP_WEBHOOK_SECRET: str = ""
 
+    # Stripe
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_ID: str = ""  # Price ID do plano Pro no Stripe (ex: price_xxx)
+
     # Planos
     PLAN_STARTER_ID: str = "starter"
     PLAN_PRO_ID: str = "pro"

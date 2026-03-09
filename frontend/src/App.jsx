@@ -3,6 +3,7 @@ import Login from './pages/Login'
 import LandingPage from './pages/LandingPage'
 import Checkout from './pages/Checkout'
 import VerificarEmail from './pages/VerificarEmail'
+import PagamentoSucesso from './pages/PagamentoSucesso'
 import Dashboard from './pages/Dashboard'
 import Campanhas from './pages/Campanhas'
 import Contatos from './pages/Contatos'
@@ -26,6 +27,7 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/checkout" element={<Checkout />} />
       <Route path="/verificar-email" element={<VerificarEmail />} />
+      <Route path="/pagamento/sucesso" element={<PagamentoSucesso />} />
       <Route path="/login" element={<Login />} />
 
       {/* Protected app routes */}

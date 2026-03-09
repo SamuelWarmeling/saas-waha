@@ -66,3 +66,53 @@ def enviar_email_verificacao(email: str, nome: str, codigo: str) -> bool:
     except Exception as e:
         logger.error(f"[EMAIL] Erro ao enviar para {email}: {e}")
         return False
+
+
+def enviar_email_boas_vindas(email: str, nome: str, trial_expira: str) -> bool:
+    """Envia email de boas-vindas após ativação do trial via Stripe."""
+    if not settings.SMTP_USER or not settings.SMTP_PASS:
+        logger.info(f"[EMAIL] Boas-vindas (SMTP não configurado) para {email}")
+        return True
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "🎉 Seu trial de 7 dias foi ativado — WahaSaaS"
+        msg["From"] = settings.SMTP_FROM
+        msg["To"] = email
+
+        html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#111827;font-family:Arial,sans-serif;">
+  <div style="max-width:480px;margin:40px auto;background:#1f2937;border-radius:12px;overflow:hidden;border:1px solid #374151;">
+    <div style="background:linear-gradient(135deg,#7c3aed,#6d28d9);padding:24px;text-align:center;">
+      <h1 style="color:white;margin:0;font-size:22px;font-weight:bold;">WahaSaaS</h1>
+    </div>
+    <div style="padding:32px;">
+      <p style="color:#d1d5db;margin:0 0 6px;font-size:18px;font-weight:bold;">🎉 Bem-vindo, {nome}!</p>
+      <p style="color:#9ca3af;margin:12px 0;font-size:14px;">Seu trial gratuito de 7 dias foi ativado com sucesso.</p>
+      <div style="background:#111827;border-radius:12px;padding:20px;margin:20px 0;border:1px solid #374151;">
+        <p style="color:#a78bfa;font-size:14px;margin:0 0 8px;font-weight:bold;">✅ Você tem acesso completo até:</p>
+        <p style="color:white;font-size:20px;margin:0;font-weight:bold;">{trial_expira}</p>
+      </div>
+      <p style="color:#9ca3af;font-size:13px;margin:0 0 6px;">💳 Após o trial, seu cartão será cobrado automaticamente.</p>
+      <p style="color:#6b7280;font-size:13px;margin:0;">Cancele quando quiser, sem burocracia.</p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASS)
+            server.sendmail(settings.SMTP_FROM, [email], msg.as_string())
+
+        logger.info(f"[EMAIL] Boas-vindas enviado para {email}")
+        return True
+
+    except Exception as e:
+        logger.error(f"[EMAIL] Erro ao enviar boas-vindas para {email}: {e}")
+        return False

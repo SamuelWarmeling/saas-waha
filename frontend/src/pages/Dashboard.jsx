@@ -91,6 +91,7 @@ export default function Dashboard() {
   const [funnelStats, setFunnelStats] = useState(null)
   const [aquecStats, setAquecStats] = useState(null)
   const [chipRiscos, setChipRiscos] = useState([])
+  const [trialInfo, setTrialInfo] = useState(null)
   const activityRef = useRef(null)
   const sessionsRef = useRef(null)
   const riscosRef   = useRef(null)
@@ -105,6 +106,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadStats()
+    api.get('/auth/status').then(r => { if (r.data.trial_ativo) setTrialInfo(r.data) }).catch(() => {})
     api.get('/campanhas?page_size=5').then(r => setCampaigns(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     loadAtividades()
     api.get('/funnel/stats').then(r => setFunnelStats(r.data)).catch(() => {})
@@ -148,6 +150,28 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+
+      {/* ── Banner de trial gratuito ─────────────────────────────────────────── */}
+      {trialInfo && (
+        <div className="rounded-2xl border border-green-500/40 bg-green-950/20 px-5 py-4 flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <span className="text-2xl flex-shrink-0">🎁</span>
+            <div className="min-w-0">
+              <p className="font-bold text-green-300 text-sm">
+                Trial gratuito: {trialInfo.trial_dias_restantes ?? '?'} dia(s) restante(s)
+              </p>
+              {trialInfo.trial_expira_em && (
+                <p className="text-xs text-green-400/70 mt-0.5">
+                  Seu cartão será cobrado em{' '}
+                  {new Date(trialInfo.trial_expira_em).toLocaleDateString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                  })}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Banners de risco de ban ──────────────────────────────────────────── */}
       {chipRiscos.filter(r => r.risco > 60).map(r => (

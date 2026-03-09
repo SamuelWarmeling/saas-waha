@@ -75,6 +75,8 @@ class UserOut(BaseModel):
     plan_expires_at: Optional[datetime]
     is_active: bool
     is_admin: bool
+    trial_ativo: bool = False
+    trial_expira_em: Optional[datetime] = None
     created_at: datetime
 
     class Config:

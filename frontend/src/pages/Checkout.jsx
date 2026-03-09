@@ -156,16 +156,23 @@ function RegistrationForm() {
 
     setLoading(true)
     try {
-      // 1. Registrar — retorna {status: "aguardando_verificacao", email}
-      await api.post('/api/usuarios/registro', {
+      // POST /api/auth/cadastro → retorna {checkout_url, access_token, refresh_token, user}
+      const res = await api.post('/auth/cadastro', {
         name: form.name.trim(),
         email: form.email.trim(),
         cpf: form.cpf,
         password: form.password,
       })
 
-      // 2. Redirecionar para verificação de email
-      navigate(`/verificar-email?email=${encodeURIComponent(form.email.trim())}`)
+      const { checkout_url, access_token, refresh_token, user } = res.data
+
+      // Salva tokens para polling na página de sucesso
+      localStorage.setItem('access_token', access_token)
+      localStorage.setItem('refresh_token', refresh_token)
+      localStorage.setItem('user', JSON.stringify(user))
+
+      // Redireciona para o checkout do Stripe
+      window.location.href = checkout_url
     } catch (err) {
       const msg = err.response?.data?.detail
       setError(msg || 'Erro ao criar conta. Tente novamente.')
@@ -289,10 +296,10 @@ function RegistrationForm() {
           {loading ? (
             <span className="flex items-center justify-center gap-2">
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-              Processando...
+              Redirecionando para pagamento seguro...
             </span>
           ) : (
-            'Criar conta e pagar →'
+            'Criar conta e começar trial grátis →'
           )}
         </button>
 

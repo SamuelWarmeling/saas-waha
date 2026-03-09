@@ -65,6 +65,10 @@ class User(Base):
     gemini_habilitado = Column(Boolean, default=True, server_default="true", nullable=False)
     cpf = Column(String(11), unique=True, nullable=True, index=True)
     email_verificado = Column(Boolean, default=False, nullable=False, server_default="false")
+    stripe_customer_id = Column(String(100), nullable=True)
+    stripe_subscription_id = Column(String(100), nullable=True)
+    trial_ativo = Column(Boolean, default=False, nullable=False, server_default="false")
+    trial_expira_em = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

@@ -158,7 +158,7 @@ function RegistrationForm() {
     console.log('INICIANDO CADASTRO')
     setLoading(true)
     try {
-      const res = await api.post('/auth/cadastro', {
+      const res = await api.post('/usuarios/registro', {
         name: form.name.trim(),
         email: form.email.trim(),
         cpf: form.cpf,

@@ -239,6 +239,8 @@ export default function Admin() {
   const [stats, setStats] = useState(null)
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [actionLoading, setActionLoading] = useState(null) // email being acted on
 
   // Guard: only admins
   useEffect(() => {
@@ -289,6 +291,26 @@ export default function Admin() {
       toast.error('Erro ao alterar status')
     }
   }
+
+  async function gerenciarPlano(email, tipo) {
+    setActionLoading(email + tipo)
+    try {
+      const res = await api.post('/admin/ativar-plano', { email, tipo })
+      const labels = { vitalicio: 'Plano vitalício ativado ✓', trial: 'Trial 7 dias ativado ✓', bloquear: 'Acesso bloqueado' }
+      toast.success(labels[tipo] || 'Feito')
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao executar ação')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const filteredUsers = users.filter(u =>
+    !search.trim() ||
+    u.email.toLowerCase().includes(search.toLowerCase()) ||
+    u.name.toLowerCase().includes(search.toLowerCase())
+  )
 
   if (loading) {
     return (
@@ -342,82 +364,90 @@ export default function Admin() {
 
       {/* Tabela de usuários */}
       <div className="glass-card overflow-x-auto">
-        <h2 className="text-sm font-semibold text-surface-300 mb-6">Administrar Usuários</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+          <h2 className="text-sm font-semibold text-surface-300 flex-1">Gerenciar Usuários</h2>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por nome ou email..."
+            className="bg-surface-900/50 border border-surface-700 text-surface-100 rounded-lg px-3 py-2 text-sm w-full sm:w-64 focus:ring-1 focus:ring-primary-500 outline-none"
+          />
+        </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-surface-400 border-b border-surface-700/50">
-              <th className="font-medium pb-3 pr-4">ID</th>
               <th className="font-medium pb-3 pr-4">Nome & Email</th>
               <th className="font-medium pb-3 pr-4">Plano</th>
-              <th className="font-medium pb-3 pr-4">Status & Métricas</th>
-              <th className="font-medium pb-3 text-right">Ações</th>
+              <th className="font-medium pb-3 pr-4">Status</th>
+              <th className="font-medium pb-3 pr-4">Expira em</th>
+              <th className="font-medium pb-3 text-right">Ações rápidas</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-800/50">
-            {users.map(u => (
+            {filteredUsers.map(u => (
               <tr key={u.id} className="hover:bg-surface-800/30 transition-colors">
-                <td className="py-4 pr-4 text-surface-500 font-mono text-xs">{u.id}</td>
                 <td className="py-4 pr-4">
-                  <div className="flex items-center gap-2">
-                    <p className="text-surface-100 font-medium">
-                      {u.name}
-                      {u.is_admin && <span className="ml-2 badge-primary">admin</span>}
-                    </p>
-                  </div>
-                  <p className="text-surface-400 text-xs mt-0.5">{u.email}</p>
+                  <p className="text-surface-100 font-medium">
+                    {u.name}
+                    {u.is_admin && <span className="ml-2 badge-primary">admin</span>}
+                  </p>
+                  <p className="text-surface-400 text-xs mt-0.5 font-mono">{u.email}</p>
                 </td>
                 <td className="py-4 pr-4">
-                  <div className="flex flex-col gap-1.5">
-                    <select
-                      value={u.plan}
-                      onChange={e => changePlan(u.id, e.target.value)}
-                      className="bg-surface-900/50 border border-surface-700 text-surface-100 text-xs rounded-lg px-2 py-1.5 w-max focus:ring-1 focus:ring-primary-500 outline-none"
-                    >
-                      {PLANS.map(p => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] text-surface-500 font-mono">
-                      Vence em: {u.plan_expires_at ? new Date(u.plan_expires_at).toLocaleDateString('pt-BR') : '—'}
-                    </span>
-                  </div>
+                  <span className="text-surface-200 capitalize">{u.plan}</span>
                 </td>
                 <td className="py-4 pr-4">
-                  <div className="flex flex-col gap-2">
-                    <span className={`w-max ${u.is_active ? 'badge-green' : 'badge-red'}`}>
-                      {u.is_active ? 'Ativo' : 'Inativo'}
-                    </span>
-                    <div className="flex items-center gap-3 text-[11px] text-surface-400 font-medium">
-                      <span className="flex items-center gap-1" title="Sessões">
-                        <MdPhoneAndroid className="text-primary-500" /> {u.sessions_count}
-                      </span>
-                      <span className="flex items-center gap-1" title="Contatos">
-                        <MdPeople className="text-blue-500" /> {u.contacts_count}
-                      </span>
-                    </div>
-                  </div>
+                  <span className={`w-max ${u.is_active ? 'badge-green' : 'badge-red'}`}>
+                    {u.is_active ? 'Ativo' : 'Bloqueado'}
+                  </span>
+                </td>
+                <td className="py-4 pr-4 text-xs font-mono text-surface-400">
+                  {u.plan_expires_at
+                    ? new Date(u.plan_expires_at).getFullYear() >= 2099
+                      ? '♾ Vitalício'
+                      : new Date(u.plan_expires_at).toLocaleDateString('pt-BR')
+                    : '—'}
                 </td>
                 <td className="py-4 text-right">
-                  <button
-                    onClick={() => toggleActive(u.id, u.is_active)}
-                    className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all ${u.is_active
-                        ? 'bg-red-900/20 text-red-400 hover:bg-red-600 hover:text-white border border-red-500/20'
-                        : 'bg-primary-900/20 text-primary-400 hover:bg-primary-600 hover:text-white border border-primary-500/20'
-                      }`}
-                  >
-                    {u.is_active ? 'Desativar' : 'Ativar Conta'}
-                  </button>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      disabled={actionLoading === u.email + 'vitalicio'}
+                      onClick={() => gerenciarPlano(u.email, 'vitalicio')}
+                      className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all bg-green-900/20 text-green-400 hover:bg-green-600 hover:text-white border border-green-500/20 disabled:opacity-40"
+                      title="Ativar plano vitalício (expira em 2099)"
+                    >
+                      {actionLoading === u.email + 'vitalicio' ? '...' : '♾ Vitalício'}
+                    </button>
+                    <button
+                      disabled={actionLoading === u.email + 'trial'}
+                      onClick={() => gerenciarPlano(u.email, 'trial')}
+                      className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all bg-blue-900/20 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/20 disabled:opacity-40"
+                      title="Ativar trial de 7 dias"
+                    >
+                      {actionLoading === u.email + 'trial' ? '...' : '7d Trial'}
+                    </button>
+                    <button
+                      disabled={actionLoading === u.email + 'bloquear'}
+                      onClick={() => gerenciarPlano(u.email, 'bloquear')}
+                      className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all bg-red-900/20 text-red-400 hover:bg-red-600 hover:text-white border border-red-500/20 disabled:opacity-40"
+                      title="Bloquear acesso"
+                    >
+                      {actionLoading === u.email + 'bloquear' ? '...' : '🚫 Bloquear'}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {users.length === 0 && (
+        {filteredUsers.length === 0 && (
           <div className="py-12 flex flex-col items-center justify-center text-center">
             <div className="w-16 h-16 rounded-full bg-surface-800/50 flex items-center justify-center mb-4">
               <MdPeople className="text-3xl text-surface-500" />
             </div>
-            <p className="text-surface-400 text-sm font-medium">Nenhum usuário encontrado.</p>
+            <p className="text-surface-400 text-sm font-medium">
+              {search ? `Nenhum usuário encontrado para "${search}"` : 'Nenhum usuário encontrado.'}
+            </p>
           </div>
         )}
       </div>

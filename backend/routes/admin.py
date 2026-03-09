@@ -55,8 +55,8 @@ class BanirIPBody(BaseModel):
 
 class AtivarPlanoBody(BaseModel):
     email: str
+    tipo: str  # "vitalicio" | "trial" | "bloquear"
     plan: str = "pro"
-    dias: Optional[int] = None  # None = vitalício (2099)
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -151,34 +151,51 @@ def ativar_plano_por_email(
     db: Session = Depends(get_db),
     _admin: models.User = Depends(auth.require_admin),
 ):
-    """Ativa conta + plano por e-mail. dias=None = vitalício (expira em 2099)."""
-    if body.plan not in PLANS:
-        raise HTTPException(status_code=400, detail=f"Plano inválido. Opções: {list(PLANS.keys())}")
+    """
+    Gerencia plano por e-mail.
+    tipo="vitalicio" → ativa com plano pro até 2099
+    tipo="trial"     → ativa trial de 7 dias
+    tipo="bloquear"  → desativa a conta
+    """
+    if body.tipo not in ("vitalicio", "trial", "bloquear"):
+        raise HTTPException(status_code=400, detail="tipo deve ser 'vitalicio', 'trial' ou 'bloquear'")
 
     user = db.query(models.User).filter(models.User.email == body.email).first()
     if not user:
         raise HTTPException(status_code=404, detail=f"Usuário '{body.email}' não encontrado")
 
-    if body.dias is None:
-        expires = datetime(2099, 12, 31, tzinfo=timezone.utc)
-    else:
-        expires = datetime.now(timezone.utc) + timedelta(days=body.dias)
+    now = datetime.now(timezone.utc)
 
-    user.is_active = True
-    user.trial_ativo = False
-    user.trial_expira_em = None
-    user.plan = models.PlanType(body.plan)
-    user.plan_expires_at = expires
-    user.chips_disparo_simultaneo = PLANS[body.plan].get("max_sessions", 3)
+    if body.tipo == "vitalicio":
+        plano = body.plan if body.plan in PLANS else "pro"
+        user.is_active = True
+        user.trial_ativo = False
+        user.trial_expira_em = None
+        user.plan = models.PlanType(plano)
+        user.plan_expires_at = datetime(2099, 12, 31, tzinfo=timezone.utc)
+        user.chips_disparo_simultaneo = PLANS[plano].get("max_sessions", 3)
+
+    elif body.tipo == "trial":
+        user.is_active = True
+        user.trial_ativo = True
+        user.trial_expira_em = now + timedelta(days=7)
+        user.plan = models.PlanType("pro")
+        user.plan_expires_at = now + timedelta(days=7)
+        user.chips_disparo_simultaneo = PLANS["pro"].get("max_sessions", 3)
+
+    elif body.tipo == "bloquear":
+        user.is_active = False
+
     db.commit()
+    db.refresh(user)
 
     return {
         "ok": True,
         "email": user.email,
-        "plan": user.plan.value,
-        "plan_expires_at": user.plan_expires_at.isoformat(),
+        "tipo": body.tipo,
         "is_active": user.is_active,
-        "chips_disparo_simultaneo": user.chips_disparo_simultaneo,
+        "plan": user.plan.value,
+        "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,
     }
 
 

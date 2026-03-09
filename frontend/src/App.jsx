@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
+import LandingPage from './pages/LandingPage'
+import Checkout from './pages/Checkout'
 import Dashboard from './pages/Dashboard'
 import Campanhas from './pages/Campanhas'
 import Contatos from './pages/Contatos'
@@ -19,26 +21,30 @@ function PrivateRoute({ children }) {
 export default function App() {
   return (
     <Routes>
+      {/* Public routes */}
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/checkout" element={<Checkout />} />
       <Route path="/login" element={<Login />} />
+
+      {/* Protected app routes */}
       <Route
-        path="/"
         element={
           <PrivateRoute>
             <Layout />
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="campanhas" element={<Campanhas />} />
-        <Route path="contatos" element={<Contatos />} />
-        <Route path="sessoes" element={<Sessoes />} />
-        <Route path="grupos" element={<Grupos />} />
-        <Route path="funil" element={<Funil />} />
-        <Route path="aquecimento" element={<Aquecimento />} />
-        <Route path="configuracoes" element={<Configuracoes />} />
-        <Route path="admin" element={<Admin />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/campanhas" element={<Campanhas />} />
+        <Route path="/contatos" element={<Contatos />} />
+        <Route path="/sessoes" element={<Sessoes />} />
+        <Route path="/grupos" element={<Grupos />} />
+        <Route path="/funil" element={<Funil />} />
+        <Route path="/aquecimento" element={<Aquecimento />} />
+        <Route path="/configuracoes" element={<Configuracoes />} />
+        <Route path="/admin" element={<Admin />} />
       </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

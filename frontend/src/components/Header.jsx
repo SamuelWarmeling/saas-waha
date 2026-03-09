@@ -10,11 +10,7 @@ export default function Header({ onMenuOpen }) {
   }, [])
 
   const isAdmin = user?.is_admin ?? false
-  const isPlanActive = !!(
-    user?.is_active &&
-    user?.plan_expires_at &&
-    new Date(user.plan_expires_at) > new Date()
-  )
+  const isPlanActive = !!(user?.is_active)
 
   const planLabel = {
     starter: 'Starter',

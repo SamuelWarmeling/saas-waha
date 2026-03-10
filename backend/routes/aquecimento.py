@@ -123,12 +123,27 @@ def get_meta_adaptacao(dia: int) -> int:
     return 30      # dia 7: pré-liberação
 
 
+def _active_session_ids_sq(db: Session):
+    """Subquery: IDs de sessões com AquecimentoConfig ativo ou em manutenção."""
+    return (
+        db.query(models.AquecimentoConfig.session_id)
+        .filter(models.AquecimentoConfig.status.in_([
+            models.AquecimentoStatus.ativo,
+            models.AquecimentoStatus.manutencao,
+        ]))
+        .subquery()
+    )
+
+
 def get_destinos_virtuais(db: Session, session_id: int) -> List[str]:
-    """Físico → busca chips VIRTUAIS conectados para enviar mensagem."""
-    # Diagnóstico: todos os chips virtuais (sem filtro de status/phone)
+    """Físico → busca chips VIRTUAIS com aquecimento ativo no pool global."""
+    active_sq = _active_session_ids_sq(db)
+
+    # Diagnóstico: virtuais com aquecimento ativo (antes de filtrar status/phone)
     todos_virtuais = (
         db.query(models.WhatsAppSession)
         .filter(
+            models.WhatsAppSession.id.in_(active_sq),
             models.WhatsAppSession.tipo_chip == "virtual",
             models.WhatsAppSession.id != session_id,
         )
@@ -142,11 +157,12 @@ def get_destinos_virtuais(db: Session, session_id: int) -> List[str]:
                 f"phone={s.phone_number or 'NULL'}"
             )
     else:
-        logger.warning("🔥 Pool: NENHUM chip virtual cadastrado no sistema (tipo_chip='virtual')")
+        logger.warning("🔥 Pool: NENHUM chip virtual com aquecimento ativo no sistema")
 
     sessoes = (
         db.query(models.WhatsAppSession)
         .filter(
+            models.WhatsAppSession.id.in_(active_sq),
             models.WhatsAppSession.status == models.SessionStatus.connected,
             models.WhatsAppSession.id != session_id,
             models.WhatsAppSession.phone_number.isnot(None),
@@ -155,7 +171,7 @@ def get_destinos_virtuais(db: Session, session_id: int) -> List[str]:
         .all()
     )
     numeros = [s.phone_number for s in sessoes if s.phone_number]
-    logger.info(f"🔥 Pool: encontrei {len(numeros)} chips virtuais disponíveis (connected + phone preenchido)")
+    logger.info(f"🔥 Pool: encontrei {len(numeros)} chips virtuais disponíveis (aquecimento ativo + connected + phone)")
 
     # Fallback: env numbers (tratados como virtuais externos)
     if not numeros and settings.AQUECIMENTO_NUMBERS:
@@ -167,11 +183,14 @@ def get_destinos_virtuais(db: Session, session_id: int) -> List[str]:
 
 
 def count_fisicos_disponiveis(db: Session, session_id: int) -> int:
-    """Virtual → conta chips FÍSICOS conectados disponíveis para enviar."""
-    # Diagnóstico: todos os chips físicos (sem filtro de status/phone)
+    """Virtual → conta chips FÍSICOS com aquecimento ativo disponíveis para enviar."""
+    active_sq = _active_session_ids_sq(db)
+
+    # Diagnóstico: físicos com aquecimento ativo
     todos_fisicos = (
         db.query(models.WhatsAppSession)
         .filter(
+            models.WhatsAppSession.id.in_(active_sq),
             models.WhatsAppSession.tipo_chip == "fisico",
             models.WhatsAppSession.id != session_id,
         )
@@ -185,11 +204,12 @@ def count_fisicos_disponiveis(db: Session, session_id: int) -> int:
                 f"phone={s.phone_number or 'NULL'}"
             )
     else:
-        logger.warning("🔥 Pool: NENHUM chip físico cadastrado no sistema (tipo_chip='fisico')")
+        logger.warning("🔥 Pool: NENHUM chip físico com aquecimento ativo no sistema")
 
     count = (
         db.query(models.WhatsAppSession)
         .filter(
+            models.WhatsAppSession.id.in_(active_sq),
             models.WhatsAppSession.status == models.SessionStatus.connected,
             models.WhatsAppSession.id != session_id,
             models.WhatsAppSession.phone_number.isnot(None),
@@ -197,7 +217,7 @@ def count_fisicos_disponiveis(db: Session, session_id: int) -> int:
         )
         .count()
     )
-    logger.info(f"🔥 Pool: encontrei {count} chips físicos disponíveis (connected + phone preenchido)")
+    logger.info(f"🔥 Pool: encontrei {count} chips físicos disponíveis (aquecimento ativo + connected + phone)")
     return count
 
 
@@ -430,10 +450,12 @@ def pool_status(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Retorna contagem de chips físicos e virtuais conectados no pool global."""
+    """Pool global = apenas chips com AquecimentoConfig ativo ou em manutenção."""
+    active_sq = _active_session_ids_sq(db)
     fisicos = (
         db.query(models.WhatsAppSession)
         .filter(
+            models.WhatsAppSession.id.in_(active_sq),
             models.WhatsAppSession.status == models.SessionStatus.connected,
             models.WhatsAppSession.phone_number.isnot(None),
             models.WhatsAppSession.tipo_chip == "fisico",
@@ -443,6 +465,7 @@ def pool_status(
     virtuais = (
         db.query(models.WhatsAppSession)
         .filter(
+            models.WhatsAppSession.id.in_(active_sq),
             models.WhatsAppSession.status == models.SessionStatus.connected,
             models.WhatsAppSession.phone_number.isnot(None),
             models.WhatsAppSession.tipo_chip == "virtual",

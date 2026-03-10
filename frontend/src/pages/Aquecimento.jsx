@@ -65,43 +65,64 @@ const PLANOS = [
 
 // ── Modal Iniciar Aquecimento ─────────────────────────────────────────────────
 
-function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
-  const [sessionId, setSessionId] = useState(sessoes[0]?.id ?? '')
+function ModalIniciar({ sessoes, aquecimentos, poolStatus, onSave, onClose }) {
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const [diasTotal, setDiasTotal] = useState(14)
   const [usarIa, setUsarIa] = useState(true)
   const [manutencaoAtiva, setManutencaoAtiva] = useState(true)
   const [origemChip, setOrigemChip] = useState('novo')
   const [saving, setSaving] = useState(false)
 
-  const sessaoSelecionada = sessoes.find(s => s.id === Number(sessionId))
-  const tipoChip = sessaoSelecionada?.tipo_chip ?? 'fisico'
-  const isVirtual = tipoChip === 'virtual'
+  // IDs que já têm aquecimento ativo/pausado/manutenção
+  const idsComAquecimento = new Set(
+    (aquecimentos || [])
+      .filter(a => ['ativo', 'pausado', 'manutencao'].includes(a.status))
+      .map(a => a.session_id)
+  )
+
   const isVeterano = origemChip === 'pessoal_antigo'
   const isPreAquecido = origemChip === 'pre_aquecido'
 
+  const selectedList = sessoes.filter(s => selectedIds.has(s.id))
+  const nFisicos = selectedList.filter(s => s.tipo_chip === 'fisico').length
+  const nVirtuais = selectedList.filter(s => s.tipo_chip === 'virtual').length
+
+  function toggleSessao(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   async function confirmar() {
-    if (!sessionId) { toast.error('Selecione um chip'); return }
+    if (selectedIds.size === 0) { toast.error('Selecione pelo menos um chip'); return }
     setSaving(true)
-    try {
-      await api.post('/aquecimento', {
-        session_id: Number(sessionId),
-        dias_total: isPreAquecido ? 7 : diasTotal,
-        usar_ia: usarIa,
-        manutencao_ativa: manutencaoAtiva,
-        origem_chip: origemChip,
-      })
-      if (isVeterano) {
-        toast.success('⭐ Chip marcado como Veterano! 150 msgs/dia liberados.')
-      } else if (isPreAquecido) {
-        toast.success('🛍️ Adaptação de 7 dias iniciada!')
-      } else {
-        toast.success('Aquecimento iniciado!')
+    let ok = 0, erros = 0
+    for (const id of selectedIds) {
+      try {
+        await api.post('/aquecimento', {
+          session_id: id,
+          dias_total: isPreAquecido ? 7 : diasTotal,
+          usar_ia: usarIa,
+          manutencao_ativa: manutencaoAtiva,
+          origem_chip: origemChip,
+        })
+        ok++
+      } catch (e) {
+        erros++
+        const detail = e.response?.data?.detail || 'Erro'
+        const nome = sessoes.find(s => s.id === id)?.name ?? id
+        toast.error(`${nome}: ${detail}`)
       }
+    }
+    setSaving(false)
+    if (ok > 0) {
+      if (isVeterano) toast.success(`⭐ ${ok} chip(s) marcado(s) como Veterano!`)
+      else if (isPreAquecido) toast.success(`🛍️ Adaptação iniciada para ${ok} chip(s)!`)
+      else toast.success(`🔥 Aquecimento iniciado para ${ok} chip(s)!`)
       onSave()
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Erro ao iniciar aquecimento')
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -120,22 +141,60 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
         </div>
 
         <div className="px-6 py-5 space-y-6">
-          {/* Seleção de chip */}
+          {/* Seleção de chips — checkboxes */}
           <div>
-            <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider block mb-2">
-              Chip WhatsApp para aquecer
-            </label>
-            <select className="input w-full" value={sessionId} onChange={e => setSessionId(e.target.value)}>
-              {sessoes.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.tipo_chip === 'virtual' ? '💻' : '📱'} {s.name}{s.phone_number ? ` · ${s.phone_number}` : ''}
-                  {s.status !== 'connected' ? ' ⚠️ offline' : ' ✅'}
-                </option>
-              ))}
-            </select>
-            {sessaoSelecionada && sessaoSelecionada.status !== 'connected' && (
-              <p className="text-xs text-orange-400 mt-1.5">⚠️ Este chip não está conectado. Conecte-o antes de iniciar o aquecimento.</p>
-            )}
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider">
+                Selecione quais chips vão aquecer
+              </label>
+              {selectedIds.size > 0 && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6' }}>
+                  {selectedIds.size} selecionado{selectedIds.size > 1 ? 's' : ''}
+                  {nFisicos > 0 && ` · ${nFisicos} físico${nFisicos > 1 ? 's' : ''}`}
+                  {nVirtuais > 0 && ` · ${nVirtuais} virtual${nVirtuais > 1 ? 'is' : ''}`}
+                </span>
+              )}
+            </div>
+            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+              {sessoes.length === 0 && (
+                <p className="text-xs text-surface-500 text-center py-4">Nenhuma sessão cadastrada</p>
+              )}
+              {sessoes.map(s => {
+                const jaAtivo = idsComAquecimento.has(s.id)
+                const offline = s.status !== 'connected' && s.status !== 'CONNECTED'
+                const disabled = jaAtivo
+                const checked = selectedIds.has(s.id)
+                return (
+                  <label
+                    key={s.id}
+                    className="flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-all select-none"
+                    style={{
+                      borderColor: checked ? '#9D4EDD' : 'rgba(255,255,255,0.07)',
+                      background: checked ? 'rgba(157,78,221,0.08)' : disabled ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.02)',
+                      opacity: disabled ? 0.5 : 1,
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                    }}
+                    onClick={e => { if (!disabled) { e.preventDefault(); toggleSessao(s.id) } }}
+                  >
+                    <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors"
+                      style={{ borderColor: checked ? '#9D4EDD' : 'rgba(255,255,255,0.2)', background: checked ? '#9D4EDD' : 'transparent' }}>
+                      {checked && <svg width="12" height="9" viewBox="0 0 12 9" fill="none"><path d="M1 4L4.5 7.5L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <span className="text-lg flex-shrink-0">{s.tipo_chip === 'virtual' ? '💻' : '📱'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-surface-100 truncate">{s.name}</p>
+                      <p className="text-xs text-surface-500">
+                        {s.phone_number || 'sem phone'} · {s.tipo_chip === 'virtual' ? 'virtual' : 'físico'}
+                        {offline && <span className="text-orange-400"> · offline</span>}
+                        {jaAtivo && <span className="text-purple-400"> · aquecimento ativo</span>}
+                      </p>
+                    </div>
+                    {!offline && !jaAtivo && <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />}
+                    {offline && <div className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0" />}
+                  </label>
+                )
+              })}
+            </div>
           </div>
 
           {/* Origem do chip */}
@@ -168,42 +227,19 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
             </div>
           </div>
 
-          {/* Tipo do chip detectado */}
-          {sessaoSelecionada && (
-            <div className="rounded-xl border p-4 flex items-start gap-3" style={{
-              borderColor: isVirtual ? 'rgba(59,130,246,0.3)' : 'rgba(34,197,94,0.3)',
-              background: isVirtual ? 'rgba(59,130,246,0.06)' : 'rgba(34,197,94,0.06)',
-            }}>
-              <span className="text-xl">{isVirtual ? '💻' : '📱'}</span>
-              <div className="flex-1">
-                <p className="text-sm font-bold" style={{ color: isVirtual ? '#60a5fa' : '#4ade80' }}>
-                  {isVirtual ? 'Chip Virtual detectado' : 'Chip Físico detectado'}
-                </p>
-                <p className="text-xs mt-1" style={{ color: isVirtual ? '#93c5fd' : '#86efac' }}>
-                  {isVirtual
-                    ? 'Este chip só responderá mensagens de chips físicos. Nunca iniciará conversas. Fica disponível no pool como receptor.'
-                    : 'Este chip irá enviar mensagens para chips virtuais do pool. Ele sempre inicia as conversas.'}
-                </p>
-                {isVirtual && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ background: poolStatus?.fisicos > 0 ? '#4ade80' : '#ef4444' }} />
-                    <span className="text-xs font-medium" style={{ color: poolStatus?.fisicos > 0 ? '#4ade80' : '#f87171' }}>
-                      🌐 {poolStatus?.fisicos ?? 0} chip{poolStatus?.fisicos !== 1 ? 's' : ''} físico{poolStatus?.fisicos !== 1 ? 's' : ''} disponível{poolStatus?.fisicos !== 1 ? 'is' : ''} para te enviar mensagens
-                    </span>
-                  </div>
-                )}
-                {!isVirtual && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ background: poolStatus?.virtuais > 0 ? '#4ade80' : '#f59e0b' }} />
-                    <span className="text-xs font-medium" style={{ color: poolStatus?.virtuais > 0 ? '#4ade80' : '#fbbf24' }}>
-                      🌐 {poolStatus?.virtuais ?? 0} chip{poolStatus?.virtuais !== 1 ? 's' : ''} virtual{poolStatus?.virtuais !== 1 ? 'is' : ''} disponível{poolStatus?.virtuais !== 1 ? 'is' : ''} no pool
-                      {(poolStatus?.virtuais ?? 0) === 0 ? ' — adicione chips virtuais para maximizar o aquecimento' : ''}
-                    </span>
-                  </div>
-                )}
-              </div>
+          {/* Status do pool global */}
+          <div className="rounded-xl border border-surface-700/40 p-3 flex items-center gap-6" style={{ background: '#1a1425' }}>
+            <span className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Pool global</span>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ background: (poolStatus?.fisicos ?? 0) > 0 ? '#4ade80' : '#6b7280' }} />
+              <span className="text-xs text-surface-300">📱 {poolStatus?.fisicos ?? 0} físico{poolStatus?.fisicos !== 1 ? 's' : ''}</span>
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ background: (poolStatus?.virtuais ?? 0) > 0 ? '#60a5fa' : '#6b7280' }} />
+              <span className="text-xs text-surface-300">💻 {poolStatus?.virtuais ?? 0} virtual{poolStatus?.virtuais !== 1 ? 'is' : ''}</span>
+            </div>
+            <span className="text-xs text-surface-500 ml-auto">chips com aquecimento ativo</span>
+          </div>
 
           {/* Info especial para chip veterano */}
           {isVeterano && (
@@ -377,8 +413,14 @@ function ModalIniciar({ sessoes, poolStatus, onSave, onClose }) {
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors">
             Cancelar
           </button>
-          <button onClick={confirmar} disabled={saving} className="btn-primary px-6 py-2 text-sm">
-            {saving ? 'Processando...' : isVeterano ? '⭐ Marcar como Veterano' : isPreAquecido ? '🛍️ Iniciar Adaptação' : '🔥 Iniciar Aquecimento'}
+          <button onClick={confirmar} disabled={saving || selectedIds.size === 0} className="btn-primary px-6 py-2 text-sm">
+            {saving
+              ? 'Processando...'
+              : isVeterano
+                ? `⭐ Marcar ${selectedIds.size} chip(s) como Veterano`
+                : isPreAquecido
+                  ? `🛍️ Iniciar Adaptação (${selectedIds.size} chip${selectedIds.size !== 1 ? 's' : ''})`
+                  : `🔥 Iniciar Aquecimento (${selectedIds.size} chip${selectedIds.size !== 1 ? 's' : ''})`}
           </button>
         </div>
       </div>
@@ -953,6 +995,7 @@ export default function Aquecimento() {
       {modalIniciar && (
         <ModalIniciar
           sessoes={sessoes}
+          aquecimentos={aquecimentos}
           poolStatus={poolStatus}
           onSave={() => { setModalIniciar(false); carregar() }}
           onClose={() => setModalIniciar(false)}

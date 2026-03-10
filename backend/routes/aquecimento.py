@@ -125,6 +125,25 @@ def get_meta_adaptacao(dia: int) -> int:
 
 def get_destinos_virtuais(db: Session, session_id: int) -> List[str]:
     """Físico → busca chips VIRTUAIS conectados para enviar mensagem."""
+    # Diagnóstico: todos os chips virtuais (sem filtro de status/phone)
+    todos_virtuais = (
+        db.query(models.WhatsAppSession)
+        .filter(
+            models.WhatsAppSession.tipo_chip == "virtual",
+            models.WhatsAppSession.id != session_id,
+        )
+        .all()
+    )
+    if todos_virtuais:
+        for s in todos_virtuais:
+            logger.info(
+                f"🔥 Pool virtual diagnóstico: id={s.id} user={s.user_id} "
+                f"nome='{s.name}' status={s.status.value if s.status else 'None'} "
+                f"phone={s.phone_number or 'NULL'}"
+            )
+    else:
+        logger.warning("🔥 Pool: NENHUM chip virtual cadastrado no sistema (tipo_chip='virtual')")
+
     sessoes = (
         db.query(models.WhatsAppSession)
         .filter(
@@ -136,17 +155,39 @@ def get_destinos_virtuais(db: Session, session_id: int) -> List[str]:
         .all()
     )
     numeros = [s.phone_number for s in sessoes if s.phone_number]
+    logger.info(f"🔥 Pool: encontrei {len(numeros)} chips virtuais disponíveis (connected + phone preenchido)")
 
     # Fallback: env numbers (tratados como virtuais externos)
     if not numeros and settings.AQUECIMENTO_NUMBERS:
         numeros = [n.strip() for n in settings.AQUECIMENTO_NUMBERS.split(",") if n.strip()]
+        if numeros:
+            logger.info(f"🔥 Pool: usando fallback AQUECIMENTO_NUMBERS ({len(numeros)} números)")
 
     return numeros
 
 
 def count_fisicos_disponiveis(db: Session, session_id: int) -> int:
     """Virtual → conta chips FÍSICOS conectados disponíveis para enviar."""
-    return (
+    # Diagnóstico: todos os chips físicos (sem filtro de status/phone)
+    todos_fisicos = (
+        db.query(models.WhatsAppSession)
+        .filter(
+            models.WhatsAppSession.tipo_chip == "fisico",
+            models.WhatsAppSession.id != session_id,
+        )
+        .all()
+    )
+    if todos_fisicos:
+        for s in todos_fisicos:
+            logger.info(
+                f"🔥 Pool físico diagnóstico: id={s.id} user={s.user_id} "
+                f"nome='{s.name}' status={s.status.value if s.status else 'None'} "
+                f"phone={s.phone_number or 'NULL'}"
+            )
+    else:
+        logger.warning("🔥 Pool: NENHUM chip físico cadastrado no sistema (tipo_chip='fisico')")
+
+    count = (
         db.query(models.WhatsAppSession)
         .filter(
             models.WhatsAppSession.status == models.SessionStatus.connected,
@@ -156,6 +197,8 @@ def count_fisicos_disponiveis(db: Session, session_id: int) -> int:
         )
         .count()
     )
+    logger.info(f"🔥 Pool: encontrei {count} chips físicos disponíveis (connected + phone preenchido)")
+    return count
 
 
 async def enviar_msg_aquecimento(session_waha_id: str, phone: str, mensagem: str) -> bool:

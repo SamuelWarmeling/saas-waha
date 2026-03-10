@@ -223,6 +223,29 @@ async def enviar_msg_aquecimento(session_waha_id: str, phone: str, mensagem: str
         return False
 
 
+async def buscar_phone_waha(session_waha_id: str) -> Optional[str]:
+    """Busca phone_number via GET /api/{session}/me no WAHA."""
+    headers = {}
+    if settings.WAHA_API_KEY:
+        headers["X-Api-Key"] = settings.WAHA_API_KEY
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                f"{settings.WAHA_API_URL}/api/{session_waha_id}/me",
+                headers=headers,
+            )
+        if r.status_code == 200:
+            data = r.json()
+            raw = data.get("id", "") or data.get("phoneNumber", "")
+            if raw:
+                phone = raw.split("@")[0].strip()
+                phone = "".join(c for c in phone if c.isdigit())
+                return phone if phone else None
+    except Exception as e:
+        logger.error(f"[AQUECIMENTO] Erro ao buscar /me para {session_waha_id}: {e}")
+    return None
+
+
 def _aq_out(aq: models.AquecimentoConfig, db: Session = None):
     sess = aq.session
     tipo_chip = getattr(sess, "tipo_chip", "fisico") if sess else "fisico"
@@ -712,6 +735,18 @@ async def processar_aquecimento():
                 if not session or session.status != models.SessionStatus.connected:
                     logger.warning(f"🔥 #{aq.id} sessão offline (status={session.status.value if session else 'None'}), pulando")
                     continue
+
+                # ── Auto-fetch phone_number se NULL ───────────────────────────
+                if not session.phone_number:
+                    logger.warning(f"🔥 #{aq.id} phone_number NULL para '{session.name}' — buscando no WAHA...")
+                    phone_found = await buscar_phone_waha(session.session_id)
+                    if phone_found:
+                        session.phone_number = phone_found
+                        db.commit()
+                        logger.info(f"🔥 Phone encontrado: {phone_found} para {session.session_id}")
+                    else:
+                        logger.error(f"🔥 #{aq.id} não conseguiu obter phone_number de '{session.name}' — pulando")
+                        continue
 
                 tipo_chip = getattr(session, "tipo_chip", "fisico")
                 logger.info(f"🔥 #{aq.id} processando chip {tipo_chip} '{session.name}' dia={aq.dia_atual} msgs={aq.msgs_hoje}/{aq.meta_hoje}")

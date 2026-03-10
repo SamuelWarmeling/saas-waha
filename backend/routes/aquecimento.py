@@ -556,8 +556,8 @@ async def processar_aquecimento():
         logger.info(f"🔥 Aquecimento worker rodando... hora BR={hora_br:02d}:{now_br.minute:02d}")
 
         # Só envia entre 08:00 e 20:00 horário de Brasília
-        if hora_br < 8 or hora_br >= 20:
-            logger.info(f"🔥 Fora do horário permitido (08-20h BR), pulando.")
+        if hora_br < 7 or hora_br >= 21:
+            logger.info(f"🔥 Fora do horário permitido (07-21h BR), pulando.")
             return
 
         ativos = (

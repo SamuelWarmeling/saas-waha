@@ -641,11 +641,26 @@ async def processar_aquecimento():
             try:
                 hoje_br: date = now_br.date()
 
+                # ── Snapshot inicial do estado para debug ─────────────────────
+                sess_preview = aq.session
+                pe_preview = aq.proximo_envio
+                if pe_preview and pe_preview.tzinfo is None:
+                    pe_preview = pe_preview.replace(tzinfo=timezone.utc)
+                pe_str = pe_preview.strftime("%H:%M") if pe_preview else "não definido"
+                logger.info(
+                    f"🔥 #{aq.id} [{getattr(sess_preview, 'name', '?')}] "
+                    f"status={aq.status.value} dia={aq.dia_atual}/{aq.dias_total} "
+                    f"msgs={aq.msgs_hoje}/{aq.meta_hoje} "
+                    f"proximo_envio={pe_str} "
+                    f"inicio_dia={'sim' if aq.inicio_dia_atual else 'NULL'}"
+                )
+
                 # ── Inicializa dia se não tiver inicio_dia_atual ──────────────
                 if aq.inicio_dia_atual is None:
                     aq.inicio_dia_atual = now
                     aq.meta_hoje = get_meta_dia(aq.dia_atual)
                     db.commit()
+                    logger.info(f"🔥 #{aq.id} inicializando dia — próximo ciclo envia")
                     continue  # espera próximo ciclo para primeira mensagem
 
                 # ── Verifica avanço de dia ────────────────────────────────────
@@ -717,7 +732,7 @@ async def processar_aquecimento():
                     aq.meta_hoje = random.randint(3, 5) if is_manutencao else get_meta_dia(aq.dia_atual)
                     db.commit()
                 if aq.msgs_hoje >= aq.meta_hoje:
-                    logger.info(f"🔥 #{aq.id} meta do dia atingida ({aq.msgs_hoje}/{aq.meta_hoje}), aguardando amanhã")
+                    logger.info(f"🔥 #{aq.id} SKIP: meta atingida ({aq.msgs_hoje}/{aq.meta_hoje}), aguardando amanhã")
                     continue
 
                 # ── Verifica próximo envio ────────────────────────────────────
@@ -726,8 +741,8 @@ async def processar_aquecimento():
                     if pe.tzinfo is None:
                         pe = pe.replace(tzinfo=timezone.utc)
                     if now < pe:
-                        espera = int((pe - now).total_seconds() // 60)
-                        logger.info(f"🔥 #{aq.id} aguardando proximo_envio (faltam ~{espera}min)")
+                        espera_min = (pe - now).total_seconds() / 60
+                        logger.info(f"🔥 #{aq.id} SKIP: proximo_envio em {pe.strftime('%H:%M')} (faltam {espera_min:.1f}min)")
                         continue  # ainda não está na hora
 
                 # ── Busca sessão ──────────────────────────────────────────────
@@ -755,6 +770,27 @@ async def processar_aquecimento():
                 # CHIP VIRTUAL — só responde, nunca inicia
                 # ════════════════════════════════════════════════════════
                 if tipo_chip == "virtual":
+                    # Diagnóstico: outros chips virtuais no pool
+                    outros_virtuais = (
+                        db.query(models.WhatsAppSession)
+                        .filter(
+                            models.WhatsAppSession.tipo_chip == "virtual",
+                            models.WhatsAppSession.id != aq.session_id,
+                        )
+                        .all()
+                    )
+                    for sv in outros_virtuais:
+                        logger.info(
+                            f"🔥 Pool virtual diagnóstico: id={sv.id} user={sv.user_id} "
+                            f"nome='{sv.name}' status={sv.status.value if sv.status else 'None'} "
+                            f"phone={sv.phone_number or 'NULL'}"
+                        )
+                    virtuais_ok = [
+                        sv for sv in outros_virtuais
+                        if sv.status == models.SessionStatus.connected and sv.phone_number
+                    ]
+                    logger.info(f"🔥 Pool: encontrei {len(virtuais_ok)} chips virtuais disponíveis (connected + phone preenchido)")
+
                     fisicos = count_fisicos_disponiveis(db, aq.session_id)
                     if fisicos == 0:
                         # Sem chips físicos no pool — registra apenas 1x por ciclo
@@ -822,7 +858,16 @@ async def processar_aquecimento():
                 destino = random.choice(destinos)
 
                 # ── Envia ─────────────────────────────────────────────────────
+                logger.info(
+                    f"🔥 Tentando enviar para chip virtual {destino} "
+                    f"via chip físico {session.phone_number} ({session.session_id})"
+                )
                 ok = await enviar_msg_aquecimento(session.session_id, destino, mensagem)
+
+                if ok:
+                    logger.info(f"🔥 Enviado! {session.session_id} → {destino}")
+                else:
+                    logger.warning(f"🔥 Falhou: envio de {session.session_id} → {destino}")
 
                 log_status = ("enviado_ia" if gerada_por_ia else "enviado") if ok else "erro"
                 db.add(models.AquecimentoLog(

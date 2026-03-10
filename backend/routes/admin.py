@@ -199,6 +199,49 @@ def ativar_plano_por_email(
     }
 
 
+@router.post("/impersonate/{user_id}")
+def impersonate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(auth.require_admin),
+):
+    """Gera token JWT temporário (1h) para acessar a conta de outro usuário."""
+    if user_id == admin.id:
+        raise HTTPException(status_code=400, detail="Não é possível impersonar a si mesmo")
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+    access_token = auth.create_access_token(
+        {"sub": str(user.id)},
+        expires_delta=timedelta(hours=1),
+    )
+
+    try:
+        db.add(models.AtividadeLog(
+            user_id=admin.id,
+            tipo="admin_impersonate",
+            descricao=f"Admin '{admin.email}' acessou conta de '{user.email}'",
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return {
+        "access_token": access_token,
+        "user_email": user.email,
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "plan": user.plan.value,
+            "is_active": user.is_active,
+            "is_admin": False,
+        },
+    }
+
+
 # ── Segurança Anti-Abuso ───────────────────────────────────────────────────────
 
 @router.get("/seguranca/ips")

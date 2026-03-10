@@ -306,6 +306,23 @@ export default function Admin() {
     }
   }
 
+  async function impersonate(u) {
+    try {
+      const res = await api.post(`/admin/impersonate/${u.id}`)
+      const { access_token, user_email, user } = res.data
+      // Salva credenciais do admin
+      sessionStorage.setItem('admin_token', localStorage.getItem('access_token'))
+      sessionStorage.setItem('admin_user', localStorage.getItem('user'))
+      sessionStorage.setItem('impersonate_email', user_email)
+      // Substitui pelo token do usuário alvo
+      localStorage.setItem('access_token', access_token)
+      localStorage.setItem('user', JSON.stringify(user))
+      navigate('/dashboard')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao acessar conta')
+    }
+  }
+
   const filteredUsers = users.filter(u =>
     !search.trim() ||
     u.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -409,7 +426,14 @@ export default function Admin() {
                     : '—'}
                 </td>
                 <td className="py-4 text-right">
-                  <div className="flex items-center justify-end gap-1.5">
+                  <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => impersonate(u)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all bg-purple-900/20 text-purple-300 hover:bg-purple-600 hover:text-white border border-purple-500/20"
+                      title="Acessar dashboard como este usuário"
+                    >
+                      👁️ Acessar
+                    </button>
                     <button
                       disabled={actionLoading === u.email + 'vitalicio'}
                       onClick={() => gerenciarPlano(u.email, 'vitalicio')}

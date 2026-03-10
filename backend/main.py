@@ -629,6 +629,37 @@ def migrate_chip_virtual():
         logger.error(f"[MIGRATE] Erro ao migrar chip virtual: {e}")
 
 
+def migrate_group_incremental():
+    """Adiciona colunas para extração incremental de grupos."""
+    try:
+        with engine.connect() as conn:
+            # GroupMember.status
+            r = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'group_members' AND column_name = 'status')"
+            ))
+            if not r.scalar():
+                logger.info("[MIGRATE] Adicionando status em group_members...")
+                conn.execute(text(
+                    "ALTER TABLE group_members ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'ativo'"
+                ))
+                conn.commit()
+                logger.info("[MIGRATE] Coluna status adicionada em group_members.")
+
+            # Group.last_extraction_result
+            r = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'groups' AND column_name = 'last_extraction_result')"
+            ))
+            if not r.scalar():
+                logger.info("[MIGRATE] Adicionando last_extraction_result em groups...")
+                conn.execute(text("ALTER TABLE groups ADD COLUMN last_extraction_result TEXT"))
+                conn.commit()
+                logger.info("[MIGRATE] Coluna last_extraction_result adicionada em groups.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_group_incremental: {e}")
+
+
 def migrate_aquecimento_tables():
     """Cria o enum aquecimentostatus e tabelas de aquecimento se não existirem."""
     try:
@@ -836,6 +867,7 @@ async def lifespan(app: FastAPI):
             migrate_listas()
             migrate_anti_abuso()
             migrate_stripe_columns()
+            migrate_group_incremental()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")

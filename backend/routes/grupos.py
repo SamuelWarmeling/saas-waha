@@ -40,6 +40,7 @@ class GroupOut(BaseModel):
     created_at: datetime
     last_extracted_at: Optional[datetime]
     auto_update_interval: Optional[int]
+    last_extraction_result: Optional[str]  # JSON: {"novos":5,"sairam":2,"existentes":10}
 
     class Config:
         from_attributes = True
@@ -166,13 +167,17 @@ async def extract_selected(
             body.group_ids,
             db,
         )
+        parts = []
+        if result["novos"] > 0:
+            parts.append(f"+{result['novos']} novos")
+        if result["sairam"] > 0:
+            parts.append(f"-{result['sairam']} saíram")
+        if result["existentes"] > 0:
+            parts.append(f"{result['existentes']} já existiam")
+        delta_msg = " | ".join(parts) if parts else "Nenhuma alteração"
         return {
             "status": "ok",
-            "message": (
-                f"{result['extracted_members']} membros extraídos de "
-                f"{len(body.group_ids)} grupos "
-                f"({result['skipped_admin']} admins e {result['skipped_nonbr']} não-BR ignorados)"
-            ),
+            "message": f"Grupo atualizado: {delta_msg}",
             **result,
         }
     except Exception as e:
@@ -262,6 +267,12 @@ def list_group_members(
         models.GroupMember.group_id == group_id
     )
 
+    # Status filter: by default exclude "saiu" members
+    if filter_type == "saiu":
+        query = query.filter(models.GroupMember.status == "saiu")
+    else:
+        query = query.filter(models.GroupMember.status != "saiu")
+
     if search:
         query = query.filter(
             (models.GroupMember.phone.ilike(f"%{search}%")) |
@@ -307,6 +318,7 @@ def list_group_members(
                 "name": m.name,
                 "is_admin": m.is_admin,
                 "is_blacklisted": m.contact_id in blacklisted_ids,
+                "status": m.status,
                 "added_at": m.added_at,
             }
             for m in items

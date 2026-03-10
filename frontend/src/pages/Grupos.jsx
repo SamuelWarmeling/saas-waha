@@ -68,6 +68,7 @@ const FILTER_TABS = [
   { key: 'named', label: 'Com nome' },
   { key: 'unnamed', label: 'Sem nome' },
   { key: 'admins', label: 'Admins' },
+  { key: 'saiu', label: 'Saíram' },
 ]
 
 const MODAL_PAGE_SIZE = 50
@@ -369,18 +370,26 @@ export default function Grupos() {
         <div className="bg-primary-900/20 border border-primary-500/30 rounded-2xl p-5 relative overflow-hidden">
           <div className="absolute top-[-50%] right-[-10%] w-[40%] h-[200%] bg-primary-500/10 blur-[50px] pointer-events-none rounded-full" />
           <p className="font-semibold text-primary-400 mb-4 flex items-center gap-2 relative z-10"><MdCheckBox size={20} /> Extração concluída com sucesso</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm relative z-10">
-            {[
-              { val: lastResult.extracted_members, label: 'Membros salvos', color: 'text-primary-400' },
-              { val: lastResult.skipped_admin, label: 'Admins ignorados', color: 'text-surface-200' },
-              { val: lastResult.skipped_nonbr, label: 'Não-BR ignorados', color: 'text-surface-200' },
-              { val: lastResult.skipped_invalid, label: 'Inválidos ignorados', color: 'text-surface-200' },
-            ].map(({ val, label, color }) => (
-              <div key={label} className="bg-surface-950/50 border border-surface-700/50 rounded-xl p-4 text-center shadow-inner">
-                <div className={`text-3xl font-bold ${color}`}>{val}</div>
-                <div className="text-surface-400 text-xs mt-1.5 font-medium">{label}</div>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm relative z-10 mb-3">
+            <div className="bg-surface-950/50 border border-green-500/30 rounded-xl p-4 text-center shadow-inner">
+              <div className="text-3xl font-bold text-green-400">+{lastResult.novos ?? lastResult.extracted_members ?? 0}</div>
+              <div className="text-surface-400 text-xs mt-1.5 font-medium">Novos membros</div>
+            </div>
+            <div className="bg-surface-950/50 border border-red-500/30 rounded-xl p-4 text-center shadow-inner">
+              <div className="text-3xl font-bold text-red-400">-{lastResult.sairam ?? 0}</div>
+              <div className="text-surface-400 text-xs mt-1.5 font-medium">Saíram</div>
+            </div>
+            <div className="bg-surface-950/50 border border-surface-700/50 rounded-xl p-4 text-center shadow-inner">
+              <div className="text-3xl font-bold text-surface-300">{lastResult.existentes ?? 0}</div>
+              <div className="text-surface-400 text-xs mt-1.5 font-medium">Já existiam</div>
+            </div>
+          </div>
+          <div className="flex gap-3 text-xs text-surface-500 relative z-10 flex-wrap">
+            <span>{lastResult.skipped_admin} admins ignorados</span>
+            <span>·</span>
+            <span>{lastResult.skipped_nonbr} não-BR ignorados</span>
+            <span>·</span>
+            <span>{lastResult.skipped_invalid} inválidos ignorados</span>
           </div>
         </div>
       )}
@@ -505,14 +514,20 @@ export default function Grupos() {
                 {dbGroups.map(grupo => {
                   const proxima = proximaExtracao(grupo.last_extracted_at, grupo.auto_update_interval)
                   const isAutoActive = !!grupo.auto_update_interval
+                  const delta = grupo.last_extraction_result ? (() => { try { return JSON.parse(grupo.last_extraction_result) } catch { return null } })() : null
                   return (
                     <tr key={grupo.id} className="hover:bg-surface-800/30 transition-colors">
                       <td className="px-6 py-4 font-medium text-surface-100">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {grupo.name}
                           {isAutoActive && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-500/30">
                               <MdAutorenew size={11} className="animate-spin" style={{ animationDuration: '3s' }} /> Auto
+                            </span>
+                          )}
+                          {delta?.novos > 0 && (
+                            <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-500/30">
+                              ↑{delta.novos} novos
                             </span>
                           )}
                         </div>
@@ -521,6 +536,13 @@ export default function Grupos() {
                       <td className="px-6 py-4 hidden md:table-cell">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-xs text-surface-300 font-medium flex items-center gap-1"><MdSchedule size={13} className="text-surface-500" />{horasAtras(grupo.last_extracted_at) || '–'}</span>
+                          {delta && (
+                            <span className="text-[10px] text-surface-500">
+                              {delta.novos > 0 && <span className="text-green-500/80">+{delta.novos} </span>}
+                              {delta.sairam > 0 && <span className="text-red-500/80">-{delta.sairam} </span>}
+                              {delta.existentes > 0 && <span>{delta.existentes} fixos</span>}
+                            </span>
+                          )}
                           {proxima && <span className="text-[11px] text-green-400/80 font-medium">Próxima: {proxima}</span>}
                         </div>
                       </td>
@@ -753,7 +775,9 @@ export default function Grupos() {
 
                           {/* Status */}
                           <td className="px-4 py-3.5">
-                            {m.is_blacklisted
+                            {m.status === 'saiu'
+                              ? <span className="badge-red text-[10px] px-2 py-0.5">Saiu</span>
+                              : m.is_blacklisted
                               ? <span className="badge-red text-[10px] px-2 py-0.5">Bloqueado</span>
                               : <span className="badge-green text-[10px] px-2 py-0.5">Ativo</span>
                             }

@@ -433,6 +433,7 @@ class Group(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_extracted_at = Column(DateTime(timezone=True), nullable=True)
     auto_update_interval = Column(Integer, nullable=True)  # horas, null = desativado
+    last_extraction_result = Column(Text, nullable=True)  # JSON {"novos":5,"sairam":2,"existentes":10}
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User")
@@ -455,6 +456,7 @@ class GroupMember(Base):
     phone = Column(String(20), nullable=False)
     name = Column(String(255), nullable=True)
     is_admin = Column(Boolean, default=False)
+    status = Column(String(20), nullable=False, default="ativo", server_default="ativo")  # ativo | saiu
     added_at = Column(DateTime(timezone=True), server_default=func.now())
 
     group = relationship("Group", back_populates="members")

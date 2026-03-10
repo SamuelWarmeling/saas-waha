@@ -2,6 +2,7 @@
 Funções para extração de grupos do WhatsApp via WAHA API
 """
 import httpx
+import json
 import logging
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -72,15 +73,17 @@ async def extract_selected_groups(
     db: Session,
 ) -> dict:
     """
-    Extrai membros dos grupos selecionados, aplicando filtros:
-    - Ignora administradores do grupo
-    - Ignora números que não começam com "55" (fora do Brasil)
-    - Aceita apenas números com 12 ou 13 dígitos (55 + DDD + 8/9 dígitos)
+    Extrai membros dos grupos selecionados de forma incremental:
+    - Compara membros atuais do WAHA com registros no banco
+    - Classifica como: novos / sairam / existentes
+    - Marca membros que saíram com status='saiu' (não deleta)
+    - Reativa membros que voltaram (status='saiu' → 'ativo')
+    - Filtra: ignora admins, não-BR, números inválidos
 
-    Retorna dicionário com contadores.
+    Retorna dicionário com contadores incrementais.
     """
     logger.info(
-        f"[GRUPOS] Iniciando extração seletiva: {len(group_ids_waha)} grupos "
+        f"[GRUPOS] Iniciando extração incremental: {len(group_ids_waha)} grupos "
         f"| sessão {session_id_waha} | user={user_id}"
     )
 
@@ -94,8 +97,10 @@ async def extract_selected_groups(
     else:
         raise ValueError(f"Formato de resposta inesperado do WAHA: {type(groups_data)}")
 
+    total_novos = 0
+    total_sairam = 0
+    total_existentes = 0
     extracted_groups = 0
-    extracted_members = 0
     skipped_admin = 0
     skipped_nonbr = 0
     skipped_invalid = 0
@@ -116,6 +121,8 @@ async def extract_selected_groups(
             models.Group.group_id_waha == group_id_waha,
         ).first()
 
+        is_new_group = existing_group is None
+
         if existing_group:
             group_obj = existing_group
             group_obj.name = group_name
@@ -133,18 +140,12 @@ async def extract_selected_groups(
             db.flush()
             extracted_groups += 1
 
-        # Participantes já vêm embutidos na resposta do WAHA
+        # ── PASSO 1: coletar membros válidos do WAHA ──────────────────────────
         members_list = group_info.get("participants", [])
+        current_valid: dict = {}  # phone → {"name": str}
 
-        # Limpa membros antigos antes de reinserir
-        db.query(models.GroupMember).filter(
-            models.GroupMember.group_id == group_obj.id
-        ).delete()
-
-        group_member_count = 0
         for member_info in members_list:
-
-            # ── FILTRO 1: ignorar admins ─────────────────────────────────────
+            # FILTRO 1: ignorar admins
             admin_val = member_info.get("admin") or ""
             is_admin = (
                 admin_val in ("admin", "superadmin")
@@ -154,20 +155,20 @@ async def extract_selected_groups(
                 skipped_admin += 1
                 continue
 
-            # ── Extrair telefone (WAHA usa LID em "id"; telefone real em "phoneNumber") ──
+            # Extrair telefone (WAHA usa LID em "id"; telefone real em "phoneNumber")
             raw_phone = member_info.get("phoneNumber") or member_info.get("id", "")
             if not raw_phone:
                 continue
 
             phone = normalize_phone(raw_phone)
 
-            # ── FILTRO 2: apenas números do Brasil (começam com 55) ──────────
+            # FILTRO 2: apenas números do Brasil (começam com 55)
             if not phone.startswith("55"):
                 skipped_nonbr += 1
                 logger.debug(f"[GRUPOS] Ignorado (não-BR): {phone!r}")
                 continue
 
-            # ── FILTRO 3: 12 ou 13 dígitos (55 + DDD 2d + número 8 ou 9d) ──
+            # FILTRO 3: 12 ou 13 dígitos (55 + DDD 2d + número 8 ou 9d)
             if not (12 <= len(phone) <= 13):
                 skipped_invalid += 1
                 logger.debug(f"[GRUPOS] Ignorado (tamanho {len(phone)}): {phone!r}")
@@ -178,6 +179,39 @@ async def extract_selected_groups(
                 or member_info.get("pushName")
                 or ""
             )
+            current_valid[phone] = {"name": member_name}
+
+        current_phones = set(current_valid.keys())
+
+        # ── PASSO 2: buscar membros existentes no banco ───────────────────────
+        existing_db_members = db.query(models.GroupMember).filter(
+            models.GroupMember.group_id == group_obj.id
+        ).all()
+        existing_by_phone: dict = {m.phone: m for m in existing_db_members}
+        existing_active_phones = {m.phone for m in existing_db_members if m.status != "saiu"}
+
+        # ── PASSO 3: classificar ──────────────────────────────────────────────
+        novos_phones = current_phones - existing_active_phones
+        sairam_phones = existing_active_phones - current_phones
+        existentes_phones = current_phones & existing_active_phones
+
+        group_novos = len(novos_phones)
+        group_sairam = len(sairam_phones)
+        group_existentes = len(existentes_phones)
+
+        logger.info(
+            f"[GRUPOS] {group_name!r}: +{group_novos} novos | -{group_sairam} saíram | "
+            f"{group_existentes} existentes"
+        )
+
+        # ── PASSO 4: marcar quem saiu ─────────────────────────────────────────
+        for phone in sairam_phones:
+            existing_by_phone[phone].status = "saiu"
+
+        # ── PASSO 5: processar membros atuais (novos + existentes) ────────────
+        group_member_count = 0
+        for phone, info in current_valid.items():
+            member_name = info.get("name", "")
 
             # Upsert contato (deduplicação garantida pelo unique(user_id, phone))
             existing_contact = db.query(models.Contact).filter(
@@ -198,57 +232,77 @@ async def extract_selected_groups(
                 db.add(contact)
                 db.flush()
 
-            db.add(models.GroupMember(
-                group_id=group_obj.id,
-                contact_id=contact.id,
-                phone=phone,
-                name=member_name or None,
-                is_admin=False,  # admins foram filtrados acima
-            ))
-            extracted_members += 1
+            if phone in existing_by_phone:
+                # Membro já existe — reativar se estava "saiu", atualizar nome
+                m = existing_by_phone[phone]
+                m.status = "ativo"
+                if member_name and member_name != m.name:
+                    m.name = member_name
+                m.contact_id = contact.id
+            else:
+                # Novo membro
+                db.add(models.GroupMember(
+                    group_id=group_obj.id,
+                    contact_id=contact.id,
+                    phone=phone,
+                    name=member_name or None,
+                    is_admin=False,
+                    status="ativo",
+                ))
+
             group_member_count += 1
 
-        # ── FILTRO: ignorar grupos com menos de 2 membros válidos ───────────
+        # ── FILTRO: ignorar grupos com menos de 2 membros válidos ─────────────
         if group_member_count < 2:
             logger.info(
                 f"[GRUPOS] Grupo {group_name!r} ignorado: apenas "
                 f"{group_member_count} membro(s) válido(s) após filtros"
             )
-            db.query(models.GroupMember).filter(
-                models.GroupMember.group_id == group_obj.id
-            ).delete()
-            db.delete(group_obj)
-            db.flush()
+            if is_new_group:
+                db.delete(group_obj)
+                db.flush()
             skipped_small += 1
             continue
 
         group_obj.member_count = group_member_count
         group_obj.last_extracted_at = datetime.now(timezone.utc)
+        group_obj.last_extraction_result = json.dumps({
+            "novos": group_novos,
+            "sairam": group_sairam,
+            "existentes": group_existentes,
+        })
+
+        total_novos += group_novos
+        total_sairam += group_sairam
+        total_existentes += group_existentes
 
     db.commit()
 
     logger.info(
-        f"[GRUPOS] Extração concluída: {extracted_groups} grupos novos, "
-        f"{extracted_members} membros salvos | ignorados: "
-        f"{skipped_admin} admins, {skipped_nonbr} não-BR, {skipped_invalid} inválidos, "
-        f"{skipped_small} grupos com < 2 membros"
+        f"[GRUPOS] Extração incremental concluída: +{total_novos} novos | "
+        f"-{total_sairam} saíram | {total_existentes} existentes | "
+        f"ignorados: {skipped_admin} admins, {skipped_nonbr} não-BR, "
+        f"{skipped_invalid} inválidos, {skipped_small} grupos pequenos"
     )
 
     db.add(models.AtividadeLog(
         user_id=user_id,
         tipo="grupos_extraidos",
         descricao=(
-            f"Extração seletiva: {len(group_ids_waha)} grupos selecionados, "
-            f"{extracted_members} membros salvos "
-            f"({skipped_admin} admins, {skipped_nonbr} não-BR ignorados, "
-            f"{skipped_small} grupos pequenos ignorados)"
+            f"Extração incremental: {len(group_ids_waha)} grupos | "
+            f"+{total_novos} novos | -{total_sairam} saíram | "
+            f"{total_existentes} existentes "
+            f"({skipped_admin} admins, {skipped_nonbr} não-BR ignorados)"
         ),
     ))
     db.commit()
 
     return {
-        "extracted_groups": extracted_groups,
-        "extracted_members": extracted_members,
+        "novos": total_novos,
+        "sairam": total_sairam,
+        "existentes": total_existentes,
+        "total": total_novos + total_sairam + total_existentes,
+        "extracted_members": total_novos + total_existentes,  # compatibilidade
         "skipped_admin": skipped_admin,
         "skipped_nonbr": skipped_nonbr,
         "skipped_invalid": skipped_invalid,

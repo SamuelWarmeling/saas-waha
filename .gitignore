@@ -30,6 +30,9 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 
+# Scripts de manutenção local (não versionar)
+# backend/scripts/
+
 # Logs
 *.log
 

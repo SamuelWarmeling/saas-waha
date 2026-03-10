@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, text
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
+import httpx
 
 import models
 import auth
 from database import get_db
-from config import PLANS
+from config import PLANS, settings
 
 router = APIRouter(tags=["admin"])
 
@@ -335,3 +336,71 @@ def desbanir_ip(
     db.delete(banido)
     db.commit()
     return {"ok": True, "ip": ip}
+
+
+@router.post("/popular-phones")
+async def popular_phones(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(auth.require_admin),
+):
+    """
+    Busca phone_number de todas as sessões via WAHA e salva no banco.
+    Chame uma vez para corrigir sessões que ficaram sem phone_number.
+    """
+    headers = {}
+    if settings.WAHA_API_KEY:
+        headers["X-Api-Key"] = settings.WAHA_API_KEY
+
+    # 1. Busca todas as sessões do WAHA (retorna me.id em uma chamada só)
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(f"{settings.WAHA_API_URL}/api/sessions", headers=headers)
+            r.raise_for_status()
+            waha_sessions = r.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao consultar WAHA: {e}")
+
+    # Monta mapa session_name → phone
+    waha_phones: dict[str, str] = {}
+    for s in waha_sessions:
+        name = s.get("name", "")
+        me = s.get("me") or {}
+        raw = me.get("id", "") or me.get("phoneNumber", "")
+        if name and raw:
+            phone = raw.split("@")[0].strip()
+            phone = "".join(c for c in phone if c.isdigit())
+            if phone:
+                waha_phones[name] = phone
+
+    # 2. Busca sessões do banco via SQL direto (evita problema de colunas novas)
+    rows = db.execute(
+        text("SELECT id, session_id, phone_number FROM whatsapp_sessions")
+    ).fetchall()
+
+    resultados = []
+    atualizadas = 0
+
+    for (sess_id, session_id, phone_number) in rows:
+        if phone_number:
+            resultados.append({"session": session_id, "status": "ja_tinha", "phone": phone_number})
+            continue
+
+        waha_phone = waha_phones.get(session_id)
+        if waha_phone:
+            db.execute(
+                text("UPDATE whatsapp_sessions SET phone_number = :phone WHERE id = :id"),
+                {"phone": waha_phone, "id": sess_id},
+            )
+            atualizadas += 1
+            resultados.append({"session": session_id, "status": "atualizado", "phone": waha_phone})
+        else:
+            resultados.append({"session": session_id, "status": "sem_phone_no_waha", "phone": None})
+
+    db.commit()
+
+    return {
+        "total_sessoes": len(rows),
+        "atualizadas": atualizadas,
+        "waha_sessions_encontradas": len(waha_phones),
+        "detalhes": resultados,
+    }

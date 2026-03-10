@@ -113,6 +113,16 @@ async def get_qrcode(
         return {"status": session.status.value, "qr": session.qr_code}
 
 
+WAHA_STATUS_MAP = {
+    "WORKING":      models.SessionStatus.connected,
+    "CONNECTED":    models.SessionStatus.connected,
+    "SCAN_QR_CODE": models.SessionStatus.connecting,
+    "STARTING":     models.SessionStatus.connecting,
+    "STOPPED":      models.SessionStatus.disconnected,
+    "FAILED":       models.SessionStatus.error,
+}
+
+
 @router.get("", response_model=List[SessionOut])
 async def list_sessions(
     db: Session = Depends(get_db),
@@ -123,21 +133,48 @@ async def list_sessions(
         .filter(models.WhatsAppSession.user_id == current_user.id)
         .all()
     )
-    # Auto-fetch phone number for connected sessions that don't have one yet
-    changed = False
-    for sess in sessions:
-        if sess.status == models.SessionStatus.connected and not sess.phone_number:
-            try:
-                me = await waha_request("GET", f"/api/{sess.session_id}/me")
+    if not sessions:
+        return sessions
+
+    # Sincroniza status e phone com WAHA em uma única chamada
+    try:
+        waha_list = await waha_request("GET", "/api/sessions")
+        # Monta mapa: session_name → dados WAHA
+        waha_map = {s["name"]: s for s in waha_list if "name" in s}
+
+        changed = False
+        for sess in sessions:
+            waha = waha_map.get(sess.session_id)
+            if not waha:
+                continue
+
+            # Sincroniza status
+            waha_status_raw = waha.get("status", "")
+            new_status = WAHA_STATUS_MAP.get(waha_status_raw)
+            if new_status and new_status != sess.status:
+                print(f"[list] Status sync {sess.session_id}: {sess.status.value} → {new_status.value}")
+                sess.status = new_status
+                if new_status == models.SessionStatus.connected:
+                    sess.qr_code = None
+                changed = True
+
+            # Sincroniza phone_number se ausente
+            if not sess.phone_number:
+                me = waha.get("me") or {}
                 raw = me.get("id", "") or me.get("phoneNumber", "")
                 if raw:
-                    sess.phone_number = raw.split("@")[0].strip()
-                    changed = True
-                    print(f"[list] Phone synced for {sess.session_id}: {sess.phone_number}")
-            except Exception as exc:
-                print(f"[list] Erro ao buscar /me para {sess.session_id}: {exc}")
-    if changed:
-        db.commit()
+                    phone = raw.split("@")[0].strip()
+                    phone = "".join(c for c in phone if c.isdigit())
+                    if phone:
+                        sess.phone_number = phone
+                        print(f"[list] Phone synced {sess.session_id}: {phone}")
+                        changed = True
+
+        if changed:
+            db.commit()
+    except Exception as exc:
+        print(f"[list] Erro ao sincronizar com WAHA: {exc}")
+
     return sessions
 
 

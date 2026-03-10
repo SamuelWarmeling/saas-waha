@@ -80,10 +80,10 @@ function RiscoBar({ ri }) {
 }
 
 const STATUS_CONFIG = {
-  connected: { label: 'Conectado', cls: 'badge-green' },
-  connecting: { label: 'Conectando', cls: 'badge-yellow' },
-  disconnected: { label: 'Desconectado', cls: 'badge-gray' },
-  error: { label: 'Erro', cls: 'badge-red' },
+  connected:    { label: '🟢 Online',      cls: 'badge-green'  },
+  connecting:   { label: '🔵 Conectando',  cls: 'badge-yellow' },
+  disconnected: { label: '🔴 Offline',     cls: 'badge-gray'   },
+  error:        { label: '🟡 Erro',        cls: 'badge-red'    },
 }
 
 function formatPhone(raw) {
@@ -160,6 +160,12 @@ export default function Sessoes() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Polling geral a cada 30s — sincroniza status de TODOS os chips
+  useEffect(() => {
+    const id = setInterval(load, 30_000)
+    return () => clearInterval(id)
+  }, [load])
 
   // Polling de risco de ban a cada 5 minutos
   useEffect(() => {

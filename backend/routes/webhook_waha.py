@@ -20,46 +20,83 @@ async def resposta_automatica_virtual(
     aq_id: int,
     user_key: str | None,
 ):
-    """Envia resposta automática para chip físico após delay de 2-8 minutos."""
-    delay_segundos = random.randint(120, 480)  # 2-8 min
-    await asyncio.sleep(delay_segundos)
+    """
+    Simula comportamento humano completo:
+    leitura → seen → digitação → stopTyping → resposta.
+    """
+    chat_id = f"{to_phone}@c.us"
+    headers = {}
+    if settings.WAHA_API_KEY:
+        headers["X-Api-Key"] = settings.WAHA_API_KEY
 
-    db: Session = SessionLocal()
+    async def waha_post(path: str, body: dict) -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                r = await client.post(
+                    f"{settings.WAHA_API_URL}{path}",
+                    json=body,
+                    headers=headers,
+                )
+            return r.status_code in (200, 201)
+        except Exception as exc:
+            print(f"[VIRTUAL-AUTO-RESP] Erro em {path}: {exc}")
+            return False
+
     try:
+        # a) Simula tempo para ler a mensagem (2-5s)
+        delay_leitura = random.randint(2, 5)
+        print(f"🤖 Virtual recebeu de {to_phone[:6]}*** → aguardando {delay_leitura}s para ler")
+        await asyncio.sleep(delay_leitura)
+
+        # b) Marca como lido (sendSeen)
+        await waha_post(f"/api/{session_waha_id}/sendSeen", {"chatId": chat_id})
+        print(f"🤖 Virtual marcou como lido ({to_phone[:6]}***)")
+
+        # c) Delay antes de começar a digitar (3-8s)
+        delay_antes_digitar = random.randint(3, 8)
+        await asyncio.sleep(delay_antes_digitar)
+
+        # d) Inicia indicador de digitação
+        await waha_post(f"/api/{session_waha_id}/startTyping", {"chatId": chat_id})
+        print(f"🤖 Virtual digitando... ({session_waha_id} → {to_phone[:6]}***)")
+
+        # e) Gera resposta com IA (ou fallback) enquanto "digita"
         import ia_service
         resposta = await ia_service.gerar_resposta_natural(mensagem_recebida, user_key)
 
-        headers = {}
-        if settings.WAHA_API_KEY:
-            headers["X-Api-Key"] = settings.WAHA_API_KEY
-        payload = {
-            "chatId": f"{to_phone}@c.us",
+        # f) Delay proporcional ao tamanho da resposta (simula digitação real, 2-4s)
+        delay_digitar = max(2, min(4, len(resposta) // 15))
+        await asyncio.sleep(delay_digitar)
+
+        # g) Para indicador de digitação
+        await waha_post(f"/api/{session_waha_id}/stopTyping", {"chatId": chat_id})
+
+        # h) Envia resposta
+        ok = await waha_post("/api/sendText", {
+            "chatId": chat_id,
             "text": resposta,
             "session": session_waha_id,
-        }
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                f"{settings.WAHA_API_URL}/api/sendText",
-                json=payload,
-                headers=headers,
-            )
-        ok = r.status_code in (200, 201)
+        })
+        print(f"🤖 Virtual {'respondeu' if ok else 'FALHOU ao responder'}: {resposta[:60]!r}")
 
-        # Incrementa contador de respostas enviadas
-        aq = db.query(models.AquecimentoConfig).filter(models.AquecimentoConfig.id == aq_id).first()
-        if aq and ok:
-            aq.respostas_enviadas = (getattr(aq, "respostas_enviadas", 0) or 0) + 1
-            db.add(models.AquecimentoLog(
-                aquecimento_id=aq_id,
-                telefone_destino=to_phone,
-                mensagem=resposta,
-                status="respondido",
-            ))
-            db.commit()
+        # Salva log no banco
+        db: Session = SessionLocal()
+        try:
+            aq = db.query(models.AquecimentoConfig).filter(models.AquecimentoConfig.id == aq_id).first()
+            if aq and ok:
+                aq.respostas_enviadas = (getattr(aq, "respostas_enviadas", 0) or 0) + 1
+                db.add(models.AquecimentoLog(
+                    aquecimento_id=aq_id,
+                    telefone_destino=to_phone,
+                    mensagem=resposta,
+                    status="respondido",
+                ))
+                db.commit()
+        finally:
+            db.close()
+
     except Exception as exc:
-        print(f"[VIRTUAL-AUTO-RESP] Erro: {exc}")
-    finally:
-        db.close()
+        print(f"[VIRTUAL-AUTO-RESP] Erro inesperado: {exc}")
 
 
 def normalize_phone(raw: str) -> str:
@@ -310,12 +347,16 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
 
         # ── Chip virtual em aquecimento → auto-resposta ──────────────────────
         tipo_chip = getattr(sess, "tipo_chip", "fisico")
+        print(f"[WEBHOOK] Sessão '{sess.session_id}' tipo_chip={tipo_chip}")
         if tipo_chip == "virtual" and not is_group:
             aq_virtual = (
                 db.query(models.AquecimentoConfig)
                 .filter(
                     models.AquecimentoConfig.session_id == sess.id,
-                    models.AquecimentoConfig.status == models.AquecimentoStatus.ativo,
+                    models.AquecimentoConfig.status.in_([
+                        models.AquecimentoStatus.ativo,
+                        models.AquecimentoStatus.manutencao,
+                    ]),
                 )
                 .first()
             )
@@ -324,6 +365,7 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
                 db.commit()
                 body_text = payload.get("body") or payload.get("text") or ""
                 user_key = getattr(sess.user, "gemini_api_key", None) if sess.user else None
+                print(f"🤖 Virtual '{sess.session_id}' (aq#{aq_virtual.id}) recebeu de {phone[:6]}*** — disparando auto-resposta")
                 asyncio.create_task(
                     resposta_automatica_virtual(
                         session_waha_id=sess.session_id,
@@ -333,7 +375,8 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
                         user_key=user_key,
                     )
                 )
-                print(f"[VIRTUAL] Chip virtual {sess.session_id} recebeu de {phone[:6]}*** — auto-resposta agendada (2-8min)")
+            else:
+                print(f"[WEBHOOK] Virtual '{sess.session_id}' sem AquecimentoConfig ativo — sem auto-resposta")
 
     # ── message.ack (entregue / lido / erro) ──────────────────────────────────
     elif event in ("message.ack", "message_ack") and sess:

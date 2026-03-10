@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone
+from pathlib import Path
 import io
 import csv
 import openpyxl
@@ -392,6 +393,51 @@ def export_contacts(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=contatos.xlsx"},
+    )
+
+
+@router.get("/backup/info")
+def get_backup_info(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Retorna info do backup mais recente disponível para download."""
+    backup = db.query(models.ContactBackup).filter(
+        models.ContactBackup.user_id == current_user.id
+    ).order_by(models.ContactBackup.created_at.desc()).first()
+
+    if not backup:
+        return {"available": False}
+
+    return {
+        "available": True,
+        "filename": backup.filename,
+        "contact_count": backup.contact_count,
+        "created_at": backup.created_at,
+    }
+
+
+@router.get("/backup/download")
+def download_backup(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Baixa o backup CSV mais recente de contatos."""
+    backup = db.query(models.ContactBackup).filter(
+        models.ContactBackup.user_id == current_user.id
+    ).order_by(models.ContactBackup.created_at.desc()).first()
+
+    if not backup:
+        raise HTTPException(status_code=404, detail="Nenhum backup disponível")
+
+    filepath = Path("backups") / str(current_user.id) / backup.filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Arquivo de backup não encontrado")
+
+    return FileResponse(
+        path=str(filepath),
+        filename=backup.filename,
+        media_type="text/csv",
     )
 
 

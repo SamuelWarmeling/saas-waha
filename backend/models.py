@@ -100,6 +100,8 @@ class WhatsAppSession(Base):
     is_aquecido = Column(Boolean, default=False, server_default="false", nullable=False)
     is_veterano = Column(Boolean, default=False, server_default="false", nullable=False)
     em_adaptacao = Column(Boolean, default=False, server_default="false", nullable=False)
+    reconexao_tentativas = Column(Integer, default=0, server_default="0", nullable=False)
+    reconexao_ultima_em = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -118,6 +120,7 @@ class Contact(Base):
     phone = Column(String(20), nullable=False)
     name = Column(String(255), nullable=True)
     is_blacklisted = Column(Boolean, default=False)
+    is_invalid = Column(Boolean, default=False, server_default="false", nullable=False)
     tags = Column(String(500), nullable=True)  # CSV de tags
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -178,6 +181,8 @@ class CampaignContact(Base):
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     read_at = Column(DateTime(timezone=True), nullable=True)
     waha_message_id = Column(String(100), nullable=True)
+    retry_count = Column(Integer, default=0, server_default="0", nullable=False)
+    retry_at = Column(DateTime(timezone=True), nullable=True)
 
     campaign = relationship("Campaign", back_populates="campaign_contacts")
     contact = relationship("Contact", back_populates="campaign_contacts")
@@ -434,6 +439,7 @@ class Group(Base):
     last_extracted_at = Column(DateTime(timezone=True), nullable=True)
     auto_update_interval = Column(Integer, nullable=True)  # horas, null = desativado
     last_extraction_result = Column(Text, nullable=True)  # JSON {"novos":5,"sairam":2,"existentes":10}
+    arquivado = Column(Boolean, default=False, server_default="false", nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User")
@@ -465,6 +471,23 @@ class GroupMember(Base):
     __table_args__ = (
         Index("ix_group_members_group_id", "group_id"),
         Index("ix_group_members_contact_id", "contact_id"),
+    )
+
+
+class ContactBackup(Base):
+    """Registra backups automáticos de contatos exportados em CSV."""
+    __tablename__ = "contact_backups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    filename = Column(String(255), nullable=False)
+    contact_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_contact_backups_user_id", "user_id"),
     )
 
 

@@ -610,8 +610,13 @@ export default function Contatos() {
   const [showListaModal, setShowListaModal] = useState(false)
   const [showAddToListaModal, setShowAddToListaModal] = useState(false)
   const [detailContactId, setDetailContactId] = useState(null)
+  const [backupInfo, setBackupInfo] = useState(null)
 
   // ── Load ──────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    api.get('/contatos/backup/info').then(r => setBackupInfo(r.data)).catch(() => {})
+  }, [])
 
   const loadStats = useCallback(async () => {
     try {
@@ -774,6 +779,16 @@ export default function Contatos() {
           <button onClick={handleExport} className="btn-secondary flex items-center gap-2 text-sm px-3 md:px-4">
             <MdDownload size={16}/> <span className="hidden sm:inline">Exportar</span>
           </button>
+          {backupInfo?.available && (
+            <a
+              href="/api/contatos/backup/download"
+              download={backupInfo.filename}
+              className="btn-secondary flex items-center gap-2 text-sm px-3 md:px-4"
+              title={`Backup de ${backupInfo.contact_count?.toLocaleString('pt-BR')} contatos`}
+            >
+              <MdDownload size={16}/> <span className="hidden sm:inline">📥 Backup</span>
+            </a>
+          )}
           <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2 text-sm px-3 md:px-4">
             <MdAdd size={18}/> <span className="hidden sm:inline">Novo Contato</span>
           </button>

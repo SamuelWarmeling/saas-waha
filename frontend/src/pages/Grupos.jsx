@@ -515,11 +515,23 @@ export default function Grupos() {
                   const proxima = proximaExtracao(grupo.last_extracted_at, grupo.auto_update_interval)
                   const isAutoActive = !!grupo.auto_update_interval
                   const delta = grupo.last_extraction_result ? (() => { try { return JSON.parse(grupo.last_extraction_result) } catch { return null } })() : null
+                  const isArquivado = grupo.arquivado
+                  const isInativo = !grupo.is_active && !grupo.arquivado
                   return (
-                    <tr key={grupo.id} className="hover:bg-surface-800/30 transition-colors">
+                    <tr key={grupo.id} className={`hover:bg-surface-800/30 transition-colors ${isArquivado ? 'opacity-50' : ''}`}>
                       <td className="px-6 py-4 font-medium text-surface-100">
                         <div className="flex items-center gap-2 flex-wrap">
                           {grupo.name}
+                          {isArquivado && (
+                            <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-surface-700/50 text-surface-500 border border-surface-600/50">
+                              📁 Arquivado
+                            </span>
+                          )}
+                          {isInativo && !isArquivado && (
+                            <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-900/30 text-red-400 border border-red-500/30">
+                              💤 Inativo
+                            </span>
+                          )}
                           {isAutoActive && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-500/30">
                               <MdAutorenew size={11} className="animate-spin" style={{ animationDuration: '3s' }} /> Auto

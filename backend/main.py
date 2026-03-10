@@ -26,6 +26,12 @@ from routes.admin import router as admin_router
 from routes.debug import router as debug_router
 from routes.atividades import router as atividades_router
 from routes.dashboard import router as dashboard_router
+from workers.reconexao import reconexao_worker_task
+from workers.rotacao import rotacao_worker_task
+from workers.limpeza import limpeza_worker_task
+from workers.reenvio import reenvio_worker_task
+from workers.grupos_inativos import grupos_inativos_worker_task
+from workers.backup import backup_worker_task
 from config import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -629,6 +635,36 @@ def migrate_chip_virtual():
         logger.error(f"[MIGRATE] Erro ao migrar chip virtual: {e}")
 
 
+def migrate_automacoes():
+    """Adiciona colunas para as 6 automações em background."""
+    cols = [
+        # WhatsAppSession
+        ("whatsapp_sessions", "reconexao_tentativas", "INTEGER NOT NULL DEFAULT 0"),
+        ("whatsapp_sessions", "reconexao_ultima_em", "TIMESTAMP WITH TIME ZONE"),
+        # CampaignContact
+        ("campaign_contacts", "retry_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("campaign_contacts", "retry_at", "TIMESTAMP WITH TIME ZONE"),
+        # Contact
+        ("contacts", "is_invalid", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        # Group
+        ("groups", "arquivado", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ]
+    try:
+        with engine.connect() as conn:
+            for table, col, dtype in cols:
+                r = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = '{table}' AND column_name = '{col}')"
+                ))
+                if not r.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em {table}...")
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {dtype}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em {table}.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_automacoes: {e}")
+
+
 def migrate_group_incremental():
     """Adiciona colunas para extração incremental de grupos."""
     try:
@@ -867,6 +903,7 @@ async def lifespan(app: FastAPI):
             migrate_listas()
             migrate_anti_abuso()
             migrate_stripe_columns()
+            migrate_automacoes()
             migrate_group_incremental()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
@@ -894,12 +931,24 @@ async def lifespan(app: FastAPI):
     task_sched = asyncio.create_task(scheduled_campaigns_task())
     task_funnel = asyncio.create_task(funnel_worker_task())
     task_aquec = asyncio.create_task(aquecimento_worker_task())
+    task_reconexao = asyncio.create_task(reconexao_worker_task())
+    task_rotacao = asyncio.create_task(rotacao_worker_task())
+    task_limpeza = asyncio.create_task(limpeza_worker_task())
+    task_reenvio = asyncio.create_task(reenvio_worker_task())
+    task_grupos_inativos = asyncio.create_task(grupos_inativos_worker_task())
+    task_backup = asyncio.create_task(backup_worker_task())
     yield
-    task_auto.cancel()
-    task_sched.cancel()
-    task_funnel.cancel()
-    task_aquec.cancel()
-    for t in (task_auto, task_sched, task_funnel, task_aquec):
+    for t in (
+        task_auto, task_sched, task_funnel, task_aquec,
+        task_reconexao, task_rotacao, task_limpeza,
+        task_reenvio, task_grupos_inativos, task_backup,
+    ):
+        t.cancel()
+    for t in (
+        task_auto, task_sched, task_funnel, task_aquec,
+        task_reconexao, task_rotacao, task_limpeza,
+        task_reenvio, task_grupos_inativos, task_backup,
+    ):
         try:
             await t
         except asyncio.CancelledError:

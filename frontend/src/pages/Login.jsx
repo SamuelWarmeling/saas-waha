@@ -6,9 +6,12 @@ import api from '../api'
 
 export default function Login() {
   const navigate = useNavigate()
-  const [mode, setMode] = useState('login') // 'login' | 'register'
+  const [mode, setMode] = useState('login') // 'login' | 'register' | 'forgot' | 'forgot_code'
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotCodigo, setForgotCodigo] = useState('')
+  const [forgotNovaSenha, setForgotNovaSenha] = useState('')
 
   const update = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }))
 
@@ -27,6 +30,21 @@ export default function Login() {
         if (data.user) localStorage.setItem('user', JSON.stringify(data.user))
         toast.success('Conta criada! Trial de 7 dias ativo.')
         window.location.href = data.checkout_url || data.redirect || '/dashboard'
+      } else if (mode === 'forgot') {
+        await api.post('/usuarios/esqueceu-senha', { email: forgotEmail })
+        toast.success('Se o e-mail estiver cadastrado, você receberá um código em breve.')
+        setMode('forgot_code')
+      } else if (mode === 'forgot_code') {
+        await api.post('/usuarios/resetar-senha', {
+          email: forgotEmail,
+          codigo: forgotCodigo,
+          nova_senha: forgotNovaSenha,
+        })
+        toast.success('Senha alterada com sucesso! Faça login.')
+        setMode('login')
+        setForgotEmail('')
+        setForgotCodigo('')
+        setForgotNovaSenha('')
       } else {
         const params = new URLSearchParams()
         params.append('username', form.email)
@@ -108,112 +126,200 @@ export default function Login() {
             boxShadow: '0 25px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(157,78,221,0.05)',
           }}
         >
-          {/* Tabs */}
-          <div
-            className="flex rounded-xl p-1 mb-8"
-            style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}
-          >
-            {['login', 'register'].map((m) => (
+          {/* Forgot password screens */}
+          {(mode === 'forgot' || mode === 'forgot_code') ? (
+            <>
               <button
-                key={m}
-                onClick={() => setMode(m)}
-                className="flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300"
-                style={
-                  mode === m
-                    ? {
-                        background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)',
-                        color: 'white',
-                        boxShadow: '0 0 20px rgba(157,78,221,0.3)',
-                        border: '1px solid rgba(157,78,221,0.4)',
-                      }
-                    : { color: '#64748b', background: 'transparent' }
-                }
+                onClick={() => setMode('login')}
+                className="text-sm text-purple-400 hover:text-purple-300 mb-6 flex items-center gap-1"
               >
-                {m === 'login' ? 'Entrar' : 'Criar conta'}
+                ← Voltar ao login
               </button>
-            ))}
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {mode === 'register' && (
-              <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1.5 ml-1">Nome</label>
-                <input
-                  name="name"
-                  value={form.name}
-                  onChange={update}
-                  placeholder="Seu nome completo"
-                  required
-                  className="input"
-                />
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1.5 ml-1">E-mail</label>
-              <input
-                type="email"
-                name="email"
-                value={form.email}
-                onChange={update}
-                placeholder="seu@email.com"
-                required
-                className="input"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1.5 ml-1">Senha</label>
-              <input
-                type="password"
-                name="password"
-                value={form.password}
-                onChange={update}
-                placeholder="Mínimo 8 caracteres"
-                required
-                minLength={8}
-                className="input"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full mt-6 text-white font-semibold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)',
-                border: '1px solid rgba(157,78,221,0.4)',
-                boxShadow: '0 0 20px rgba(157,78,221,0.3)',
-              }}
-              onMouseEnter={e => {
-                if (!loading) e.currentTarget.style.boxShadow = '0 0 30px rgba(157,78,221,0.5)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.boxShadow = '0 0 20px rgba(157,78,221,0.3)'
-              }}
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Processando...
-                </span>
-              ) : mode === 'login' ? 'Acessar Plataforma' : 'Criar Conta Grátis'}
-            </button>
-          </form>
-
-          {mode === 'register' && (
-            <div
-              className="mt-6 pt-5 text-center"
-              style={{ borderTop: '1px solid rgba(157,78,221,0.15)' }}
-            >
-              <p className="text-sm font-medium text-surface-400 flex items-center justify-center gap-2">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: '#9D4EDD', boxShadow: '0 0 8px #9D4EDD' }}
-                />
-                7 dias de trial grátis liberados.
+              <h2 className="text-white font-bold text-lg mb-1">
+                {mode === 'forgot' ? 'Recuperar senha' : 'Digite o código'}
+              </h2>
+              <p className="text-gray-400 text-sm mb-6">
+                {mode === 'forgot'
+                  ? 'Informe seu e-mail para receber um código de recuperação.'
+                  : `Enviamos um código para ${forgotEmail}. Digite abaixo com a nova senha.`}
               </p>
-            </div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {mode === 'forgot' && (
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-1.5 ml-1">E-mail</label>
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={e => setForgotEmail(e.target.value)}
+                      placeholder="seu@email.com"
+                      required
+                      className="input"
+                    />
+                  </div>
+                )}
+                {mode === 'forgot_code' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-300 mb-1.5 ml-1">Código (6 dígitos)</label>
+                      <input
+                        type="text"
+                        value={forgotCodigo}
+                        onChange={e => setForgotCodigo(e.target.value)}
+                        placeholder="000000"
+                        maxLength={6}
+                        required
+                        className="input"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-300 mb-1.5 ml-1">Nova senha</label>
+                      <input
+                        type="password"
+                        value={forgotNovaSenha}
+                        onChange={e => setForgotNovaSenha(e.target.value)}
+                        placeholder="Mínimo 8 caracteres"
+                        minLength={8}
+                        required
+                        className="input"
+                      />
+                    </div>
+                  </>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full mt-2 text-white font-semibold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)',
+                    border: '1px solid rgba(157,78,221,0.4)',
+                    boxShadow: '0 0 20px rgba(157,78,221,0.3)',
+                  }}
+                >
+                  {loading ? 'Processando...' : mode === 'forgot' ? 'Enviar código' : 'Redefinir senha'}
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              {/* Tabs */}
+              <div
+                className="flex rounded-xl p-1 mb-8"
+                style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}
+              >
+                {['login', 'register'].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    className="flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300"
+                    style={
+                      mode === m
+                        ? {
+                            background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)',
+                            color: 'white',
+                            boxShadow: '0 0 20px rgba(157,78,221,0.3)',
+                            border: '1px solid rgba(157,78,221,0.4)',
+                          }
+                        : { color: '#64748b', background: 'transparent' }
+                    }
+                  >
+                    {m === 'login' ? 'Entrar' : 'Criar conta'}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {mode === 'register' && (
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-1.5 ml-1">Nome</label>
+                    <input
+                      name="name"
+                      value={form.name}
+                      onChange={update}
+                      placeholder="Seu nome completo"
+                      required
+                      className="input"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-surface-300 mb-1.5 ml-1">E-mail</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={form.email}
+                    onChange={update}
+                    placeholder="seu@email.com"
+                    required
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-surface-300 mb-1.5 ml-1">Senha</label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={form.password}
+                    onChange={update}
+                    placeholder="Mínimo 8 caracteres"
+                    required
+                    minLength={8}
+                    className="input"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full mt-6 text-white font-semibold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)',
+                    border: '1px solid rgba(157,78,221,0.4)',
+                    boxShadow: '0 0 20px rgba(157,78,221,0.3)',
+                  }}
+                  onMouseEnter={e => {
+                    if (!loading) e.currentTarget.style.boxShadow = '0 0 30px rgba(157,78,221,0.5)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.boxShadow = '0 0 20px rgba(157,78,221,0.3)'
+                  }}
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Processando...
+                    </span>
+                  ) : mode === 'login' ? 'Acessar Plataforma' : 'Criar Conta Grátis'}
+                </button>
+              </form>
+
+              {mode === 'login' && (
+                <div className="mt-4 text-center">
+                  <button
+                    onClick={() => setMode('forgot')}
+                    className="text-sm text-purple-400 hover:text-purple-300"
+                  >
+                    Esqueci minha senha
+                  </button>
+                </div>
+              )}
+
+              {mode === 'register' && (
+                <div
+                  className="mt-6 pt-5 text-center"
+                  style={{ borderTop: '1px solid rgba(157,78,221,0.15)' }}
+                >
+                  <p className="text-sm font-medium text-surface-400 flex items-center justify-center gap-2">
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{ background: '#9D4EDD', boxShadow: '0 0 8px #9D4EDD' }}
+                    />
+                    7 dias de trial grátis liberados.
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import api from '../api'
+
+const ALLOWED_REDIRECT_PREFIXES = [
+  'https://checkout.stripe.com',
+  'https://www.mercadopago.com.br',
+  window.location.origin,
+]
 
 // ── Urgency Timer ─────────────────────────────────────────────────────────────
 
@@ -155,7 +162,6 @@ function RegistrationForm() {
     if (form.password.length < 8) return setError('A senha deve ter no mínimo 8 caracteres.')
     if (form.password !== form.confirmPassword) return setError('As senhas não coincidem.')
 
-    console.log('INICIANDO CADASTRO')
     setLoading(true)
     try {
       const res = await api.post('/auth/cadastro', {
@@ -165,8 +171,6 @@ function RegistrationForm() {
         password: form.password,
       })
 
-      console.log('RESPOSTA:', JSON.stringify(res.data))
-
       const { checkout_url, redirect, access_token, refresh_token, user } = res.data
 
       // Salva tokens (necessário para polling ou acesso ao dashboard)
@@ -175,16 +179,26 @@ function RegistrationForm() {
       if (user) localStorage.setItem('user', JSON.stringify(user))
 
       if (checkout_url) {
-        console.log('REDIRECIONANDO PARA:', checkout_url)
-        alert('Cadastro OK! Redirecionando para pagamento...')
+        const isAllowed = ALLOWED_REDIRECT_PREFIXES.some(p => checkout_url.startsWith(p))
+        if (!isAllowed) {
+          toast.error('URL de pagamento inválida. Contate o suporte.')
+          setLoading(false)
+          return
+        }
+        toast.success('Cadastro OK! Redirecionando para pagamento...')
         window.location.href = checkout_url
       } else {
-        console.log('REDIRECIONANDO PARA:', redirect || '/dashboard')
-        alert('Cadastro OK! Redirecionando...')
-        window.location.href = redirect || '/dashboard'
+        const dest = redirect || '/dashboard'
+        const isAllowed = ALLOWED_REDIRECT_PREFIXES.some(p => dest.startsWith(p)) || dest.startsWith('/')
+        if (!isAllowed) {
+          toast.error('Destino de redirecionamento inválido. Contate o suporte.')
+          setLoading(false)
+          return
+        }
+        toast.success('Cadastro OK! Redirecionando...')
+        window.location.href = dest
       }
     } catch (err) {
-      console.log('ERRO:', err.message, err.response?.data)
       // FastAPI 422 retorna detail como ARRAY — nunca setar objeto no estado (React error #31)
       const rawDetail = err.response?.data?.detail
       const msg = Array.isArray(rawDetail)

@@ -33,15 +33,16 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         import stripe
         stripe.api_key = settings.STRIPE_SECRET_KEY
 
-        if settings.STRIPE_WEBHOOK_SECRET:
-            event = stripe.Webhook.construct_event(
-                payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
-            )
-        else:
-            import json
-            event = json.loads(payload)
-            logger.warning("[STRIPE] STRIPE_WEBHOOK_SECRET não configurado — aceitando sem verificação")
+        if not settings.STRIPE_WEBHOOK_SECRET:
+            logger.error("[STRIPE] STRIPE_WEBHOOK_SECRET não configurado!")
+            raise HTTPException(status_code=400, detail="Webhook secret não configurado")
 
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
+        )
+
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.error(f"[STRIPE] Payload inválido: {e}")
         raise HTTPException(status_code=400, detail="Payload inválido")
@@ -50,9 +51,10 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Assinatura inválida")
 
     event_type = event.get("type", "")
+    event_id = event.get("id", "")
     data_obj = event.get("data", {}).get("object", {})
 
-    logger.info(f"[STRIPE] Evento recebido: {event_type}")
+    logger.info(f"[STRIPE] Evento recebido: {event_type} (id={event_id})")
 
     # ── checkout.session.completed ─────────────────────────────────────────────
     if event_type == "checkout.session.completed":
@@ -67,6 +69,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         if not user:
             logger.warning(f"[STRIPE] Usuário {user_id_str} não encontrado")
             return {"status": "user_not_found"}
+
+        # Idempotência: já ativado por evento anterior
+        if user.trial_ativo:
+            logger.info(f"[STRIPE] checkout.session.completed já processado para usuário {user.id} — ignorando")
+            return {"status": "ok"}
 
         now = datetime.now(timezone.utc)
         trial_expira = now + timedelta(days=7)
@@ -110,6 +117,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             return {"status": "user_not_found"}
 
         now = datetime.now(timezone.utc)
+
+        # Idempotência: plano já está ativo e não expirou
+        if user.plan_expires_at and user.plan_expires_at.replace(tzinfo=timezone.utc) > now:
+            logger.info(f"[STRIPE] invoice.payment_succeeded já processado para usuário {user.id} — ignorando")
+            return {"status": "ok"}
+
         user.is_active = True
         user.trial_ativo = False
         user.plan_expires_at = now + timedelta(days=30)

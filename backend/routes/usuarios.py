@@ -1,4 +1,6 @@
 import re
+import hmac
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -13,6 +15,18 @@ from config import settings, PLANS
 from email_utils import gerar_codigo_verificacao, enviar_email_verificacao
 
 router = APIRouter(prefix="/api/usuarios", tags=["Usuários"])
+
+# ── Rate limiting (login + esqueceu-senha) ─────────────────────────────────────
+_login_attempts: dict = {}   # ip -> [timestamp, ...]
+MAX_LOGIN_PER_MINUTE = 10
+
+
+def _check_rate_limit(ip: str):
+    now = datetime.now(timezone.utc)
+    attempts = [t for t in _login_attempts.get(ip, []) if (now - t).total_seconds() < 60]
+    if len(attempts) >= MAX_LOGIN_PER_MINUTE:
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Aguarde 1 minuto.")
+    _login_attempts[ip] = attempts + [now]
 
 
 # ── Domínios de email temporário bloqueados ────────────────────────────────────
@@ -202,7 +216,8 @@ def register(data: UserCreate, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenOut)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    _check_rate_limit(_get_ip(request))
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not auth.verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="E-mail ou senha incorretos")
@@ -318,3 +333,101 @@ def get_plan_info(current_user: models.User = Depends(auth.get_current_user)):
         "plan_expires_at": current_user.plan_expires_at,
         "is_active": is_active,
     }
+
+
+# ── Schemas para reset de senha ───────────────────────────────────────────────
+
+class EsqueceuSenhaRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetarSenhaRequest(BaseModel):
+    email: EmailStr
+    codigo: str
+    nova_senha: str
+
+
+# ── Endpoints de reset de senha ───────────────────────────────────────────────
+
+@router.post("/esqueceu-senha")
+def esqueceu_senha(data: EsqueceuSenhaRequest, request: Request, db: Session = Depends(get_db)):
+    _check_rate_limit(_get_ip(request))
+    user = db.query(models.User).filter(models.User.email == data.email).first()
+    # Resposta genérica para não revelar se email existe
+    if not user:
+        return {"message": "Se o e-mail estiver cadastrado, você receberá um código em breve."}
+
+    # Remove códigos anteriores de reset para este usuário
+    db.query(models.EmailVerificacao).filter(
+        models.EmailVerificacao.user_id == user.id,
+        models.EmailVerificacao.tipo == "reset_senha",
+    ).delete()
+    db.commit()
+
+    codigo = gerar_codigo_verificacao()
+    db.add(models.EmailVerificacao(
+        user_id=user.id,
+        codigo=codigo,
+        tipo="reset_senha",
+        expira_em=datetime.now(timezone.utc) + timedelta(minutes=30),
+    ))
+    db.commit()
+
+    enviar_email_verificacao(user.email, user.name, codigo)
+
+    return {"message": "Se o e-mail estiver cadastrado, você receberá um código em breve."}
+
+
+@router.post("/resetar-senha")
+def resetar_senha(data: ResetarSenhaRequest, db: Session = Depends(get_db)):
+    if len(data.nova_senha) < 8:
+        raise HTTPException(status_code=400, detail="Nova senha deve ter no mínimo 8 caracteres")
+
+    user = db.query(models.User).filter(models.User.email == data.email).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Código inválido ou expirado.")
+
+    verificacao = (
+        db.query(models.EmailVerificacao)
+        .filter(
+            models.EmailVerificacao.user_id == user.id,
+            models.EmailVerificacao.tipo == "reset_senha",
+        )
+        .order_by(models.EmailVerificacao.criado_em.desc())
+        .first()
+    )
+    if not verificacao:
+        raise HTTPException(status_code=400, detail="Código inválido ou expirado.")
+
+    now = datetime.now(timezone.utc)
+    expira = verificacao.expira_em
+    if expira.tzinfo is None:
+        expira = expira.replace(tzinfo=timezone.utc)
+    if now > expira:
+        db.delete(verificacao)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Código expirado. Solicite um novo.")
+
+    if verificacao.tentativas >= 3:
+        db.delete(verificacao)
+        db.commit()
+        raise HTTPException(status_code=429, detail="Código bloqueado por excesso de tentativas.")
+
+    verificacao.tentativas += 1
+    db.commit()
+
+    if not hmac.compare_digest(data.codigo.strip(), verificacao.codigo):
+        restantes = 3 - verificacao.tentativas
+        if restantes <= 0:
+            db.delete(verificacao)
+            db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Código incorreto. {restantes} tentativa(s) restante(s)." if restantes > 0 else "Código bloqueado. Solicite um novo."
+        )
+
+    user.password_hash = auth.hash_password(data.nova_senha)
+    db.delete(verificacao)
+    db.commit()
+
+    return {"message": "Senha alterada com sucesso. Faça login com sua nova senha."}

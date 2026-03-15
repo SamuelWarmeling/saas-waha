@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import Login from './pages/Login'
 import LandingPage from './pages/LandingPage'
 import Checkout from './pages/Checkout'
@@ -22,6 +23,8 @@ function PrivateRoute({ children }) {
 
 export default function App() {
   return (
+    <>
+    <Toaster position="top-right" toastOptions={{ style: { background: '#1f2937', color: '#f9fafb', border: '1px solid #374151' } }} />
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<LandingPage />} />
@@ -51,5 +54,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }

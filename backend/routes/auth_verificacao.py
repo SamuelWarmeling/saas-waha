@@ -1,4 +1,5 @@
 import re
+import hmac
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -155,7 +156,7 @@ def verificar_email(data: VerificarEmailRequest, db: Session = Depends(get_db)):
     verificacao.tentativas += 1
     db.commit()
 
-    if data.codigo.strip() != verificacao.codigo:
+    if not hmac.compare_digest(data.codigo.strip(), verificacao.codigo):
         restantes = MAX_TENTATIVAS - verificacao.tentativas
         if restantes <= 0:
             db.delete(verificacao)

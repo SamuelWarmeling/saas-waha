@@ -574,6 +574,7 @@ class EmailVerificacao(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     codigo = Column(String(6), nullable=False)
+    tipo = Column(String(20), nullable=False, default="verificacao", server_default="verificacao")
     expira_em = Column(DateTime(timezone=True), nullable=False)
     tentativas = Column(Integer, default=0, nullable=False, server_default="0")
     criado_em = Column(DateTime(timezone=True), server_default=func.now())

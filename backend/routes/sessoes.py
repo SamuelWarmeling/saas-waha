@@ -1,3 +1,4 @@
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -206,7 +207,7 @@ async def create_session(
         .filter(models.WhatsAppSession.user_id == current_user.id)
         .count()
     )
-    session_id = f"u{current_user.id}_{total_count + 1:02d}"
+    session_id = f"s{secrets.token_hex(4)}_{total_count + 1:02d}"
     max_daily = data.max_daily_messages or plan_info.get("max_daily_messages", 200)
 
     # Salva no DB

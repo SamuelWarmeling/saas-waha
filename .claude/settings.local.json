@@ -47,7 +47,17 @@
       "Bash(node:*)",
       "Bash(cd \"C:/Users/samue/OneDrive/Desktop/saas-waha/frontend\" && npm run build 2>&1)",
       "Bash(PGPASSWORD=postgres psql:*)",
-      "WebFetch(domain:api-saas.xeramr.easypanel.host)"
+      "WebFetch(domain:api-saas.xeramr.easypanel.host)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add frontend/src/pages/Login.jsx && git commit -m \"fix: Login.jsx usando /auth/cadastro\" && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add backend/routes/admin.py && git commit -m \"feat: endpoint POST /api/admin/ativar-plano por email\" && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add frontend/src/components/Header.jsx && git commit -m \"fix: status do plano no Header\" && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add frontend/src/components/Header.jsx && git commit -m \"fix: Header mostrando status correto do plano\" && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add backend/routes/admin.py frontend/src/pages/Admin.jsx && git commit -m \"feat: painel admin para gerenciar planos\" && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add backend/routes/aquecimento.py && git commit -m \"fix: debug aquecimento worker\" && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add frontend/src/pages/Sessoes.jsx && git commit -m \"fix: seleção manual obrigatória do tipo de chip\" && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add backend/routes/aquecimento.py && git commit -m \"fix: horário aquecimento 07-21h BR\" && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add backend/routes/admin.py frontend/src/pages/Admin.jsx frontend/src/components/Layout.jsx && git commit -m \"feat: admin pode acessar conta de usuários\" && git push origin master 2>&1)",
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add . && git commit --allow-empty -m \"force redeploy frontend\" && git push origin master 2>&1)"
     ]
   }
 }

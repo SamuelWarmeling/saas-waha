@@ -4,7 +4,7 @@ import {
   MdAccessTime, MdSettings, MdShield, MdSchedule, MdFilterList,
   MdBarChart, MdDownload, MdImage, MdAudiotrack, MdAttachFile, MdSmartButton,
   MdMessage, MdCheckCircle, MdCancel, MdSkipNext, MdEmail, MdLink,
-  MdGroup, MdDialpad, MdEditNote, MdFormatListBulleted, MdShuffle, MdSearch,
+  MdGroup, MdDialpad, MdEditNote, MdFormatListBulleted, MdShuffle, MdSearch, MdEdit,
 } from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
@@ -808,6 +808,7 @@ export default function Campanhas() {
   const [drawerDraft, setDrawerDraft] = useState(EMPTY_ADVANCED)
   const [uploadingIdx, setUploadingIdx] = useState(null)
   const [reportCampaign, setReportCampaign] = useState(null)
+  const [editingCampaign, setEditingCampaign] = useState(null)
   const [grupos, setGrupos] = useState([])
   const [ddsDisponiveis, setDdsDisponiveis] = useState([])
   const [preview, setPreview] = useState(null)
@@ -940,11 +941,41 @@ export default function Campanhas() {
   function openDrawer() { setDrawerDraft({ ...adv }); setShowDrawer(true) }
   function saveDrawer() { setAdv({ ...drawerDraft }); setShowDrawer(false); toast.success('Configurações salvas') }
 
+  // ── Helpers de modal ───────────────────────────────────────────────────────
+
+  function closeModal() {
+    setShowModal(false)
+    setForm(EMPTY_FORM)
+    setAdv(EMPTY_ADVANCED)
+    setEditingCampaign(null)
+  }
+
+  function openEdit(c) {
+    const msgItems = c.message_items?.length
+      ? c.message_items.map(m => ({
+          tipo: m.tipo || 'text',
+          text: m.text || '',
+          media_url: m.media_url || '',
+          media_filename: m.media_filename || '',
+          botoes: m.botoes?.length ? m.botoes : [{ texto: '', tipo: 'reply', valor: '' }],
+        }))
+      : [{ ...EMPTY_MSG_ITEM }]
+    setForm({
+      name: c.name,
+      message_items: msgItems,
+      session_ids: c.session_ids || [],
+      ordem_mensagens: c.ordem_mensagens || 'aleatorio',
+      contactSel: { ...EMPTY_CONTACT_SEL },
+    })
+    setAdv(EMPTY_ADVANCED)
+    setEditingCampaign(c)
+    setShowModal(true)
+  }
+
   // ── Criar campanha ─────────────────────────────────────────────────────────
 
   async function handleCreate(e) {
     e.preventDefault()
-    if (form.session_ids.length === 0) { toast.error('Selecione ao menos 1 chip'); return }
 
     // Validar itens de mensagem
     const validItems = form.message_items.filter(item =>
@@ -978,12 +1009,37 @@ export default function Campanhas() {
         contact_ids: cs.fonte === 'manual' ? cs.selected_contacts.map(c => c.id) : null,
       })
       toast.success(scheduledAt ? 'Campanha agendada!' : 'Campanha criada!')
-      setShowModal(false)
-      setForm(EMPTY_FORM)
-      setAdv(EMPTY_ADVANCED)
+      closeModal()
       load()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao criar campanha')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Editar campanha ────────────────────────────────────────────────────────
+
+  async function handleEdit(e) {
+    e.preventDefault()
+    const validItems = form.message_items.filter(item =>
+      (item.tipo === 'text' && item.text.trim()) ||
+      (item.tipo !== 'text' && item.media_url)
+    )
+    if (!validItems.length) { toast.error('Adicione ao menos 1 mensagem válida'); return }
+    setLoading(true)
+    try {
+      await api.put(`/campanhas/${editingCampaign.id}`, {
+        name: form.name,
+        message_items: validItems,
+        session_ids: form.session_ids,
+        ordem_mensagens: form.ordem_mensagens,
+      })
+      toast.success('Campanha atualizada!')
+      closeModal()
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao salvar')
     } finally {
       setLoading(false)
     }
@@ -1105,7 +1161,10 @@ export default function Campanhas() {
                       <div className="text-[11px] text-surface-500 mt-1 uppercase tracking-wider font-medium flex items-center gap-1.5 flex-wrap">
                         <span className="w-4 h-4 rounded-full bg-surface-800 border border-surface-700 font-bold flex items-center justify-center text-surface-400">{c.messages?.length ?? 1}</span> msg
                         <span className="text-surface-700">|</span>
-                        <span className="w-4 h-4 rounded-full bg-surface-800 border border-surface-700 font-bold flex items-center justify-center text-surface-400">{c.session_ids?.length ?? 1}</span> chip
+                        {(!c.session_ids || c.session_ids.length === 0)
+                          ? <span className="text-[10px] font-bold text-orange-400">⚠️ Sem chip</span>
+                          : <><span className="w-4 h-4 rounded-full bg-surface-800 border border-surface-700 font-bold flex items-center justify-center text-surface-400">{c.session_ids.length}</span> chip</>
+                        }
                         {isScheduled && c.scheduled_at && (
                           <span className="text-yellow-400/90 font-semibold flex items-center gap-1 text-[10px]">
                             <MdSchedule size={12} /> {fmtScheduledAt(c.scheduled_at)}
@@ -1140,6 +1199,25 @@ export default function Campanhas() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {/* Editar */}
+                        {(c.status === 'draft' || c.status === 'paused') && (
+                          <button
+                            onClick={() => openEdit(c)}
+                            className="p-2.5 rounded-xl bg-surface-800/50 hover:bg-surface-700 text-surface-400 hover:text-primary-300 transition-all border border-surface-700/40"
+                            title="Editar campanha"
+                          >
+                            <MdEdit size={18} />
+                          </button>
+                        )}
+                        {c.status === 'running' && (
+                          <button
+                            disabled
+                            className="p-2.5 rounded-xl bg-surface-800/30 text-surface-700 border border-surface-700/30 cursor-not-allowed"
+                            title="Pause a campanha para editar"
+                          >
+                            <MdEdit size={18} />
+                          </button>
+                        )}
                         {/* Ver Relatório */}
                         {(c.status === 'completed' || c.status === 'cancelled' || c.sent_count > 0) && (
                           <button
@@ -1194,18 +1272,20 @@ export default function Campanhas() {
         </div>
       </div>
 
-      {/* ── Modal Nova Campanha ─────────────────────────────────────────────── */}
+      {/* ── Modal Nova / Editar Campanha ────────────────────────────────────── */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col sm:items-start sm:justify-center z-50 sm:p-4 sm:overflow-y-auto">
-          <div className="glass-card w-full sm:max-w-lg sm:my-8 sm:rounded-2xl rounded-none flex flex-col h-full sm:h-auto sm:max-h-[92vh] p-0 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-0 sm:border sm:border-surface-600/50">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col sm:items-center sm:justify-center z-50 sm:p-4 sm:overflow-y-auto">
+          <div className="glass-card w-full sm:max-w-xl sm:my-8 sm:rounded-2xl rounded-none flex flex-col h-full sm:h-auto sm:max-h-[92vh] p-0 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-0 sm:border sm:border-surface-600/50">
 
             {/* Header — fixo no topo */}
             <div className="flex-shrink-0 px-4 sm:px-6 py-4 sm:py-5 border-b border-surface-700/50 bg-surface-900/50 flex items-center justify-between">
               <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center"><MdPlayArrow size={20} /></div>
-                Nova Campanha
+                <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center">
+                  {editingCampaign ? <MdEdit size={20} /> : <MdPlayArrow size={20} />}
+                </div>
+                {editingCampaign ? 'Editar Campanha' : 'Nova Campanha'}
               </h2>
-              <button onClick={() => { setShowModal(false); setForm(EMPTY_FORM); setAdv(EMPTY_ADVANCED) }}
+              <button onClick={closeModal}
                 className="w-10 h-10 rounded-full bg-surface-800 flex items-center justify-center text-surface-400 hover:text-white hover:bg-surface-700 transition-colors">
                 <MdClose size={20} />
               </button>
@@ -1213,7 +1293,7 @@ export default function Campanhas() {
 
             {/* Conteúdo scrollável */}
             <div className="flex-1 overflow-y-auto overscroll-contain">
-            <form onSubmit={handleCreate} className="p-4 sm:p-6 space-y-6">
+            <form onSubmit={editingCampaign ? handleEdit : handleCreate} className="p-4 sm:p-6 space-y-6">
 
               {/* Nome */}
               <div>
@@ -1292,30 +1372,34 @@ export default function Campanhas() {
                 </div>
               </div>
 
-              {/* Seleção de contatos */}
-              <div className="bg-surface-900/30 p-5 rounded-2xl border border-surface-800/50">
-                <div className="flex items-center justify-between mb-4 pb-2 border-b border-surface-700/50">
-                  <label className="label mb-0 text-surface-200">Contatos</label>
-                  {previewLoading
-                    ? <span className="text-[11px] text-surface-500 italic">Carregando...</span>
-                    : preview != null
-                      ? <span className="text-[11px] font-bold text-primary-400">{preview.total} contatos</span>
-                      : null
-                  }
+              {/* Seleção de contatos — oculta ao editar */}
+              {!editingCampaign && (
+                <div className="bg-surface-900/30 p-5 rounded-2xl border border-surface-800/50">
+                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-surface-700/50">
+                    <label className="label mb-0 text-surface-200">Contatos</label>
+                    {previewLoading
+                      ? <span className="text-[11px] text-surface-500 italic">Carregando...</span>
+                      : preview != null
+                        ? <span className="text-[11px] font-bold text-primary-400">{preview.total} contatos</span>
+                        : null
+                    }
+                  </div>
+                  <ContactSourceSelector
+                    value={form.contactSel}
+                    onChange={cs => setForm(f => ({ ...f, contactSel: cs }))}
+                    grupos={grupos}
+                    ddsDisponiveis={ddsDisponiveis}
+                  />
                 </div>
-                <ContactSourceSelector
-                  value={form.contactSel}
-                  onChange={cs => setForm(f => ({ ...f, contactSel: cs }))}
-                  grupos={grupos}
-                  ddsDisponiveis={ddsDisponiveis}
-                />
-              </div>
+              )}
 
               {/* Chips */}
               <div>
                 <label className="label flex justify-between items-center mb-3">
                   <span className="text-surface-200">Chips WhatsApp</span>
-                  <span className="text-xs text-surface-500 font-normal">Selecione as conexões de envio</span>
+                  <span className="text-xs text-surface-500 font-normal">
+                    {editingCampaign ? 'Selecione as conexões de envio' : 'Opcional — pode adicionar depois'}
+                  </span>
                 </label>
                 {connectedSessions.length === 0 ? (
                   <div className="p-4 rounded-xl border border-yellow-500/30 bg-yellow-900/10 flex items-center gap-3">
@@ -1429,57 +1513,63 @@ export default function Campanhas() {
                 </div>
               )}
 
-              {/* Preview resumo */}
-              <div className="bg-surface-950/80 border border-surface-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-inner">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="text-center">
-                    <div className="text-xl font-black text-primary-400">{validMsgCount}</div>
-                    <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Msg{validMsgCount !== 1 ? 's' : ''}</div>
+              {/* Preview resumo — oculto ao editar */}
+              {!editingCampaign && (
+                <div className="bg-surface-950/80 border border-surface-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-inner">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="text-center">
+                      <div className="text-xl font-black text-primary-400">{validMsgCount}</div>
+                      <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Msg{validMsgCount !== 1 ? 's' : ''}</div>
+                    </div>
+                    <div className="w-[1px] h-8 bg-surface-800" />
+                    <div className="text-center">
+                      <div className="text-xl font-black text-primary-400">{chipCount}</div>
+                      <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Chip{chipCount !== 1 ? 's' : ''}</div>
+                    </div>
+                    <div className="w-[1px] h-8 bg-surface-800" />
+                    <div className="text-center">
+                      {previewLoading
+                        ? <div className="w-5 h-5 border-2 border-primary-500/30 border-t-primary-400 rounded-full animate-spin mx-auto" />
+                        : <div className="text-xl font-black text-primary-400">{preview?.total ?? '—'}</div>
+                      }
+                      <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Contatos</div>
+                    </div>
+                    {adv.schedule_enabled && adv.schedule_date && adv.schedule_time && (
+                      <>
+                        <div className="w-[1px] h-8 bg-surface-800" />
+                        <div className="text-center">
+                          <MdSchedule className="text-yellow-400 mx-auto" size={20} />
+                          <div className="text-[10px] text-yellow-400/80 uppercase font-bold tracking-widest mt-1">Agendado</div>
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <div className="w-[1px] h-8 bg-surface-800" />
-                  <div className="text-center">
-                    <div className="text-xl font-black text-primary-400">{chipCount}</div>
-                    <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Chip{chipCount !== 1 ? 's' : ''}</div>
-                  </div>
-                  <div className="w-[1px] h-8 bg-surface-800" />
-                  <div className="text-center">
-                    {previewLoading
-                      ? <div className="w-5 h-5 border-2 border-primary-500/30 border-t-primary-400 rounded-full animate-spin mx-auto" />
-                      : <div className="text-xl font-black text-primary-400">{preview?.total ?? '—'}</div>
-                    }
-                    <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Contatos</div>
-                  </div>
-                  {adv.schedule_enabled && adv.schedule_date && adv.schedule_time && (
-                    <>
-                      <div className="w-[1px] h-8 bg-surface-800" />
-                      <div className="text-center">
-                        <MdSchedule className="text-yellow-400 mx-auto" size={20} />
-                        <div className="text-[10px] text-yellow-400/80 uppercase font-bold tracking-widest mt-1">Agendado</div>
-                      </div>
-                    </>
-                  )}
+                  {validMsgCount > 0
+                    ? chipCount === 0
+                      ? <p className="text-[11px] text-orange-400/80 font-medium max-w-[220px]">Adicione um chip para poder disparar. A campanha será salva como rascunho.</p>
+                      : preview?.total === 0
+                        ? <p className="text-[11px] text-yellow-400/80 font-medium max-w-[220px]">Nenhum contato encontrado para esse filtro. A campanha será salva como rascunho.</p>
+                        : <p className="text-[11px] text-surface-400 font-medium leading-relaxed max-w-[220px]">Cada cliente receberá <strong className="text-surface-200">1</strong> mensagem enviada por <strong className="text-surface-200">1</strong> chip aleatório.</p>
+                    : <p className="text-[11px] text-red-400/80 font-medium">Preencha ao menos 1 mensagem.</p>
+                  }
                 </div>
-                {chipCount > 0 && validMsgCount > 0
-                  ? preview?.total === 0
-                    ? <p className="text-[11px] text-yellow-400/80 font-medium max-w-[220px]">Nenhum contato encontrado para esse filtro. A campanha será salva como rascunho.</p>
-                    : <p className="text-[11px] text-surface-400 font-medium leading-relaxed max-w-[220px]">Cada cliente receberá <strong className="text-surface-200">1</strong> mensagem enviada por <strong className="text-surface-200">1</strong> chip aleatório.</p>
-                  : <p className="text-[11px] text-red-400/80 font-medium">Preencha as mensagens e selecione os chips.</p>
-                }
-              </div>
+              )}
 
               {/* Rodapé */}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => { setShowModal(false); setForm(EMPTY_FORM); setAdv(EMPTY_ADVANCED) }}
-                  className="btn-secondary flex-1 py-3">Cancelar</button>
-                <button type="submit" disabled={loading || chipCount === 0 || validMsgCount === 0}
-                  className="btn-primary flex-[2] py-3 text-sm flex items-center justify-center gap-2">
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button type="button" onClick={closeModal}
+                  className="btn-secondary sm:flex-1 py-3 order-2 sm:order-1">Cancelar</button>
+                <button type="submit" disabled={loading || validMsgCount === 0}
+                  className="btn-primary sm:flex-[2] py-3 text-sm flex items-center justify-center gap-2 order-1 sm:order-2">
                   {loading
-                    ? <><div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> Criando...</>
-                    : preview?.total === 0
-                      ? 'Salvar como Rascunho'
-                      : adv.schedule_enabled && adv.schedule_date
-                        ? 'Agendar Campanha'
-                        : 'Salvar e Iniciar Campanha'
+                    ? <><div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> {editingCampaign ? 'Salvando...' : 'Criando...'}</>
+                    : editingCampaign
+                      ? 'Salvar Alterações'
+                      : chipCount === 0 || preview?.total === 0
+                        ? 'Salvar como Rascunho'
+                        : adv.schedule_enabled && adv.schedule_date
+                          ? 'Agendar Campanha'
+                          : 'Salvar e Iniciar Campanha'
                   }
                 </button>
               </div>
@@ -1507,15 +1597,14 @@ export default function Campanhas() {
           transition: 'opacity 0.3s ease',
         }}
       />
-      {/* Painel */}
+      {/* Painel — fullscreen no mobile, 480px no desktop */}
       <div
         style={{
           position: 'fixed',
           top: 0,
           right: 0,
-          width: '420px',
-          maxWidth: '100vw',
-          height: '100vh',
+          width: 'min(480px, 100vw)',
+          height: '100dvh',
           overflowY: 'auto',
           zIndex: 9999,
           background: 'linear-gradient(160deg,#1a1228 0%,#120d1e 100%)',

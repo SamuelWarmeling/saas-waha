@@ -53,7 +53,7 @@ class CampaignCreate(BaseModel):
     name: str
     messages: Optional[List[str]] = None      # legado: lista de textos
     message_items: Optional[List[MessageItem]] = None  # novo: lista rica
-    session_ids: List[int]
+    session_ids: Optional[List[int]] = []     # opcional — campanha pode ser rascunho sem chip
     # Seleção de contatos por fonte
     fonte: str = "lista"          # lista | grupo | ddd | manual
     contact_ids: Optional[List[int]] = None   # legado / lista com IDs específicos
@@ -68,13 +68,6 @@ class CampaignCreate(BaseModel):
     media_url: Optional[str] = None
     ordem_mensagens: Optional[str] = "aleatorio"
     scheduled_at: Optional[datetime] = None   # agendamento
-
-    @field_validator("session_ids")
-    @classmethod
-    def validate_sessions(cls, v):
-        if not v:
-            raise ValueError("Selecione ao menos 1 sessão")
-        return v
 
     def get_message_items(self) -> List[MessageItem]:
         """Retorna message_items normalizados (prioriza message_items, cai em messages)."""
@@ -95,6 +88,7 @@ class CampaignOut(BaseModel):
     name: str
     message: Optional[str]
     messages: List[str] = []
+    message_items: Optional[List[dict]] = None
     session_ids: List[int] = []
     status: str
     total_contacts: int
@@ -301,11 +295,22 @@ def _campaign_out(c: models.Campaign) -> dict:
     msgs = sorted(c.messages, key=lambda m: m.ordem)
     message_texts = [m.text or "" for m in msgs] if msgs else ([c.message] if c.message else [])
     session_ids = [cs.session_id for cs in c.campaign_sessions]
+    message_items_out = [
+        {
+            "tipo": getattr(m, "tipo", "text") or "text",
+            "text": m.text or "",
+            "media_url": m.media_url,
+            "media_filename": m.media_filename,
+            "botoes": json.loads(m.botoes) if m.botoes else [],
+        }
+        for m in msgs
+    ]
     return {
         "id": c.id,
         "name": c.name,
         "message": c.message,
         "messages": message_texts,
+        "message_items": message_items_out,
         "session_ids": session_ids,
         "status": c.status,
         "total_contacts": c.total_contacts,
@@ -673,12 +678,13 @@ def create_campaign(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_active_plan),
 ):
-    sessions = db.query(models.WhatsAppSession).filter(
-        models.WhatsAppSession.id.in_(data.session_ids),
-        models.WhatsAppSession.user_id == current_user.id,
-    ).all()
-    if not sessions:
-        raise HTTPException(status_code=404, detail="Nenhuma sessão encontrada")
+    if data.session_ids:
+        sessions = db.query(models.WhatsAppSession).filter(
+            models.WhatsAppSession.id.in_(data.session_ids),
+            models.WhatsAppSession.user_id == current_user.id,
+        ).all()
+    else:
+        sessions = []  # campanha rascunho sem chip — chip pode ser adicionado depois
 
     contacts = _resolver_contatos(
         fonte=data.fonte,
@@ -708,7 +714,7 @@ def create_campaign(
         user_id=current_user.id,
         name=data.name,
         message=first_text,
-        session_id=sessions[0].id,
+        session_id=sessions[0].id if sessions else None,
         delay_min=data.delay_min,
         delay_max=data.delay_max,
         media_url=data.media_url,
@@ -881,6 +887,77 @@ def adicionar_contatos(
     db.commit()
 
     return {"total": len(contacts), "message": f"{len(contacts)} contatos adicionados à campanha"}
+
+
+class CampaignUpdate(BaseModel):
+    name: Optional[str] = None
+    message_items: Optional[List[MessageItem]] = None
+    session_ids: Optional[List[int]] = None
+    ordem_mensagens: Optional[str] = None
+
+
+@router.put("/{campaign_id}", response_model=CampaignOut)
+def update_campaign(
+    campaign_id: int,
+    data: CampaignUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_active_plan),
+):
+    """Atualiza uma campanha em rascunho ou pausada."""
+    campaign = db.query(models.Campaign).filter(
+        models.Campaign.id == campaign_id,
+        models.Campaign.user_id == current_user.id,
+    ).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campanha não encontrada")
+    if campaign.status not in (models.CampaignStatus.draft, models.CampaignStatus.paused):
+        raise HTTPException(
+            status_code=400,
+            detail="Só é possível editar campanhas com status rascunho ou pausada"
+        )
+
+    if data.name is not None:
+        campaign.name = data.name
+
+    if data.ordem_mensagens is not None:
+        campaign.ordem_mensagens = data.ordem_mensagens
+
+    if data.message_items is not None:
+        db.query(models.CampaignMessage).filter(
+            models.CampaignMessage.campaign_id == campaign_id
+        ).delete(synchronize_session=False)
+        for i, item in enumerate(data.message_items):
+            db.add(models.CampaignMessage(
+                campaign_id=campaign.id,
+                text=item.text,
+                ordem=i,
+                tipo=item.tipo,
+                media_url=item.media_url,
+                media_filename=item.media_filename,
+                botoes=json.dumps(item.botoes) if item.botoes else None,
+            ))
+        if data.message_items:
+            campaign.message = data.message_items[0].text
+
+    if data.session_ids is not None:
+        db.query(models.CampaignSession).filter(
+            models.CampaignSession.campaign_id == campaign_id
+        ).delete(synchronize_session=False)
+        if data.session_ids:
+            sessions = db.query(models.WhatsAppSession).filter(
+                models.WhatsAppSession.id.in_(data.session_ids),
+                models.WhatsAppSession.user_id == current_user.id,
+            ).all()
+            for sess in sessions:
+                db.add(models.CampaignSession(campaign_id=campaign.id, session_id=sess.id))
+            if sessions:
+                campaign.session_id = sessions[0].id
+        else:
+            campaign.session_id = None
+
+    db.commit()
+    c = _load_campaign_q(db).filter(models.Campaign.id == campaign.id).first()
+    return _campaign_out(c)
 
 
 @router.get("/{campaign_id}", response_model=CampaignOut)

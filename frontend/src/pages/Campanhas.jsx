@@ -458,6 +458,7 @@ const FONTES_CONTATOS = [
 
 function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
   const up = (patch) => onChange({ ...value, ...patch })
+  const [grupoSearch, setGrupoSearch] = useState('')
 
   function toggleGrupo(id) {
     const ids = value.grupo_ids.includes(id)
@@ -503,32 +504,52 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
 
       {/* Por Grupo */}
       {value.fonte === 'grupo' && (
-        <div className="space-y-2 max-h-52 overflow-y-auto overscroll-contain pr-1">
-          {(grupos || []).length === 0
-            ? <p className="text-xs text-surface-500 italic">Nenhum grupo extraído. Extraia grupos na página de Sessões.</p>
-            : (grupos || []).map(g => {
-                const sel = value.grupo_ids.includes(g.id)
-                return (
-                  <div key={g.id} onClick={() => toggleGrupo(g.id)}
-                    className={`flex items-center justify-between gap-3 min-h-[48px] px-3 py-2 rounded-xl border cursor-pointer transition-all select-none
-                      ${sel ? 'border-primary-500/50 bg-primary-900/20' : 'border-surface-700 bg-surface-900/30 active:bg-surface-800/50'}`}>
-                    <div className="flex items-center gap-3 min-w-0">
-                      {/* Checkbox 44px touch target */}
-                      <div className="flex-shrink-0 flex items-center justify-center w-11 h-11 -ml-2">
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all
-                          ${sel ? 'bg-primary-500 border-primary-500' : 'border-surface-500 bg-surface-900/50'}`}>
-                          {sel && <MdCheckCircle className="text-white" size={14} />}
+        <div className="space-y-2">
+          {/* Busca local */}
+          <div className="relative">
+            <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500" size={16} />
+            <input
+              type="text"
+              placeholder="Buscar grupo..."
+              value={grupoSearch}
+              onChange={e => setGrupoSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-2 text-sm rounded-xl bg-surface-900/50 border border-surface-700 text-surface-200 placeholder-surface-500 focus:outline-none focus:border-primary-500/50"
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto overscroll-contain pr-1 space-y-1">
+            {(grupos || []).length === 0
+              ? <p className="text-xs text-surface-500 italic">Nenhum grupo extraído. Extraia grupos na página de Sessões.</p>
+              : (() => {
+                  const q = grupoSearch.toLowerCase()
+                  const filtered = q
+                    ? (grupos || []).filter(g => g.name?.toLowerCase().includes(q))
+                    : (grupos || [])
+                  if (filtered.length === 0)
+                    return <p className="text-xs text-surface-500 italic px-1">Nenhum grupo encontrado para "{grupoSearch}".</p>
+                  return filtered.map(g => {
+                    const sel = value.grupo_ids.includes(g.id)
+                    return (
+                      <div key={g.id} onClick={() => toggleGrupo(g.id)}
+                        className={`flex items-center justify-between gap-3 min-h-[48px] px-3 py-2 rounded-xl border cursor-pointer transition-all select-none
+                          ${sel ? 'border-primary-500/50 bg-primary-900/20' : 'border-surface-700 bg-surface-900/30 active:bg-surface-800/50'}`}>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex-shrink-0 flex items-center justify-center w-11 h-11 -ml-2">
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all
+                              ${sel ? 'bg-primary-500 border-primary-500' : 'border-surface-500 bg-surface-900/50'}`}>
+                              {sel && <MdCheckCircle className="text-white" size={14} />}
+                            </div>
+                          </div>
+                          <span className="text-sm font-medium text-surface-300 truncate">{g.name}</span>
                         </div>
+                        <span className="text-[11px] text-surface-500 flex-shrink-0 ml-auto">
+                          {g.member_count ?? g.total_membros ?? '?'} membros
+                        </span>
                       </div>
-                      <span className="text-sm font-medium text-surface-300 truncate">{g.name}</span>
-                    </div>
-                    <span className="text-[11px] text-surface-500 flex-shrink-0 ml-auto">
-                      {g.member_count ?? g.total_membros ?? '?'} membros
-                    </span>
-                  </div>
-                )
-              })
-          }
+                    )
+                  })
+                })()
+            }
+          </div>
         </div>
       )}
 
@@ -798,7 +819,7 @@ export default function Campanhas() {
       api.get('/sessoes'),
       api.get('/chips/diagnostico'),
       api.get('/campanhas/slots'),
-      api.get('/grupos'),
+      api.get('/grupos?page_size=500'),
       api.get('/campanhas/ddds-disponiveis'),
     ])
     if (cRes.status === 'fulfilled') setCampaigns(cRes.value.data)

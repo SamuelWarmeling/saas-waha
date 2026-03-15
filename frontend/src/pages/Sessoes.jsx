@@ -651,7 +651,7 @@ export default function Sessoes() {
 
               <p className="text-[11px] font-medium text-surface-500 mt-6 flex items-center justify-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse"></span>
-                Atualiza automaticamente a cada 5 segundos
+                Atualiza automaticamente a cada 5 minutos
               </p>
             </div>
 

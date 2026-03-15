@@ -110,7 +110,7 @@ function MessageItemEditor({ item, onChange, onUpload, uploadingIdx }) {
   return (
     <div className="space-y-3">
       {/* Tabs de tipo */}
-      <div className="flex rounded-xl p-0.5 gap-0.5 flex-wrap" style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(34,211,238,0.15)' }}>
+      <div className="flex rounded-xl p-0.5 gap-0.5 flex-wrap" style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}>
         {MEDIA_TABS.map(tab => {
           const active = tipo === tab.tipo
           return (
@@ -118,7 +118,7 @@ function MessageItemEditor({ item, onChange, onUpload, uploadingIdx }) {
               onClick={() => onChange({ ...item, tipo: tab.tipo })}
               className="flex-1 min-w-[80px] text-[11px] font-semibold px-2 py-1.5 rounded-lg transition-all"
               style={active
-                ? { background: 'linear-gradient(135deg,rgba(34,211,238,0.3),rgba(106,13,173,0.25))', color: '#b07de6', border: '1px solid rgba(34,211,238,0.4)' }
+                ? { background: 'linear-gradient(135deg,rgba(157,78,221,0.3),rgba(106,13,173,0.25))', color: '#b07de6', border: '1px solid rgba(157,78,221,0.4)' }
                 : { color: '#64748b', background: 'transparent', border: '1px solid transparent' }}
             >
               {tab.label}
@@ -332,7 +332,7 @@ function ManualContactPicker({ selected, onChange }) {
         <div className="flex flex-wrap gap-1.5 p-2.5 rounded-xl border border-primary-500/25 bg-primary-900/10 max-h-[72px] overflow-y-auto">
           {selected.map(c => (
             <span key={c.id} className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
-              style={{ background: 'rgba(34,211,238,0.18)', color: '#b07de6', border: '1px solid rgba(34,211,238,0.35)' }}>
+              style={{ background: 'rgba(157,78,221,0.18)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.35)' }}>
               {c.name || formatPhone(c.phone)}
               <button type="button" onClick={() => removeTag(c.id)}
                 className="ml-0.5 text-[11px] opacity-70 hover:opacity-100 hover:text-red-300 transition-opacity leading-none">
@@ -397,9 +397,9 @@ function ManualContactPicker({ selected, onChange }) {
                 {/* Avatar */}
                 <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
                   style={{
-                    background: isSel ? 'rgba(34,211,238,0.28)' : 'rgba(30,28,40,0.9)',
+                    background: isSel ? 'rgba(157,78,221,0.28)' : 'rgba(30,28,40,0.9)',
                     color: isSel ? '#b07de6' : '#64748b',
-                    border: `1px solid ${isSel ? 'rgba(34,211,238,0.4)' : 'rgba(100,116,139,0.2)'}`,
+                    border: `1px solid ${isSel ? 'rgba(157,78,221,0.4)' : 'rgba(100,116,139,0.2)'}`,
                   }}>
                   {initial}
                 </div>
@@ -479,7 +479,7 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
       {/* Tabs de fonte — scroll horizontal no mobile */}
       <div className="overflow-x-auto -mx-0.5 pb-0.5">
         <div className="flex rounded-xl p-0.5 gap-0.5 min-w-max sm:min-w-0"
-          style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(34,211,238,0.15)' }}>
+          style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}>
           {FONTES_CONTATOS.map(f => {
             const active = value.fonte === f.id
             return (
@@ -487,7 +487,7 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
                 onClick={() => up({ fonte: f.id })}
                 className="min-h-[44px] sm:min-h-0 text-[11px] font-semibold px-3 sm:px-1 py-2 rounded-lg transition-all text-center whitespace-nowrap flex-1"
                 style={active
-                  ? { background: 'linear-gradient(135deg,rgba(34,211,238,0.3),rgba(106,13,173,0.25))', color: '#b07de6', border: '1px solid rgba(34,211,238,0.4)' }
+                  ? { background: 'linear-gradient(135deg,rgba(157,78,221,0.3),rgba(106,13,173,0.25))', color: '#b07de6', border: '1px solid rgba(157,78,221,0.4)' }
                   : { color: '#64748b', background: 'transparent', border: '1px solid transparent' }}>
                 <span className="sm:hidden">{f.labelMobile}</span>
                 <span className="hidden sm:inline">{f.label}</span>
@@ -566,7 +566,7 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
                     <button key={d.ddd} type="button" onClick={() => toggleDdd(d.ddd)}
                       className="flex items-center gap-1.5 px-3 min-h-[44px] rounded-xl text-xs font-bold transition-all"
                       style={sel
-                        ? { background: 'rgba(34,211,238,0.25)', color: '#b07de6', border: '1px solid rgba(34,211,238,0.5)' }
+                        ? { background: 'rgba(157,78,221,0.25)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.5)' }
                         : { background: 'rgba(30,28,40,0.6)', color: '#64748b', border: '1px solid rgba(100,116,139,0.3)' }}>
                       DDD {d.ddd}
                       <span className="opacity-70">— {d.total}</span>
@@ -635,11 +635,11 @@ function ReportModal({ campaign, onClose }) {
       <div className="w-full flex flex-col rounded-2xl overflow-hidden" style={{
         maxWidth: 900, maxHeight: '93vh',
         background: 'linear-gradient(160deg,#1a1228 0%,#120d1e 100%)',
-        border: '1px solid rgba(34,211,238,0.25)',
+        border: '1px solid rgba(157,78,221,0.25)',
         boxShadow: '0 0 80px rgba(0,0,0,0.7)',
       }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0" style={{ background: 'rgba(34,211,238,0.07)' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0" style={{ background: 'rgba(157,78,221,0.07)' }}>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-primary-500/20 text-primary-400 flex items-center justify-center"><MdBarChart size={20} /></div>
             <div>
@@ -1322,7 +1322,7 @@ export default function Campanhas() {
                 {/* Ordem de envio */}
                 <div className="mt-4 space-y-2">
                   <p className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Ordem de envio</p>
-                  <div className="flex rounded-xl p-1 gap-1" style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(34,211,238,0.15)' }}>
+                  <div className="flex rounded-xl p-1 gap-1" style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}>
                     {[
                       { value: 'aleatorio', icon: '🔀', label: 'Aleatório' },
                       { value: 'sequencial', icon: '🔢', label: 'Em ordem' },
@@ -1333,7 +1333,7 @@ export default function Campanhas() {
                           onClick={() => setForm(f => ({ ...f, ordem_mensagens: opt.value }))}
                           className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all"
                           style={active
-                            ? { background: 'linear-gradient(135deg,rgba(34,211,238,0.25),rgba(106,13,173,0.2))', color: '#b07de6', border: '1px solid rgba(34,211,238,0.4)' }
+                            ? { background: 'linear-gradient(135deg,rgba(157,78,221,0.25),rgba(106,13,173,0.2))', color: '#b07de6', border: '1px solid rgba(157,78,221,0.4)' }
                             : { color: '#64748b', background: 'transparent', border: '1px solid transparent' }}>
                           <span>{opt.icon}</span> {opt.label}
                         </button>
@@ -1399,7 +1399,7 @@ export default function Campanhas() {
                           title={isAdaptacao ? 'Em adaptação — disponível para campanhas após concluir os 7 dias' : diag?.razao}
                           className={`flex flex-col p-3.5 rounded-xl border transition-all gap-2 ${
                             isAdaptacao
-                              ? 'border-cyan-500/20 bg-cyan-900/5 cursor-not-allowed opacity-60'
+                              ? 'border-purple-500/20 bg-purple-900/5 cursor-not-allowed opacity-60'
                               : checked
                                 ? 'border-primary-500/50 bg-primary-900/20 cursor-pointer'
                                 : 'border-surface-700 bg-surface-900/30 hover:border-surface-500 cursor-pointer'
@@ -1418,7 +1418,7 @@ export default function Campanhas() {
                             <div className="flex-shrink-0 flex flex-col items-end gap-1">
                               {isAdaptacao ? (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-                                  style={{ background: 'rgba(34,211,238,0.15)', color: '#67e8f9', border: '1px solid rgba(34,211,238,0.25)' }}>
+                                  style={{ background: 'rgba(157,78,221,0.15)', color: '#c4b5fd', border: '1px solid rgba(157,78,221,0.25)' }}>
                                   ⏳ Em adaptação
                                 </span>
                               ) : s.is_veterano ? (
@@ -1586,7 +1586,7 @@ export default function Campanhas() {
           overflowY: 'auto',
           zIndex: 9999,
           background: 'linear-gradient(160deg,#1a1228 0%,#120d1e 100%)',
-          borderLeft: '1px solid rgba(34,211,238,0.2)',
+          borderLeft: '1px solid rgba(157,78,221,0.2)',
           boxShadow: '-20px 0 60px rgba(0,0,0,0.6)',
           transform: showDrawer ? 'translateX(0)' : 'translateX(100%)',
           transition: 'transform 0.32s cubic-bezier(0.4,0,0.2,1)',
@@ -1595,7 +1595,7 @@ export default function Campanhas() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', position: 'sticky', top: 0, background: '#1a1228', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(34,211,238,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(157,78,221,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <MdSettings size={18} style={{ color: '#b07de6' }} />
             </div>
             <div>
@@ -1722,7 +1722,7 @@ export default function Campanhas() {
           {/* Footer */}
           <div style={{ paddingBottom: 8 }}>
             <button type="button" onClick={saveDrawer}
-              style={{ width: '100%', padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 700, color: '#fff', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#22D3EE,#6a0dad)', boxShadow: '0 4px 20px rgba(34,211,238,0.35)' }}>
+              style={{ width: '100%', padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 700, color: '#fff', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#9d4edd,#6a0dad)', boxShadow: '0 4px 20px rgba(157,78,221,0.35)' }}>
               Salvar configurações
             </button>
           </div>

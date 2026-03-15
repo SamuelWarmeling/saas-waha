@@ -58,7 +58,7 @@ const PLANOS = [
     nivel: '🥇 Premium',
     desc: 'Até 40 msgs/dia no pico',
     risco: 'Mínimo',
-    riscoCor: '#22D3EE',
+    riscoCor: '#9D4EDD',
     detalhes: 'Dias 1-14: progressivo • Dias 15-21: 40/dia',
   },
 ]
@@ -148,7 +148,7 @@ function ModalIniciar({ sessoes, aquecimentos, poolStatus, onSave, onClose }) {
                 Selecione quais chips vão aquecer
               </label>
               {selectedIds.size > 0 && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,211,238,0.2)', color: '#b07de6' }}>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6' }}>
                   {selectedIds.size} selecionado{selectedIds.size > 1 ? 's' : ''}
                   {nFisicos > 0 && ` · ${nFisicos} físico${nFisicos > 1 ? 's' : ''}`}
                   {nVirtuais > 0 && ` · ${nVirtuais} virtual${nVirtuais > 1 ? 'is' : ''}`}
@@ -169,15 +169,15 @@ function ModalIniciar({ sessoes, aquecimentos, poolStatus, onSave, onClose }) {
                     key={s.id}
                     className="flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-all select-none"
                     style={{
-                      borderColor: checked ? '#22D3EE' : 'rgba(255,255,255,0.07)',
-                      background: checked ? 'rgba(34,211,238,0.08)' : disabled ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.02)',
+                      borderColor: checked ? '#9D4EDD' : 'rgba(255,255,255,0.07)',
+                      background: checked ? 'rgba(157,78,221,0.08)' : disabled ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.02)',
                       opacity: disabled ? 0.5 : 1,
                       cursor: disabled ? 'not-allowed' : 'pointer',
                     }}
                     onClick={e => { if (!disabled) { e.preventDefault(); toggleSessao(s.id) } }}
                   >
                     <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors"
-                      style={{ borderColor: checked ? '#22D3EE' : 'rgba(255,255,255,0.2)', background: checked ? '#22D3EE' : 'transparent' }}>
+                      style={{ borderColor: checked ? '#9D4EDD' : 'rgba(255,255,255,0.2)', background: checked ? '#9D4EDD' : 'transparent' }}>
                       {checked && <svg width="12" height="9" viewBox="0 0 12 9" fill="none"><path d="M1 4L4.5 7.5L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
                     <span className="text-lg flex-shrink-0">{s.tipo_chip === 'virtual' ? '💻' : '📱'}</span>
@@ -186,7 +186,7 @@ function ModalIniciar({ sessoes, aquecimentos, poolStatus, onSave, onClose }) {
                       <p className="text-xs text-surface-500">
                         {s.phone_number || 'sem phone'} · {s.tipo_chip === 'virtual' ? 'virtual' : 'físico'}
                         {offline && <span className="text-orange-400"> · offline</span>}
-                        {jaAtivo && <span className="text-cyan-400"> · aquecimento ativo</span>}
+                        {jaAtivo && <span className="text-purple-400"> · aquecimento ativo</span>}
                       </p>
                     </div>
                     {!offline && !jaAtivo && <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />}
@@ -211,8 +211,8 @@ function ModalIniciar({ sessoes, aquecimentos, poolStatus, onSave, onClose }) {
                 <label key={opt.value}
                   className="flex items-start gap-3 p-3.5 rounded-xl cursor-pointer border-2 transition-all"
                   style={{
-                    borderColor: origemChip === opt.value ? '#22D3EE' : 'rgba(255,255,255,0.07)',
-                    background: origemChip === opt.value ? 'rgba(34,211,238,0.08)' : 'rgba(255,255,255,0.02)',
+                    borderColor: origemChip === opt.value ? '#9D4EDD' : 'rgba(255,255,255,0.07)',
+                    background: origemChip === opt.value ? 'rgba(157,78,221,0.08)' : 'rgba(255,255,255,0.02)',
                   }}>
                   <input type="radio" name="origem" value={opt.value}
                     checked={origemChip === opt.value}
@@ -257,11 +257,11 @@ function ModalIniciar({ sessoes, aquecimentos, poolStatus, onSave, onClose }) {
 
           {/* Info especial para chip pré-aquecido */}
           {isPreAquecido && (
-            <div className="rounded-xl border border-cyan-500/30 p-4 flex gap-3" style={{ background: 'rgba(34,211,238,0.07)' }}>
+            <div className="rounded-xl border border-purple-500/30 p-4 flex gap-3" style={{ background: 'rgba(157,78,221,0.07)' }}>
               <span className="text-xl">🛍️</span>
               <div>
-                <p className="text-sm font-bold text-cyan-300">Modo Adaptação — 7 dias obrigatórios</p>
-                <p className="text-xs text-cyan-400/70 mt-1 leading-relaxed">
+                <p className="text-sm font-bold text-purple-300">Modo Adaptação — 7 dias obrigatórios</p>
+                <p className="text-xs text-purple-400/70 mt-1 leading-relaxed">
                   <strong>Dias 1-2:</strong> Apenas recebe mensagens do pool (fase passiva) •{' '}
                   <strong>Dias 3-4:</strong> 5 msgs/dia •{' '}
                   <strong>Dias 5-6:</strong> 15 msgs/dia •{' '}
@@ -283,8 +283,8 @@ function ModalIniciar({ sessoes, aquecimentos, poolStatus, onSave, onClose }) {
                   key={p.dias}
                   className="flex items-start gap-3 p-4 rounded-xl cursor-pointer border-2 transition-all"
                   style={{
-                    borderColor: diasTotal === p.dias ? '#22D3EE' : 'rgba(255,255,255,0.07)',
-                    background: diasTotal === p.dias ? 'rgba(34,211,238,0.08)' : 'rgba(255,255,255,0.02)',
+                    borderColor: diasTotal === p.dias ? '#9D4EDD' : 'rgba(255,255,255,0.07)',
+                    background: diasTotal === p.dias ? 'rgba(157,78,221,0.08)' : 'rgba(255,255,255,0.02)',
                   }}
                 >
                   <input
@@ -302,7 +302,7 @@ function ModalIniciar({ sessoes, aquecimentos, poolStatus, onSave, onClose }) {
                         <span className="text-surface-500 text-xs ml-2">— {p.titulo}</span>
                       </div>
                       {p.destacado && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,211,238,0.2)', color: '#b07de6' }}>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6' }}>
                           Mais popular
                         </span>
                       )}
@@ -380,7 +380,7 @@ function ModalIniciar({ sessoes, aquecimentos, poolStatus, onSave, onClose }) {
             <button
               onClick={() => setUsarIa(v => !v)}
               className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
-              style={{ background: usarIa ? '#22D3EE' : '#374151' }}
+              style={{ background: usarIa ? '#9D4EDD' : '#374151' }}
             >
               <span
                 className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200"
@@ -480,7 +480,7 @@ function ModalLogs({ aq, onClose }) {
                     <td className="py-2.5 text-surface-300 max-w-[220px] truncate">{l.mensagem}</td>
                     <td className="py-2.5 text-center">
                       {l.status === 'enviado_ia' ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(34,211,238,0.2)', color: '#b07de6', border: '1px solid rgba(34,211,238,0.3)' }}>✨ IA</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.3)' }}>✨ IA</span>
                       ) : l.status === 'enviado' ? (
                         <span className="badge-green">✓ pool</span>
                       ) : l.status === 'respondido' ? (
@@ -520,8 +520,8 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar, onToggle
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl"
             style={{
-              background: aq.tipo_chip === 'virtual' ? 'rgba(59,130,246,0.15)' : 'rgba(34,211,238,0.15)',
-              border: aq.tipo_chip === 'virtual' ? '1px solid rgba(59,130,246,0.25)' : '1px solid rgba(34,211,238,0.25)',
+              background: aq.tipo_chip === 'virtual' ? 'rgba(59,130,246,0.15)' : 'rgba(157,78,221,0.15)',
+              border: aq.tipo_chip === 'virtual' ? '1px solid rgba(59,130,246,0.25)' : '1px solid rgba(157,78,221,0.25)',
             }}>
             {aq.tipo_chip === 'virtual' ? '💻' : '📱'}
           </div>
@@ -555,7 +555,7 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar, onToggle
             </span>
           )}
           {aq.usar_ia && isAtivo && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(34,211,238,0.2)', color: '#b07de6', border: '1px solid rgba(34,211,238,0.3)' }}>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(157,78,221,0.2)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.3)' }}>
               ✨ Gemini IA
             </span>
           )}
@@ -573,7 +573,7 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar, onToggle
             className="h-full rounded-full transition-all duration-700"
             style={{
               width: `${progressoDia}%`,
-              background: 'linear-gradient(90deg, #22D3EE, #6A0DAD)',
+              background: 'linear-gradient(90deg, #9D4EDD, #6A0DAD)',
             }}
           />
         </div>
@@ -624,8 +624,8 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar, onToggle
 
       {/* Fase de adaptação */}
       {aq.is_adaptacao && isAtivo && (
-        <div className="rounded-xl border border-cyan-500/20 p-3" style={{ background: 'rgba(34,211,238,0.06)' }}>
-          <p className="text-xs font-bold text-cyan-300 mb-1">🛍️ Modo Adaptação</p>
+        <div className="rounded-xl border border-purple-500/20 p-3" style={{ background: 'rgba(157,78,221,0.06)' }}>
+          <p className="text-xs font-bold text-purple-300 mb-1">🛍️ Modo Adaptação</p>
           {aq.fase_adaptacao === 'passiva' && (
             <p className="text-xs text-surface-500">📭 Dias 1-2: fase passiva — recebendo mensagens, sem enviar</p>
           )}
@@ -639,7 +639,7 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar, onToggle
             <p className="text-xs text-surface-500">🚀 Dia 7: pré-liberação — meta 30 msgs/dia</p>
           )}
           {(aq.dias_adaptacao_restantes ?? 0) > 0 && (
-            <p className="text-[11px] text-cyan-400 mt-1.5">⏳ {aq.dias_adaptacao_restantes} dia(s) restantes para liberação</p>
+            <p className="text-[11px] text-purple-400 mt-1.5">⏳ {aq.dias_adaptacao_restantes} dia(s) restantes para liberação</p>
           )}
         </div>
       )}
@@ -866,7 +866,7 @@ export default function Aquecimento() {
           {[
             { label: 'Chips Aquecendo', value: stats.total_ativos, color: '#f97316', emoji: '🔥' },
             { label: 'Concluídos', value: stats.total_concluidos, color: '#22c55e', emoji: '✅' },
-            { label: 'Progresso médio', value: `${stats.progresso_medio}%`, color: '#22D3EE', emoji: '📈' },
+            { label: 'Progresso médio', value: `${stats.progresso_medio}%`, color: '#9D4EDD', emoji: '📈' },
           ].map(s => (
             <div key={s.label} className="glass-card">
               <div className="text-2xl mb-1">{s.emoji}</div>

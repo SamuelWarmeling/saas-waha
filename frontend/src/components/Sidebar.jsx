@@ -25,10 +25,6 @@ function getIsAdmin() {
   }
 }
 
-const ACTIVE_BG = 'rgba(34,211,238,0.10)'
-const HOVER_BG  = 'rgba(34,211,238,0.05)'
-const ACCENT    = '#22D3EE'
-
 export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate()
   const isAdmin = getIsAdmin()
@@ -36,30 +32,6 @@ export default function Sidebar({ isOpen, onClose }) {
   function logout() {
     localStorage.clear()
     navigate('/login')
-  }
-
-  function navStyle(isActive) {
-    return isActive
-      ? {
-          background: ACTIVE_BG,
-          borderLeft: `3px solid ${ACCENT}`,
-          paddingLeft: '9px',
-          color: ACCENT,
-          textShadow: '0 0 8px rgba(34,211,238,0.5)',
-        }
-      : { borderLeft: '3px solid transparent' }
-  }
-
-  function handleEnter(e) {
-    if (!e.currentTarget.style.background.includes(ACTIVE_BG.slice(0, -1))) {
-      e.currentTarget.style.background = HOVER_BG
-    }
-  }
-
-  function handleLeave(e) {
-    if (!e.currentTarget.style.background.includes(ACTIVE_BG.slice(0, -1))) {
-      e.currentTarget.style.background = ''
-    }
   }
 
   return (
@@ -71,18 +43,18 @@ export default function Sidebar({ isOpen, onClose }) {
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}
       style={{
-        background: '#0F172A',
-        borderRight: '1px solid rgba(255,255,255,0.03)',
+        background: '#1E293B',
+        borderRight: '1px solid rgba(255,255,255,0.05)',
       }}
     >
       {/* Logo */}
       <div
         className="p-5 flex items-center gap-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
       >
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
-          style={{ background: 'linear-gradient(135deg, #22D3EE, #06B6D4)' }}
+          style={{ background: 'linear-gradient(135deg, #8B5CF6, #7c3aed)' }}
         >
           <MdWhatsapp className="text-white text-2xl" />
         </div>
@@ -90,7 +62,7 @@ export default function Sidebar({ isOpen, onClose }) {
           <p
             className="font-bold text-sm leading-none tracking-wide"
             style={{
-              background: 'linear-gradient(90deg, #ffffff, #67e8f9)',
+              background: 'linear-gradient(90deg, #ffffff, #a78bfa)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
             }}
@@ -110,19 +82,36 @@ export default function Sidebar({ isOpen, onClose }) {
             onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                isActive ? '' : 'text-surface-400 hover:text-surface-100'
+                isActive
+                  ? 'text-primary-400'
+                  : 'text-surface-400 hover:text-surface-100'
               }`
             }
-            style={({ isActive }) => navStyle(isActive)}
-            onMouseEnter={handleEnter}
-            onMouseLeave={handleLeave}
+            style={({ isActive }) =>
+              isActive
+                ? {
+                    background: 'rgba(139,92,246,0.12)',
+                    borderLeft: '3px solid #8B5CF6',
+                    paddingLeft: '9px',
+                  }
+                : {
+                    borderLeft: '3px solid transparent',
+                  }
+            }
+            onMouseEnter={e => {
+              if (!e.currentTarget.style.background.includes('rgba(139,92,246,0.12)')) {
+                e.currentTarget.style.background = 'rgba(139,92,246,0.06)'
+              }
+            }}
+            onMouseLeave={e => {
+              if (!e.currentTarget.style.background.includes('rgba(139,92,246,0.12)')) {
+                e.currentTarget.style.background = ''
+              }
+            }}
           >
             {({ isActive }) => (
               <>
-                <Icon
-                  className="text-xl transition-colors"
-                  style={isActive ? { color: ACCENT } : {}}
-                />
+                <Icon className={`text-xl transition-colors ${isActive ? 'text-primary-400' : 'text-surface-500'}`} />
                 {label}
               </>
             )}
@@ -134,19 +123,24 @@ export default function Sidebar({ isOpen, onClose }) {
             onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 mt-2 ${
-                isActive ? '' : 'text-surface-400 hover:text-surface-100'
+                isActive ? 'text-primary-400' : 'text-surface-400 hover:text-surface-100'
               }`
             }
-            style={({ isActive }) => navStyle(isActive)}
-            onMouseEnter={handleEnter}
-            onMouseLeave={handleLeave}
+            style={({ isActive }) =>
+              isActive
+                ? {
+                    background: 'rgba(139,92,246,0.12)',
+                    borderLeft: '3px solid #8B5CF6',
+                    paddingLeft: '9px',
+                  }
+                : {
+                    borderLeft: '3px solid transparent',
+                  }
+            }
           >
             {({ isActive }) => (
               <>
-                <MdAdminPanelSettings
-                  className="text-xl"
-                  style={isActive ? { color: ACCENT } : {}}
-                />
+                <MdAdminPanelSettings className={`text-xl ${isActive ? 'text-primary-400' : 'text-surface-500'}`} />
                 Admin
               </>
             )}
@@ -155,7 +149,7 @@ export default function Sidebar({ isOpen, onClose }) {
       </nav>
 
       {/* Logout */}
-      <div className="p-3 mt-auto" style={{ borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+      <div className="p-3 mt-auto" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <button
           onClick={logout}
           className="w-full flex items-center justify-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:bg-red-900/20 hover:text-red-400 transition-all duration-200"

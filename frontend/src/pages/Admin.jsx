@@ -175,7 +175,7 @@ function SecurityTab() {
       {/* Tentativas suspeitas */}
       <div className="glass-card overflow-x-auto">
         <h3 className="text-sm font-semibold text-surface-300 mb-4 flex items-center gap-2">
-          <MdSecurity className="text-cyan-400" /> Tentativas bloqueadas (últimas 200)
+          <MdSecurity className="text-purple-400" /> Tentativas bloqueadas (últimas 200)
         </h3>
         {tentativas.length === 0 ? (
           <p className="text-surface-500 text-sm py-4 text-center">Nenhuma tentativa registrada.</p>
@@ -218,7 +218,7 @@ function StatCard({ icon: Icon, label, value, color }) {
     green: 'text-primary-400 bg-primary-900/30',
     blue: 'text-blue-400 bg-blue-900/30',
     yellow: 'text-yellow-400 bg-yellow-900/30',
-    purple: 'text-cyan-400 bg-cyan-900/30',
+    purple: 'text-purple-400 bg-purple-900/30',
   }
   return (
     <div className="card flex items-center gap-4">
@@ -429,7 +429,7 @@ export default function Admin() {
                   <div className="flex items-center justify-end gap-1.5 flex-wrap">
                     <button
                       onClick={() => impersonate(u)}
-                      className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all bg-cyan-900/20 text-cyan-300 hover:bg-cyan-600 hover:text-white border border-cyan-500/20"
+                      className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all bg-purple-900/20 text-purple-300 hover:bg-purple-600 hover:text-white border border-purple-500/20"
                       title="Acessar dashboard como este usuário"
                     >
                       👁️ Acessar

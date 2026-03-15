@@ -29,7 +29,7 @@ export default function Header({ onMenuOpen }) {
   }
 
   const badgeStyle = isAdmin
-    ? { background: 'rgba(34,211,238,0.18)', color: '#67e8f9', border: '1px solid rgba(34,211,238,0.5)', boxShadow: '0 0 12px rgba(34,211,238,0.2)' }
+    ? { background: 'rgba(139,92,246,0.18)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,0.5)', boxShadow: '0 0 12px rgba(139,92,246,0.2)' }
     : isPlanActive
       ? { background: 'rgba(34,197,94,0.12)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.35)', boxShadow: '0 0 12px rgba(34,197,94,0.15)' }
       : { background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }
@@ -63,7 +63,7 @@ export default function Header({ onMenuOpen }) {
         <span
           className="md:hidden font-bold text-sm tracking-wide"
           style={{
-            background: 'linear-gradient(90deg, #ffffff, #67e8f9)',
+            background: 'linear-gradient(90deg, #ffffff, #a78bfa)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}
@@ -90,8 +90,8 @@ export default function Header({ onMenuOpen }) {
           className="hidden md:flex relative w-10 h-10 items-center justify-center rounded-xl text-surface-400 transition-all"
           style={{ border: '1px solid rgba(255,255,255,0.08)' }}
           onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(34,211,238,0.1)'
-            e.currentTarget.style.color = '#67e8f9'
+            e.currentTarget.style.background = 'rgba(139,92,246,0.1)'
+            e.currentTarget.style.color = '#a78bfa'
           }}
           onMouseLeave={e => {
             e.currentTarget.style.background = 'transparent'
@@ -101,7 +101,7 @@ export default function Header({ onMenuOpen }) {
           <MdNotifications className="text-xl" />
           <span
             className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full animate-pulse"
-            style={{ background: '#22D3EE', boxShadow: '0 0 8px #22D3EE' }}
+            style={{ background: '#8B5CF6', boxShadow: '0 0 8px #8B5CF6' }}
           />
         </button>
 
@@ -112,8 +112,8 @@ export default function Header({ onMenuOpen }) {
           style={{ border: '1px solid rgba(255,255,255,0.08)' }}
           title={theme === 'dark' ? 'Mudar para light mode' : 'Mudar para dark mode'}
           onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(34,211,238,0.1)'
-            e.currentTarget.style.color = '#67e8f9'
+            e.currentTarget.style.background = 'rgba(139,92,246,0.1)'
+            e.currentTarget.style.color = '#a78bfa'
           }}
           onMouseLeave={e => {
             e.currentTarget.style.background = 'transparent'
@@ -130,12 +130,12 @@ export default function Header({ onMenuOpen }) {
             background: 'rgba(30,41,59,0.8)',
             border: '1px solid rgba(255,255,255,0.08)',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(34,211,238,0.1)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.1)' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(30,41,59,0.8)' }}
         >
           <div
             className="w-7 h-7 md:w-6 md:h-6 rounded-full flex items-center justify-center text-white shadow-sm"
-            style={{ background: 'linear-gradient(135deg, #22D3EE, #06B6D4)' }}
+            style={{ background: 'linear-gradient(135deg, #8B5CF6, #7c3aed)' }}
           >
             <MdPerson className="text-sm" />
           </div>

@@ -82,7 +82,7 @@ function OTPInput({ value, onChange }) {
           onInput={(e) => handleInput(e, idx)}
           onChange={() => {}}
           onClick={() => inputsRef.current[idx]?.select()}
-          className="w-12 h-14 text-center text-2xl font-bold bg-gray-900 border-2 border-gray-700 text-white rounded-xl focus:outline-none focus:border-cyan-500 transition-colors caret-transparent"
+          className="w-12 h-14 text-center text-2xl font-bold bg-gray-900 border-2 border-gray-700 text-white rounded-xl focus:outline-none focus:border-purple-500 transition-colors caret-transparent"
         />
       ))}
     </div>
@@ -164,7 +164,7 @@ export default function VerificarEmail() {
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center px-4">
       {/* Logo */}
       <div className="mb-8 flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-        <div className="w-9 h-9 bg-gradient-to-br from-cyan-600 to-violet-500 rounded-lg flex items-center justify-center font-bold text-sm">W</div>
+        <div className="w-9 h-9 bg-gradient-to-br from-purple-600 to-violet-500 rounded-lg flex items-center justify-center font-bold text-sm">W</div>
         <span className="font-bold text-xl">WahaSaaS</span>
       </div>
 
@@ -176,14 +176,14 @@ export default function VerificarEmail() {
           <p className="text-gray-400 text-sm">
             Enviamos um código de 6 dígitos para
           </p>
-          <p className="text-cyan-300 font-medium text-sm mt-1">{email}</p>
+          <p className="text-purple-300 font-medium text-sm mt-1">{email}</p>
         </div>
 
         {/* Timer */}
         {!expired ? (
           <div className="flex items-center justify-center gap-2 mb-6 text-sm">
             <span className="text-gray-500">Código expira em</span>
-            <span className={`font-mono font-bold px-2 py-0.5 rounded ${remaining < 120 ? 'text-red-400 bg-red-900/20' : 'text-cyan-300 bg-cyan-900/20'}`}>
+            <span className={`font-mono font-bold px-2 py-0.5 rounded ${remaining < 120 ? 'text-red-400 bg-red-900/20' : 'text-purple-300 bg-purple-900/20'}`}>
               {label}
             </span>
           </div>
@@ -214,7 +214,7 @@ export default function VerificarEmail() {
         <button
           onClick={handleVerify}
           disabled={loading || code.length !== 6 || expired}
-          className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl text-base transition-all mb-4"
+          className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl text-base transition-all mb-4"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
@@ -232,7 +232,7 @@ export default function VerificarEmail() {
           <button
             onClick={handleReenviar}
             disabled={loadingReenvio || reenvio.remaining > 0}
-            className="text-cyan-400 hover:text-cyan-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="text-purple-400 hover:text-purple-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loadingReenvio
               ? 'Reenviando...'

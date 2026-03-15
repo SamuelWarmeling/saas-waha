@@ -57,8 +57,7 @@
       "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add frontend/src/pages/Sessoes.jsx && git commit -m \"fix: seleção manual obrigatória do tipo de chip\" && git push origin master 2>&1)",
       "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add backend/routes/aquecimento.py && git commit -m \"fix: horário aquecimento 07-21h BR\" && git push origin master 2>&1)",
       "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add backend/routes/admin.py frontend/src/pages/Admin.jsx frontend/src/components/Layout.jsx && git commit -m \"feat: admin pode acessar conta de usuários\" && git push origin master 2>&1)",
-      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add . && git commit --allow-empty -m \"force redeploy frontend\" && git push origin master 2>&1)",
-      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add backend/routes/campanhas.py frontend/src/pages/Campanhas.jsx && git commit -m \"$\\(cat <<'EOF'\nfeat: responsive + chip opcional + editar campanha\n\nBackend:\n- session_ids opcional em CampaignCreate \\(rascunho sem chip\\)\n- message_items incluído em _campaign_out e CampaignOut\n- PUT /api/campanhas/{id} para editar rascunho/pausada\n\nFrontend:\n- Botão ✏️ Editar em cada campanha \\(draft/paused\\)\n- Modal de edição preenchido com dados atuais\n- Chip opcional — sem obrigatoriedade na criação\n- Badge ⚠️ Sem chip na listagem\n- Preview e submit adaptados para modo sem chip\n- Modal: sm:max-w-xl, título/submit dinâmico\n- Contatos e preview ocultos no modo edição\n- Footer buttons empilhados no mobile \\(flex-col sm:flex-row\\)\n- Drawer: width min\\(480px, 100vw\\) — fullscreen no mobile\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push origin master 2>&1)"
+      "Bash(cd /c/Users/samue/OneDrive/Desktop/saas-waha && git add . && git commit --allow-empty -m \"force redeploy frontend\" && git push origin master 2>&1)"
     ]
   }
 }

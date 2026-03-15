@@ -85,7 +85,7 @@ export default function PagamentoSucesso() {
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center px-4">
       {/* Logo */}
       <div className="mb-10 flex items-center gap-2">
-        <div className="w-9 h-9 bg-gradient-to-br from-cyan-600 to-violet-500 rounded-lg flex items-center justify-center font-bold text-sm">
+        <div className="w-9 h-9 bg-gradient-to-br from-purple-600 to-violet-500 rounded-lg flex items-center justify-center font-bold text-sm">
           W
         </div>
         <span className="font-bold text-xl">WahaSaaS</span>
@@ -106,7 +106,7 @@ export default function PagamentoSucesso() {
             </p>
 
             <div className="flex items-center justify-center gap-3 mb-6">
-              <span className="w-5 h-5 border-2 border-cyan-500/40 border-t-purple-400 rounded-full animate-spin inline-block" />
+              <span className="w-5 h-5 border-2 border-purple-500/40 border-t-purple-400 rounded-full animate-spin inline-block" />
               <span className="text-gray-400 text-sm">Ativando sua conta...</span>
             </div>
 
@@ -136,7 +136,7 @@ export default function PagamentoSucesso() {
             </p>
             <button
               onClick={irParaDashboard}
-              className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-xl text-sm transition-all"
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all"
             >
               Acessar dashboard →
             </button>
@@ -156,7 +156,7 @@ export default function PagamentoSucesso() {
             </p>
             <button
               onClick={() => navigate('/login', { replace: true })}
-              className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-xl text-sm transition-all"
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all"
             >
               Fazer login
             </button>

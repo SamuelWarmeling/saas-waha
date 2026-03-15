@@ -38,7 +38,7 @@ function FAQItem({ item, open, onToggle }) {
         className="w-full flex items-center justify-between p-5 text-left bg-gray-800 hover:bg-gray-750 transition-colors"
       >
         <span className="font-semibold text-white">{item.q}</span>
-        <span className={`text-cyan-400 text-xl transition-transform ${open ? 'rotate-45' : ''}`}>+</span>
+        <span className={`text-purple-400 text-xl transition-transform ${open ? 'rotate-45' : ''}`}>+</span>
       </button>
       {open && (
         <div className="px-5 pb-5 pt-3 bg-gray-800 border-t border-gray-700 text-gray-300 text-sm leading-relaxed">
@@ -101,7 +101,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-gray-900/90 backdrop-blur border-b border-gray-800">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-cyan-600 to-cyan-500 rounded-lg flex items-center justify-center text-sm font-bold">W</div>
+            <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-violet-500 rounded-lg flex items-center justify-center text-sm font-bold">W</div>
             <span className="font-bold text-lg">WahaSaaS</span>
           </div>
           <div className="hidden md:flex items-center gap-6 text-sm text-gray-400">
@@ -113,7 +113,7 @@ export default function LandingPage() {
             <button onClick={() => navigate('/login')} className="text-sm text-gray-400 hover:text-white transition-colors hidden md:block">
               Entrar
             </button>
-            <button onClick={goToCheckout} className="bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+            <button onClick={goToCheckout} className="bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
               Começar grátis
             </button>
           </div>
@@ -123,14 +123,14 @@ export default function LandingPage() {
       {/* ── Hero ── */}
       <section className="pt-32 pb-24 px-4">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 bg-cyan-600/20 border border-cyan-500/40 rounded-full px-4 py-2 text-sm text-cyan-300 mb-6">
+          <div className="inline-flex items-center gap-2 bg-purple-600/20 border border-purple-500/40 rounded-full px-4 py-2 text-sm text-purple-300 mb-6">
             <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
             IA Anti-Ban ativa · 47 pessoas usando agora
           </div>
 
           <h1 className="text-4xl md:text-6xl font-extrabold leading-tight mb-6">
             Dispare no WhatsApp em massa{' '}
-            <span className="bg-gradient-to-r from-cyan-400 to-cyan-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-purple-400 to-violet-400 bg-clip-text text-transparent">
               sem tomar ban
             </span>
           </h1>
@@ -143,7 +143,7 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button
               onClick={goToCheckout}
-              className="w-full sm:w-auto bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-8 py-4 rounded-xl text-lg transition-all shadow-lg shadow-cyan-900/50 hover:shadow-cyan-700/50 hover:-translate-y-0.5"
+              className="w-full sm:w-auto bg-purple-600 hover:bg-purple-500 text-white font-bold px-8 py-4 rounded-xl text-lg transition-all shadow-lg shadow-purple-900/50 hover:shadow-purple-700/50 hover:-translate-y-0.5"
             >
               Começar 7 dias grátis →
             </button>
@@ -153,7 +153,7 @@ export default function LandingPage() {
           <div className="mt-16 grid grid-cols-3 gap-8 max-w-lg mx-auto text-center">
             {[['500+', 'Clientes ativos'], ['2M+', 'Msgs disparadas'], ['99.2%', 'Uptime']].map(([v, l]) => (
               <div key={l}>
-                <p className="text-2xl font-bold text-cyan-400">{v}</p>
+                <p className="text-2xl font-bold text-purple-400">{v}</p>
                 <p className="text-xs text-gray-500 mt-1">{l}</p>
               </div>
             ))}
@@ -205,7 +205,7 @@ export default function LandingPage() {
               { title: 'Gestão de contatos', desc: 'Importe Excel/CSV, organize por listas e tags, filtre por DDD ou status.' },
               { title: 'Agendamento inteligente', desc: 'Configure campanhas para disparar automaticamente no horário ideal para seu público.' },
             ].map((s) => (
-              <div key={s.title} className="bg-cyan-900/10 border border-cyan-700/30 rounded-xl p-5">
+              <div key={s.title} className="bg-purple-900/10 border border-purple-700/30 rounded-xl p-5">
                 <p className="text-green-400 text-xl mb-2">✅</p>
                 <h3 className="font-semibold text-white mb-1">{s.title}</h3>
                 <p className="text-sm text-gray-400">{s.desc}</p>
@@ -231,7 +231,7 @@ export default function LandingPage() {
               { n: '5', title: 'Dispare e acompanhe', desc: 'Inicie o disparo e acompanhe os resultados em tempo real no dashboard.' },
             ].map((step) => (
               <div key={step.n} className="flex gap-5 items-start">
-                <div className="w-10 h-10 bg-cyan-600 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+                <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
                   {step.n}
                 </div>
                 <div className="pt-1">
@@ -253,7 +253,7 @@ export default function LandingPage() {
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {features.map((f) => (
-              <div key={f.title} className="bg-gray-800 border border-gray-700 rounded-xl p-6 hover:border-cyan-600/50 transition-colors">
+              <div key={f.title} className="bg-gray-800 border border-gray-700 rounded-xl p-6 hover:border-purple-600/50 transition-colors">
                 <div className="text-3xl mb-3">{f.icon}</div>
                 <h3 className="font-semibold text-white mb-2">{f.title}</h3>
                 <p className="text-sm text-gray-400 leading-relaxed">{f.desc}</p>
@@ -278,7 +278,7 @@ export default function LandingPage() {
                 </div>
                 <p className="text-gray-300 text-sm leading-relaxed mb-5">"{t.text}"</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-cyan-700 rounded-full flex items-center justify-center text-sm font-bold">
+                  <div className="w-9 h-9 bg-purple-700 rounded-full flex items-center justify-center text-sm font-bold">
                     {t.avatar}
                   </div>
                   <div>
@@ -300,11 +300,11 @@ export default function LandingPage() {
             <p className="text-gray-400">Um plano completo, sem limitações escondidas</p>
           </div>
 
-          <div className="bg-gray-800 border-2 border-cyan-600 rounded-2xl p-8 text-center relative overflow-hidden">
+          <div className="bg-gray-800 border-2 border-purple-600 rounded-2xl p-8 text-center relative overflow-hidden">
             <div className="absolute top-4 right-4 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
               7 DIAS GRÁTIS
             </div>
-            <div className="absolute -top-10 -right-10 w-40 h-40 bg-cyan-600/10 rounded-full blur-2xl"></div>
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-purple-600/10 rounded-full blur-2xl"></div>
 
             <h3 className="text-xl font-bold text-white mb-2">Plano Pro</h3>
             <div className="mb-1">
@@ -336,7 +336,7 @@ export default function LandingPage() {
 
             <button
               onClick={goToCheckout}
-              className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-4 rounded-xl text-lg transition-all shadow-lg shadow-cyan-900/50 hover:-translate-y-0.5"
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-xl text-lg transition-all shadow-lg shadow-purple-900/50 hover:-translate-y-0.5"
             >
               Começar 7 dias grátis →
             </button>
@@ -378,7 +378,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── CTA Final ── */}
-      <section className="py-24 px-4 bg-gradient-to-br from-cyan-900/40 to-cyan-900/20 border-y border-cyan-800/30">
+      <section className="py-24 px-4 bg-gradient-to-br from-purple-900/40 to-violet-900/20 border-y border-purple-800/30">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-5xl font-extrabold mb-6 leading-tight">
             Pronto para disparar sem ban?
@@ -389,7 +389,7 @@ export default function LandingPage() {
           </p>
           <button
             onClick={goToCheckout}
-            className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-10 py-5 rounded-xl text-xl transition-all shadow-xl shadow-cyan-900/50 hover:shadow-cyan-700/50 hover:-translate-y-1"
+            className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-10 py-5 rounded-xl text-xl transition-all shadow-xl shadow-purple-900/50 hover:shadow-purple-700/50 hover:-translate-y-1"
           >
             Criar conta grátis agora →
           </button>
@@ -401,7 +401,7 @@ export default function LandingPage() {
       <footer className="py-10 px-4 border-t border-gray-800">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-600">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-cyan-600 to-cyan-500 rounded flex items-center justify-center text-xs font-bold text-white">W</div>
+            <div className="w-6 h-6 bg-gradient-to-br from-purple-600 to-violet-500 rounded flex items-center justify-center text-xs font-bold text-white">W</div>
             <span className="text-gray-500">WahaSaaS © {new Date().getFullYear()}</span>
           </div>
           <div className="flex gap-6">

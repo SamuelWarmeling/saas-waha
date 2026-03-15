@@ -250,7 +250,7 @@ export default function Configuracoes() {
       {/* Inteligência Artificial */}
       <div className="glass-card border-t border-surface-800/50">
         <div className="flex items-center gap-3 mb-6">
-          <div className="p-2.5 rounded-xl bg-cyan-500/15 text-cyan-400 shadow-[0_0_12px_theme(colors.cyan.500/15)]">
+          <div className="p-2.5 rounded-xl bg-purple-500/15 text-purple-400 shadow-[0_0_12px_theme(colors.purple.500/15)]">
             <MdAutoAwesome className="text-2xl" />
           </div>
           <div>
@@ -261,7 +261,7 @@ export default function Configuracoes() {
             <span className="text-xs text-surface-400 font-medium">IA Global</span>
             <button
               onClick={() => setIaConfig(c => ({ ...c, gemini_habilitado: !c.gemini_habilitado }))}
-              className={`relative w-11 h-6 rounded-full transition-colors ${iaConfig.gemini_habilitado ? 'bg-cyan-500' : 'bg-surface-700'}`}
+              className={`relative w-11 h-6 rounded-full transition-colors ${iaConfig.gemini_habilitado ? 'bg-purple-500' : 'bg-surface-700'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${iaConfig.gemini_habilitado ? 'translate-x-5' : ''}`} />
             </button>
@@ -271,7 +271,7 @@ export default function Configuracoes() {
         {/* Status da chave */}
         <div className="flex flex-wrap gap-3 mb-6">
           {iaConfig.tem_chave_servidor && (
-            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ background: 'rgba(34,211,238,0.12)', color: '#b07de6', border: '1px solid rgba(34,211,238,0.25)' }}>
+            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ background: 'rgba(157,78,221,0.12)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.25)' }}>
               <MdVpnKey className="text-sm" /> Chave do servidor ativa
             </span>
           )}
@@ -295,7 +295,7 @@ export default function Configuracoes() {
                 href="https://aistudio.google.com/app/apikey"
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-cyan-400 hover:text-cyan-300 font-medium underline underline-offset-2"
+                className="text-xs text-purple-400 hover:text-purple-300 font-medium underline underline-offset-2"
               >
                 Obter chave gratuita em aistudio.google.com →
               </a>
@@ -317,7 +317,7 @@ export default function Configuracoes() {
               </button>
             </div>
             <p className="text-[11px] text-surface-500 mt-1.5 ml-1">
-              Gemini 1.5 Flash é <span className="text-cyan-400 font-medium">gratuito até 15 req/min</span>. Sem cartão de crédito.
+              Gemini 1.5 Flash é <span className="text-purple-400 font-medium">gratuito até 15 req/min</span>. Sem cartão de crédito.
             </p>
           </div>
 
@@ -329,7 +329,7 @@ export default function Configuracoes() {
           </div>
 
           <div className="flex flex-wrap gap-3 pt-2">
-            <button type="submit" disabled={loadingIa} className="btn-primary px-6" style={{ background: 'linear-gradient(135deg, #06B6D4, #06B6D4)', borderColor: 'rgba(34,211,238,0.5)' }}>
+            <button type="submit" disabled={loadingIa} className="btn-primary px-6" style={{ background: 'linear-gradient(135deg, #7c3aed, #9333ea)', borderColor: 'rgba(157,78,221,0.5)' }}>
               {loadingIa ? (
                 <span className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
@@ -350,7 +350,7 @@ export default function Configuracoes() {
                 </>
               ) : (
                 <>
-                  <MdAutoAwesome className="text-cyan-400" />
+                  <MdAutoAwesome className="text-purple-400" />
                   Testar Conexão
                 </>
               )}

@@ -101,7 +101,7 @@ export default function Dashboard() {
   }, [])
 
   const loadAtividades = useCallback(() => {
-    api.get('/atividades').then(r => setAtividades(r.data)).catch(() => {})
+    api.get('/atividades').then(r => setAtividades(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -365,11 +365,11 @@ export default function Dashboard() {
                 <p className="text-[11px] text-surface-500 mt-0.5">Concentração de contatos por região</p>
               </div>
             </div>
-            {!stats || stats.top_ddds.length === 0 ? (
+            {!stats || !stats.top_ddds?.length ? (
               <p className="text-surface-500 text-xs py-6 text-center">Nenhum dado disponível</p>
             ) : (
               <div className="space-y-2.5">
-                {stats.top_ddds.map((row, i) => (
+                {(stats.top_ddds || []).map((row, i) => (
                   <div key={row.ddd} className="flex items-center gap-3">
                     <div className="w-6 text-[11px] font-bold text-surface-500 text-right flex-shrink-0">{i + 1}</div>
                     <div className="w-8 text-center flex-shrink-0">
@@ -500,11 +500,11 @@ export default function Dashboard() {
                 <p className="text-[10px] text-surface-500">Próximas campanhas programadas</p>
               </div>
             </div>
-            {!stats || stats.campanhas_agendadas.length === 0 ? (
+            {!stats || !stats.campanhas_agendadas?.length ? (
               <p className="text-surface-500 text-xs text-center py-4">Nenhuma campanha agendada</p>
             ) : (
               <ul className="space-y-3">
-                {stats.campanhas_agendadas.map(c => (
+                {(stats.campanhas_agendadas || []).map(c => (
                   <li key={c.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-surface-800/30 transition-colors border border-surface-800/40">
                     <div className="w-8 h-8 rounded-lg bg-primary-900/30 border border-primary-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <MdCampaign size={16} className="text-primary-400" />

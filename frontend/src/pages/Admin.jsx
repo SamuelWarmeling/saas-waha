@@ -262,7 +262,7 @@ export default function Admin() {
         api.get('/admin/usuarios'),
       ])
       setStats(statsRes.data)
-      setUsers(usersRes.data)
+      setUsers(Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.items ?? []))
     } catch {
       toast.error('Erro ao carregar dados admin')
     } finally {

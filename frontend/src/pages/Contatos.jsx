@@ -628,7 +628,7 @@ export default function Contatos() {
   const loadListas = useCallback(async () => {
     try {
       const { data } = await api.get('/listas')
-      setListas(data)
+      setListas(Array.isArray(data) ? data : (data?.items ?? []))
     } catch {}
   }, [])
 
@@ -646,7 +646,7 @@ export default function Contatos() {
       if (filterDataFim) params.set('data_fim', filterDataFim + 'T23:59:59')
 
       const { data } = await api.get(`/contatos?${params}`)
-      setContacts(data.items)
+      setContacts(data.items ?? [])
       setTotal(data.total)
     } catch {
       toast.error('Erro ao carregar contatos')

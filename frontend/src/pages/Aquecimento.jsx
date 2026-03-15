@@ -749,7 +749,7 @@ export default function Aquecimento() {
         api.get('/aquecimento/stats'),
         api.get('/aquecimento/pool-status'),
       ])
-      setAquecimentos(aqR.data)
+      setAquecimentos(Array.isArray(aqR.data) ? aqR.data : (aqR.data?.items ?? []))
       setSessoes(Array.isArray(sessR.data) ? sessR.data : (sessR.data.items ?? []))
       setStats(statsR.data)
       setPoolStatus(poolR.data)

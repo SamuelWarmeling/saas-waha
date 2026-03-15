@@ -650,7 +650,7 @@ export default function Funil() {
         api.get('/sessoes'),
         api.get('/funnel/stats'),
       ])
-      setSequencias(seqR.data)
+      setSequencias(Array.isArray(seqR.data) ? seqR.data : (seqR.data?.items ?? []))
       setSessoes(Array.isArray(sessR.data) ? sessR.data : (sessR.data.items ?? []))
       setStats(statsR.data)
     } catch {

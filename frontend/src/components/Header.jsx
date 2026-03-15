@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react'
-import { MdNotifications, MdPerson, MdMenu } from 'react-icons/md'
+import { MdNotifications, MdPerson, MdMenu, MdLightMode, MdDarkMode } from 'react-icons/md'
 import api from '../api'
 
 export default function Header({ onMenuOpen }) {
   const [user, setUser] = useState(null)
+  const [theme, setTheme] = useState(
+    () => localStorage.getItem('theme') || document.documentElement.getAttribute('data-theme') || 'dark'
+  )
 
   useEffect(() => {
     api.get('/usuarios/me').then(r => setUser(r.data)).catch(() => { })
   }, [])
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    localStorage.setItem('theme', next)
+    document.documentElement.setAttribute('data-theme', next)
+  }
 
   const isAdmin = user?.is_admin ?? false
   const isPlanActive = !!(user?.is_active)
@@ -95,6 +105,24 @@ export default function Header({ onMenuOpen }) {
             className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full animate-pulse"
             style={{ background: '#9D4EDD', boxShadow: '0 0 8px #9D4EDD' }}
           />
+        </button>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className="w-10 h-10 flex items-center justify-center rounded-xl text-surface-400 transition-all"
+          style={{ border: '1px solid rgba(157,78,221,0.15)' }}
+          title={theme === 'dark' ? 'Mudar para light mode' : 'Mudar para dark mode'}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(157,78,221,0.1)'
+            e.currentTarget.style.color = '#b07de6'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.color = ''
+          }}
+        >
+          {theme === 'dark' ? <MdLightMode className="text-xl" /> : <MdDarkMode className="text-xl" />}
         </button>
 
         {/* Avatar */}

@@ -29,6 +29,13 @@ if (import.meta.env.VITE_POSTHOG_KEY) {
   })
 }
 
+// Aplica tema antes do React renderizar para evitar flash (FOUC)
+;(function () {
+  const saved = localStorage.getItem('theme')
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+  document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'))
+})()
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

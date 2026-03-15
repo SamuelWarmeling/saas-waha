@@ -587,28 +587,6 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
         />
       )}
 
-      {/* Opções de quantidade */}
-      <div className="flex flex-col gap-1 pt-2 border-t border-surface-800/50">
-        <div className="flex items-center justify-between min-h-[48px]">
-          <p className="text-sm font-medium text-surface-300">Limitar quantidade</p>
-          <Toggle checked={value.limite_habilitado} onChange={v => up({ limite_habilitado: v })} />
-        </div>
-        {value.limite_habilitado && (
-          <input
-            type="number" min={1} value={value.limite}
-            onChange={e => up({ limite: Number(e.target.value) })}
-            className="input text-sm py-3"
-            placeholder="Ex: 100"
-          />
-        )}
-        <div className="flex items-center justify-between min-h-[48px]">
-          <div className="flex items-center gap-2">
-            <MdShuffle size={16} className="text-surface-500" />
-            <p className="text-sm font-medium text-surface-300">Ordem aleatória</p>
-          </div>
-          <Toggle checked={value.aleatorio} onChange={v => up({ aleatorio: v })} />
-        </div>
-      </div>
     </div>
   )
 }

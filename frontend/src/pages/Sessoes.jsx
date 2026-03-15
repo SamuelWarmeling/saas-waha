@@ -238,7 +238,7 @@ export default function Sessoes() {
     }
   }
 
-  // Auto-refresh QR a cada 5s até conectar
+  // Auto-refresh QR a cada 5min até conectar
   useEffect(() => {
     if (!qrSession) return
     const interval = setInterval(async () => {
@@ -253,7 +253,7 @@ export default function Sessoes() {
         }
         setQrSession(prev => ({ ...prev, qr: data.qr, status: data.status }))
       } catch { /* ignora */ }
-    }, 5000)
+    }, 300_000)
     return () => clearInterval(interval)
   }, [qrSession, load])
 

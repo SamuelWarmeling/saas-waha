@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import validator
 from functools import lru_cache
 import os
 
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
 
     # Waha API
     WAHA_API_URL: str = "https://waha-waha.xeramr.easypanel.host"
-    WAHA_API_KEY: str = "wARM31Ngadmin"
+    WAHA_API_KEY: str = ""
     WAHA_WEBHOOK_URL: str = "https://api-saas.xeramr.easypanel.host/api/webhook/waha"
 
     # Mercado Pago
@@ -48,12 +49,26 @@ class Settings(BaseSettings):
     # URL pública do backend (usada pelo WAHA para buscar arquivos de mídia)
     BACKEND_URL: str = "https://api-saas.xeramr.easypanel.host"
 
-    # SMTP (email de verificação)
+    # SMTP (email de verificação — fallback)
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASS: str = ""
     SMTP_FROM: str = "noreply@wahasaas.com"
+
+    # Resend (email transacional — preferido sobre SMTP)
+    RESEND_API_KEY: str = ""
+
+    # Sentry (monitoramento de erros)
+    SENTRY_DSN: str = ""
+
+    @validator('SECRET_KEY')
+    def secret_key_must_not_be_default(cls, v):
+        if v == 'troque-esta-chave-secreta-em-producao':
+            import os
+            if os.getenv('APP_ENV', 'development') == 'production':
+                raise ValueError('SECRET_KEY deve ser alterada no .env antes de usar em produção')
+        return v
 
     class Config:
         env_file = ".env"

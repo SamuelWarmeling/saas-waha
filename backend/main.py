@@ -6,6 +6,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -36,6 +41,23 @@ from config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Sentry — inicializa apenas se DSN configurado
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        integrations=[
+            StarletteIntegration(),
+            FastApiIntegration(),
+            SqlalchemyIntegration(),
+        ],
+        traces_sample_rate=0.2,
+        environment="development" if settings.DEBUG else "production",
+        send_default_pii=False,
+    )
+    logger.info("[SENTRY] Monitoramento de erros ativado.")
+else:
+    logger.info("[SENTRY] SENTRY_DSN não configurado — monitoramento desativado.")
 
 
 def wait_for_db(retries: int = 5, delay: int = 3) -> bool:
@@ -665,6 +687,25 @@ def migrate_automacoes():
         logger.error(f"[MIGRATE] Erro em migrate_automacoes: {e}")
 
 
+def migrate_email_verificacao_tipo():
+    """Adiciona coluna tipo em email_verificacoes para diferenciar verificação de cadastro e reset de senha."""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'email_verificacoes' AND column_name = 'tipo')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Adicionando tipo em email_verificacoes...")
+                conn.execute(text(
+                    "ALTER TABLE email_verificacoes ADD COLUMN tipo VARCHAR(20) NOT NULL DEFAULT 'verificacao'"
+                ))
+                conn.commit()
+                logger.info("[MIGRATE] Coluna tipo adicionada em email_verificacoes.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_email_verificacao_tipo: {e}")
+
+
 def migrate_group_incremental():
     """Adiciona colunas para extração incremental de grupos."""
     try:
@@ -905,6 +946,7 @@ async def lifespan(app: FastAPI):
             migrate_stripe_columns()
             migrate_automacoes()
             migrate_group_incremental()
+            migrate_email_verificacao_tipo()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")

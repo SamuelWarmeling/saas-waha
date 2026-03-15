@@ -2,8 +2,32 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import * as Sentry from '@sentry/react'
+import posthog from 'posthog-js'
 import App from './App'
 import './index.css'
+
+// Sentry — inicializa apenas se DSN configurado
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    integrations: [Sentry.browserTracingIntegration()],
+    tracesSampleRate: 0.2,
+    environment: import.meta.env.MODE,
+    replaysSessionSampleRate: 0,
+    replaysOnErrorSampleRate: 0,
+  })
+}
+
+// PostHog — inicializa apenas se chave configurada
+if (import.meta.env.VITE_POSTHOG_KEY) {
+  posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
+    api_host: import.meta.env.VITE_POSTHOG_HOST || 'https://app.posthog.com',
+    loaded: (ph) => {
+      if (import.meta.env.DEV) ph.debug()
+    },
+  })
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

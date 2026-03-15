@@ -27,6 +27,7 @@ UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 _queue_lock = asyncio.Lock()
+_active_campaign_tasks: set[int] = set()  # guard contra task duplicada
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -267,10 +268,9 @@ async def _start_next_queued(user_id: int):
                 .first()
             )
             if queued:
-                # Marcar como running antes de criar a task para evitar race condition
                 queued.status = models.CampaignStatus.running
+                queued.started_at = datetime.now(timezone.utc)
                 db.commit()
-                db.refresh(queued)
                 asyncio.create_task(send_campaign(queued.id, user_id))
         finally:
             db.close()
@@ -383,6 +383,12 @@ async def _send_waha_message(
 # ── Background task de disparo ────────────────────────────────────────────────
 
 async def send_campaign(campaign_id: int, user_id: int):
+    # ── Guard contra task duplicada ─────────────────────────────────────────
+    if campaign_id in _active_campaign_tasks:
+        print(f"[CAMPANHA-{campaign_id}] ⚠️  Task duplicada detectada — abortando (já existe uma task rodando)")
+        return
+    _active_campaign_tasks.add(campaign_id)
+
     db = SessionLocal()
     try:
         campaign = db.query(models.Campaign).filter(
@@ -391,9 +397,11 @@ async def send_campaign(campaign_id: int, user_id: int):
         if not campaign:
             return
 
-        campaign.status = models.CampaignStatus.running
-        campaign.started_at = datetime.now(timezone.utc)
-        db.commit()
+        # Garante status running (pode já estar marcado pelo endpoint)
+        if campaign.status != models.CampaignStatus.running:
+            campaign.status = models.CampaignStatus.running
+            campaign.started_at = datetime.now(timezone.utc)
+            db.commit()
 
         # Configurações de disparo do usuário
         user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -406,7 +414,6 @@ async def send_campaign(campaign_id: int, user_id: int):
         ).order_by(models.CampaignMessage.ordem).all()
 
         if not db_msgs and campaign.message:
-            # legado: cria mensagem in-memory
             db_msgs = [models.CampaignMessage(
                 campaign_id=campaign_id, text=campaign.message, ordem=0, tipo="text"
             )]
@@ -416,7 +423,7 @@ async def send_campaign(campaign_id: int, user_id: int):
             db.commit()
             return
 
-        # Sessões
+        # Sessões (chips)
         camp_sess = db.query(models.CampaignSession).filter(
             models.CampaignSession.campaign_id == campaign_id
         ).all()
@@ -428,21 +435,53 @@ async def send_campaign(campaign_id: int, user_id: int):
             db.commit()
             return
 
-        # Pré-carrega objetos de sessão para seleção fuzzy (atualizado in-memory a cada envio)
-        from fuzzy_chip import selecionar_chip_inteligente
         sessoes_candidatas = db.query(models.WhatsAppSession).filter(
             models.WhatsAppSession.id.in_(session_ids)
         ).all()
+        n_chips = len(sessoes_candidatas)
 
-        # Contatos pendentes
+        if n_chips == 0:
+            campaign.status = models.CampaignStatus.cancelled
+            db.commit()
+            return
+
+        # ── Contatos pendentes ───────────────────────────────────────────────
         pending = (
             db.query(models.CampaignContact)
             .filter(
                 models.CampaignContact.campaign_id == campaign_id,
                 models.CampaignContact.status == models.ContactStatus.pending,
             )
+            .order_by(models.CampaignContact.id)
             .all()
         )
+        total = len(pending)
+
+        if total == 0:
+            campaign.status = models.CampaignStatus.completed
+            campaign.completed_at = datetime.now(timezone.utc)
+            db.commit()
+            asyncio.create_task(_start_next_queued(user_id))
+            return
+
+        # ── Pré-distribuição: cada contato recebe exatamente 1 chip ─────────
+        # Divide contatos em fatias contíguas: Chip A: 0..k-1, Chip B: k..2k-1, ...
+        session_map: dict[int, models.WhatsAppSession] = {s.id: s for s in sessoes_candidatas}
+
+        for i, cc in enumerate(pending):
+            chip_idx = i * n_chips // total   # partição proporcional
+            cc.session_id = sessoes_candidatas[chip_idx].id
+        db.commit()
+
+        # Log da distribuição
+        for chip_idx, sess in enumerate(sessoes_candidatas):
+            start_i = chip_idx * total // n_chips
+            end_i = (chip_idx + 1) * total // n_chips
+            if start_i < end_i:
+                print(
+                    f"[CAMPANHA-{campaign_id}] 📋 Chip {sess.session_id}: "
+                    f"contatos {start_i + 1}–{end_i} ({end_i - start_i} contatos)"
+                )
 
         ordem = campaign.ordem_mensagens or "aleatorio"
         headers = {}
@@ -451,21 +490,34 @@ async def send_campaign(campaign_id: int, user_id: int):
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             for contact_index, cc in enumerate(pending):
+
                 # Verificar pause/cancel
-                campaign = db.query(models.Campaign).filter(
-                    models.Campaign.id == campaign_id
-                ).first()
+                db.refresh(campaign)
                 if campaign.status in (
                     models.CampaignStatus.paused,
                     models.CampaignStatus.cancelled,
                 ):
+                    print(f"[CAMPANHA-{campaign_id}] ⏸️  Interrompido (status={campaign.status})")
                     break
+
+                # Re-check status: pula se já foi processado (race condition guard)
+                db.refresh(cc)
+                if cc.status != models.ContactStatus.pending:
+                    print(f"[CAMPANHA-{campaign_id}] ⏭️  Contato {cc.contact_id} status={cc.status} — pulando")
+                    continue
 
                 contact = cc.contact
                 if contact.is_blacklisted:
                     cc.status = models.ContactStatus.skipped
+                    campaign.sent_count += 1
                     db.commit()
                     continue
+
+                # Chip pré-atribuído
+                used_session = session_map.get(cc.session_id)
+                if not used_session:
+                    # Fallback improvável
+                    used_session = sessoes_candidatas[contact_index % n_chips]
 
                 # Escolher mensagem
                 if ordem == "sequencial":
@@ -480,19 +532,11 @@ async def send_campaign(campaign_id: int, user_id: int):
                     msg_copy.text = msg.text.replace("{nome}", contact.name or "Cliente")
                     msg = msg_copy
 
-                # Seleção fuzzy: escolhe o chip com melhor score de saúde
-                used_session = selecionar_chip_inteligente(sessoes_candidatas)
-
-                if not used_session:
-                    cc.status = models.ContactStatus.failed
-                    cc.error_message = "Nenhuma sessão disponível"
-                    campaign.fail_count += 1
-                    cc.sent_at = datetime.now(timezone.utc)
-                    campaign.sent_count += 1
-                    db.commit()
-                    continue
-
                 phone = contact.phone
+                print(
+                    f"[CAMPANHA-{campaign_id}] 📤 Chip {used_session.session_id} "
+                    f"enviando para {phone} ({contact_index + 1}/{total})"
+                )
 
                 try:
                     status_code, resp_text = await _send_waha_message(
@@ -502,7 +546,10 @@ async def send_campaign(campaign_id: int, user_id: int):
                     if status_code == 201:
                         cc.status = models.ContactStatus.sent
                         campaign.success_count += 1
-                        # Tentar extrair waha_message_id
+                        print(
+                            f"[CAMPANHA-{campaign_id}] ✅ {phone} enviado pelo chip "
+                            f"{used_session.session_id} — pulando nos outros chips"
+                        )
                         try:
                             resp_json = json.loads(resp_text)
                             waha_id = resp_json.get("id") or resp_json.get("key", {}).get("id")
@@ -514,14 +561,15 @@ async def send_campaign(campaign_id: int, user_id: int):
                         cc.status = models.ContactStatus.failed
                         cc.error_message = resp_text[:200]
                         campaign.fail_count += 1
+                        print(f"[CAMPANHA-{campaign_id}] ❌ {phone} falhou (HTTP {status_code}): {resp_text[:100]}")
 
                 except Exception as e:
                     cc.status = models.ContactStatus.failed
                     cc.error_message = str(e)[:200]
                     campaign.fail_count += 1
+                    print(f"[CAMPANHA-{campaign_id}] ❌ {phone} exceção: {e}")
 
                 cc.sent_at = datetime.now(timezone.utc)
-                cc.session_id = used_session.id
                 campaign.sent_count += 1
                 used_session.messages_sent_today += 1
                 db.commit()
@@ -530,18 +578,17 @@ async def send_campaign(campaign_id: int, user_id: int):
                 await asyncio.sleep(delay)
 
         # Finaliza
-        campaign = db.query(models.Campaign).filter(
-            models.Campaign.id == campaign_id
-        ).first()
+        db.refresh(campaign)
         if campaign.status == models.CampaignStatus.running:
             campaign.status = models.CampaignStatus.completed
             campaign.completed_at = datetime.now(timezone.utc)
             db.commit()
+            print(f"[CAMPANHA-{campaign_id}] 🏁 Concluída")
 
-        # Libera slot para próxima campanha na fila
         asyncio.create_task(_start_next_queued(user_id))
 
     finally:
+        _active_campaign_tasks.discard(campaign_id)
         db.close()
 
 
@@ -1070,6 +1117,12 @@ async def fire_campaign(
             "campaign_id": campaign_id,
             "queued": True,
         }
+    # Marcar como running ANTES de iniciar o background task.
+    # Isso impede que uma segunda chamada ao endpoint veja status=draft e
+    # inicie uma segunda task simultânea (causando envio duplicado por chip).
+    campaign.status = models.CampaignStatus.running
+    campaign.started_at = datetime.now(timezone.utc)
+    db.commit()
     background_tasks.add_task(send_campaign, campaign_id, current_user.id)
     return {"message": "Disparo iniciado", "campaign_id": campaign_id}
 
@@ -1104,6 +1157,9 @@ async def start_campaign(
             "campaign_id": campaign_id,
             "queued": True,
         }
+    campaign.status = models.CampaignStatus.running
+    campaign.started_at = datetime.now(timezone.utc)
+    db.commit()
     background_tasks.add_task(send_campaign, campaign_id, current_user.id)
     return {"message": "Campanha iniciada", "campaign_id": campaign_id}
 

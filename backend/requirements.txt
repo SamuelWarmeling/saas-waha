@@ -15,4 +15,4 @@ python-dotenv==1.0.1
 google-generativeai==0.7.2
 stripe==10.12.0
 sentry-sdk[fastapi]==2.19.2
-resend==2.5.0
+resend==2.5.1

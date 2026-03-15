@@ -4,7 +4,7 @@ import {
   MdAccessTime, MdSettings, MdShield, MdSchedule, MdFilterList,
   MdBarChart, MdDownload, MdImage, MdAudiotrack, MdAttachFile, MdSmartButton,
   MdMessage, MdCheckCircle, MdCancel, MdSkipNext, MdEmail, MdLink,
-  MdGroup, MdDialpad, MdEditNote, MdFormatListBulleted, MdShuffle,
+  MdGroup, MdDialpad, MdEditNote, MdFormatListBulleted, MdShuffle, MdSearch,
 } from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
@@ -36,7 +36,7 @@ const EMPTY_CONTACT_SEL = {
   limite_habilitado: false,
   limite: 100,
   aleatorio: false,
-  contatos_manual: '',
+  selected_contacts: [],   // modo manual: [{id, phone, name}]
 }
 const EMPTY_FORM = { name: '', message_items: [{ ...EMPTY_MSG_ITEM }], session_ids: [], ordem_mensagens: 'aleatorio', contactSel: { ...EMPTY_CONTACT_SEL } }
 const EMPTY_ADVANCED = {
@@ -253,6 +253,198 @@ function MessageItemEditor({ item, onChange, onUpload, uploadingIdx }) {
   )
 }
 
+// ── Picker manual de contatos ─────────────────────────────────────────────────
+
+function formatPhone(phone) {
+  if (!phone) return ''
+  const d = phone.replace(/\D/g, '')
+  const local = d.startsWith('55') ? d.slice(2) : d
+  if (local.length === 11) return `(${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`
+  if (local.length === 10) return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`
+  return phone
+}
+
+function ManualContactPicker({ selected, onChange }) {
+  const [search, setSearch] = useState('')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+
+  async function fetchContacts(p, q) {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ page: p, page_size: 50, blacklisted: false })
+      if (q) params.set('search', q)
+      const { data } = await api.get(`/contatos?${params}`)
+      const items = data.items || []
+      setResults(prev => p === 1 ? items : [...prev, ...items])
+      setTotal(data.total || 0)
+      setHasMore(p * 50 < (data.total || 0))
+      setPage(p)
+    } catch { /* silencioso */ } finally {
+      setLoading(false)
+    }
+  }
+
+  // Busca inicial
+  useEffect(() => { fetchContacts(1, '') }, [])
+
+  // Debounce da busca
+  useEffect(() => {
+    const t = setTimeout(() => fetchContacts(1, search), 400)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const selectedIds = new Set(selected.map(c => c.id))
+
+  function toggle(c) {
+    if (selectedIds.has(c.id)) {
+      onChange(selected.filter(s => s.id !== c.id))
+    } else {
+      onChange([...selected, { id: c.id, phone: c.phone, name: c.name }])
+    }
+  }
+
+  function selectAllVisible() {
+    const newOnes = results.filter(c => !selectedIds.has(c.id))
+    onChange([...selected, ...newOnes.map(c => ({ id: c.id, phone: c.phone, name: c.name }))])
+  }
+
+  function clearAll() { onChange([]) }
+
+  function removeTag(id) { onChange(selected.filter(c => c.id !== id)) }
+
+  function getDdd(phone) {
+    const d = (phone || '').replace(/\D/g, '')
+    const local = d.startsWith('55') ? d.slice(2) : d
+    return local.slice(0, 2)
+  }
+
+  return (
+    <div className="space-y-3">
+
+      {/* Tags dos selecionados */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 p-2.5 rounded-xl border border-primary-500/25 bg-primary-900/10 max-h-[72px] overflow-y-auto">
+          {selected.map(c => (
+            <span key={c.id} className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(157,78,221,0.18)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.35)' }}>
+              {c.name || formatPhone(c.phone)}
+              <button type="button" onClick={() => removeTag(c.id)}
+                className="ml-0.5 text-[11px] opacity-70 hover:opacity-100 hover:text-red-300 transition-opacity leading-none">
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Contador + ações em massa */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-primary-400">
+          {selected.length} contato{selected.length !== 1 ? 's' : ''} selecionado{selected.length !== 1 ? 's' : ''}
+        </span>
+        <div className="flex items-center gap-2 text-[11px] font-semibold">
+          <button type="button" onClick={selectAllVisible}
+            className="text-primary-400 hover:text-primary-300 transition-colors">
+            Selecionar todos
+          </button>
+          {selected.length > 0 && (
+            <>
+              <span className="text-surface-700">|</span>
+              <button type="button" onClick={clearAll}
+                className="text-surface-500 hover:text-red-400 transition-colors">
+                Desmarcar todos
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Campo de busca */}
+      <div className="relative">
+        <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500 pointer-events-none" size={16} />
+        <input
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(1) }}
+          placeholder="Buscar por nome ou número..."
+          className="input pl-9 text-sm"
+        />
+        {loading && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-primary-500/30 border-t-primary-400 rounded-full animate-spin" />
+        )}
+      </div>
+
+      {/* Lista de contatos */}
+      <div className="rounded-xl border border-surface-700/50 overflow-hidden">
+        <div className="max-h-52 overflow-y-auto divide-y divide-surface-800/30">
+          {results.length === 0 && !loading ? (
+            <p className="text-xs text-surface-500 italic text-center py-6">
+              {search ? `Nenhum contato encontrado para "${search}"` : 'Nenhum contato na base.'}
+            </p>
+          ) : results.map(c => {
+            const isSel = selectedIds.has(c.id)
+            const ddd = getDdd(c.phone)
+            const initial = (c.name || c.phone || '?')[0].toUpperCase()
+            return (
+              <div key={c.id} onClick={() => toggle(c)}
+                className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors select-none
+                  ${isSel ? 'bg-primary-900/20' : 'bg-transparent hover:bg-surface-800/30'}`}>
+                {/* Avatar */}
+                <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
+                  style={{
+                    background: isSel ? 'rgba(157,78,221,0.28)' : 'rgba(30,28,40,0.9)',
+                    color: isSel ? '#b07de6' : '#64748b',
+                    border: `1px solid ${isSel ? 'rgba(157,78,221,0.4)' : 'rgba(100,116,139,0.2)'}`,
+                  }}>
+                  {initial}
+                </div>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className={`text-xs font-semibold truncate ${isSel ? 'text-primary-300' : 'text-surface-200'}`}>
+                    {c.name || formatPhone(c.phone)}
+                  </div>
+                  {c.name && (
+                    <div className="text-[10px] text-surface-500 font-mono">{formatPhone(c.phone)}</div>
+                  )}
+                </div>
+                {/* DDD badge */}
+                {ddd && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0"
+                    style={{ background: 'rgba(100,116,139,0.12)', color: '#64748b', border: '1px solid rgba(100,116,139,0.18)' }}>
+                    {ddd}
+                  </span>
+                )}
+                {/* Checkbox */}
+                <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all
+                  ${isSel ? 'bg-primary-500 border-primary-500' : 'border-surface-600 bg-surface-900/50'}`}>
+                  {isSel && <MdCheckCircle className="text-white" size={12} />}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Carregar mais */}
+        {hasMore && (
+          <div className="px-3 py-2 border-t border-surface-800/40 bg-surface-900/30 text-center">
+            <button type="button" onClick={() => fetchContacts(page + 1, search)} disabled={loading}
+              className="text-[11px] font-semibold text-primary-400 hover:text-primary-300 disabled:opacity-40 transition-colors">
+              {loading ? 'Carregando...' : `Carregar mais (${total - results.length} restantes)`}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[11px] text-surface-500">
+        Mostrando {results.length} de {total} contatos{search ? ` para "${search}"` : ''}
+      </p>
+    </div>
+  )
+}
+
 // ── Seletor de fonte de contatos ───────────────────────────────────────────────
 
 const FONTES_CONTATOS = [
@@ -355,19 +547,10 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
 
       {/* Manual */}
       {value.fonte === 'manual' && (
-        <div className="space-y-2">
-          <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider block">
-            Números (um por linha ou separados por vírgula)
-          </label>
-          <textarea
-            value={value.contatos_manual}
-            onChange={e => up({ contatos_manual: e.target.value })}
-            placeholder={'5521999123456\n5511888123456\n...'}
-            rows={5}
-            className="input resize-none text-xs font-mono"
-          />
-          <p className="text-[11px] text-surface-500">Formato: 55 + DDD + número (ex: 5521999123456)</p>
-        </div>
+        <ManualContactPicker
+          selected={value.selected_contacts}
+          onChange={sel => up({ selected_contacts: sel })}
+        />
       )}
 
       {/* Opções de quantidade */}
@@ -636,9 +819,7 @@ export default function Campanhas() {
           ddds: cs.ddds,
           limite: cs.limite_habilitado ? cs.limite : null,
           aleatorio: cs.aleatorio,
-          contatos_manual: cs.fonte === 'manual'
-            ? cs.contatos_manual.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
-            : null,
+          contact_ids: cs.fonte === 'manual' ? cs.selected_contacts.map(c => c.id) : null,
         }
         const { data } = await api.post('/campanhas/contatos-preview', body)
         setPreview(data)
@@ -756,9 +937,7 @@ export default function Campanhas() {
         ddds: cs.ddds,
         limite: cs.limite_habilitado ? cs.limite : null,
         aleatorio: cs.aleatorio,
-        contatos_manual: cs.fonte === 'manual'
-          ? cs.contatos_manual.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
-          : null,
+        contact_ids: cs.fonte === 'manual' ? cs.selected_contacts.map(c => c.id) : null,
       })
       toast.success(scheduledAt ? 'Campanha agendada!' : 'Campanha criada!')
       setShowModal(false)

@@ -45,7 +45,8 @@ class ContatosPreviewRequest(BaseModel):
     ddds: Optional[List[str]] = None
     limite: Optional[int] = None
     aleatorio: bool = False
-    contatos_manual: Optional[List[str]] = None
+    contatos_manual: Optional[List[str]] = None   # legado: strings de telefone
+    contact_ids: Optional[List[int]] = None        # manual picker: IDs de contatos
 
 
 class CampaignCreate(BaseModel):
@@ -147,23 +148,36 @@ def _resolver_contatos(
     """Resolve lista de contatos de acordo com a fonte selecionada."""
     contacts: List[models.Contact] = []
 
-    if fonte == "manual" and contatos_manual:
-        seen_phones: set = set()
-        for raw in contatos_manual:
-            phone = _normalizar_phone(raw.strip())
-            if not phone or len(phone) not in (12, 13) or phone in seen_phones:
-                continue
-            seen_phones.add(phone)
-            c = db.query(models.Contact).filter(
-                models.Contact.user_id == user_id,
-                models.Contact.phone == phone,
-            ).first()
-            if not c:
-                c = models.Contact(user_id=user_id, phone=phone)
-                db.add(c)
-                db.flush()
-            if not c.is_blacklisted:
-                contacts.append(c)
+    if fonte == "manual":
+        if contact_ids:
+            # Picker visual: contatos selecionados por ID
+            contacts = (
+                db.query(models.Contact)
+                .filter(
+                    models.Contact.user_id == user_id,
+                    models.Contact.id.in_(contact_ids),
+                    models.Contact.is_blacklisted == False,
+                )
+                .all()
+            )
+        elif contatos_manual:
+            # Legado: strings de telefone digitadas manualmente
+            seen_phones: set = set()
+            for raw in contatos_manual:
+                phone = _normalizar_phone(raw.strip())
+                if not phone or len(phone) not in (12, 13) or phone in seen_phones:
+                    continue
+                seen_phones.add(phone)
+                c = db.query(models.Contact).filter(
+                    models.Contact.user_id == user_id,
+                    models.Contact.phone == phone,
+                ).first()
+                if not c:
+                    c = models.Contact(user_id=user_id, phone=phone)
+                    db.add(c)
+                    db.flush()
+                if not c.is_blacklisted:
+                    contacts.append(c)
 
     elif fonte == "grupo" and grupo_ids:
         members = (
@@ -788,8 +802,8 @@ def contatos_preview(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Preview de quantos contatos serão usados com os filtros fornecidos."""
-    if data.fonte == "manual":
-        # Conta sem criar registros no banco
+    if data.fonte == "manual" and data.contatos_manual and not data.contact_ids:
+        # Legado: strings de telefone — conta sem criar registros no banco
         seen: set = set()
         valid: List[str] = []
         for raw in (data.contatos_manual or []):
@@ -813,6 +827,7 @@ def contatos_preview(
         ddds=data.ddds,
         limite=data.limite,
         aleatorio=data.aleatorio,
+        contact_ids=data.contact_ids,
     )
     por_ddd: dict = {}
     for c in contacts:

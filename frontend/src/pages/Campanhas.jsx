@@ -68,8 +68,10 @@ function ProgressBar({ percent, status }) {
 function Toggle({ checked, onChange }) {
   return (
     <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none ${checked ? 'bg-primary-500 border-primary-500' : 'bg-surface-700 border-surface-700'}`}>
-      <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-4' : 'translate-x-0'}`} />
+      className="relative flex-shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px] focus:outline-none">
+      <span className={`relative inline-flex h-6 w-11 rounded-full border-2 transition-colors duration-200 ${checked ? 'bg-primary-500 border-primary-500' : 'bg-surface-700 border-surface-700'}`}>
+        <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+      </span>
     </button>
   )
 }
@@ -448,10 +450,10 @@ function ManualContactPicker({ selected, onChange }) {
 // ── Seletor de fonte de contatos ───────────────────────────────────────────────
 
 const FONTES_CONTATOS = [
-  { id: 'lista',  icon: MdFormatListBulleted, label: '📋 Todas as Listas' },
-  { id: 'grupo',  icon: MdGroup,              label: '👥 Por Grupo' },
-  { id: 'ddd',    icon: MdDialpad,            label: '🔢 Por DDD' },
-  { id: 'manual', icon: MdEditNote,           label: '✏️ Manual' },
+  { id: 'lista',  labelMobile: '📋 Lista',  label: '📋 Todas as Listas' },
+  { id: 'grupo',  labelMobile: '👥 Grupo',  label: '👥 Por Grupo' },
+  { id: 'ddd',    labelMobile: '🔢 DDD',    label: '🔢 Por DDD' },
+  { id: 'manual', labelMobile: '✏️ Manual', label: '✏️ Manual' },
 ]
 
 function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
@@ -473,21 +475,25 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
 
   return (
     <div className="space-y-4">
-      {/* Tabs de fonte */}
-      <div className="flex rounded-xl p-0.5 gap-0.5" style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}>
-        {FONTES_CONTATOS.map(f => {
-          const active = value.fonte === f.id
-          return (
-            <button key={f.id} type="button"
-              onClick={() => up({ fonte: f.id })}
-              className="flex-1 min-w-0 text-[11px] font-semibold px-1 py-2 rounded-lg transition-all text-center"
-              style={active
-                ? { background: 'linear-gradient(135deg,rgba(157,78,221,0.3),rgba(106,13,173,0.25))', color: '#b07de6', border: '1px solid rgba(157,78,221,0.4)' }
-                : { color: '#64748b', background: 'transparent', border: '1px solid transparent' }}>
-              {f.label}
-            </button>
-          )
-        })}
+      {/* Tabs de fonte — scroll horizontal no mobile */}
+      <div className="overflow-x-auto -mx-0.5 pb-0.5">
+        <div className="flex rounded-xl p-0.5 gap-0.5 min-w-max sm:min-w-0"
+          style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}>
+          {FONTES_CONTATOS.map(f => {
+            const active = value.fonte === f.id
+            return (
+              <button key={f.id} type="button"
+                onClick={() => up({ fonte: f.id })}
+                className="min-h-[44px] sm:min-h-0 text-[11px] font-semibold px-3 sm:px-1 py-2 rounded-lg transition-all text-center whitespace-nowrap flex-1"
+                style={active
+                  ? { background: 'linear-gradient(135deg,rgba(157,78,221,0.3),rgba(106,13,173,0.25))', color: '#b07de6', border: '1px solid rgba(157,78,221,0.4)' }
+                  : { color: '#64748b', background: 'transparent', border: '1px solid transparent' }}>
+                <span className="sm:hidden">{f.labelMobile}</span>
+                <span className="hidden sm:inline">{f.label}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Lista (padrão) — sem filtro extra */}
@@ -497,22 +503,29 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
 
       {/* Por Grupo */}
       {value.fonte === 'grupo' && (
-        <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-52 overflow-y-auto overscroll-contain pr-1">
           {(grupos || []).length === 0
             ? <p className="text-xs text-surface-500 italic">Nenhum grupo extraído. Extraia grupos na página de Sessões.</p>
             : (grupos || []).map(g => {
                 const sel = value.grupo_ids.includes(g.id)
                 return (
-                  <label key={g.id} onClick={() => toggleGrupo(g.id)}
-                    className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${sel ? 'border-primary-500/50 bg-primary-900/20' : 'border-surface-700 bg-surface-900/30 hover:border-surface-500'}`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-primary-500 border-primary-500' : 'border-surface-600'}`}>
-                        {sel && <MdCheckCircle className="text-white text-[10px]" />}
+                  <div key={g.id} onClick={() => toggleGrupo(g.id)}
+                    className={`flex items-center justify-between gap-3 min-h-[48px] px-3 py-2 rounded-xl border cursor-pointer transition-all select-none
+                      ${sel ? 'border-primary-500/50 bg-primary-900/20' : 'border-surface-700 bg-surface-900/30 active:bg-surface-800/50'}`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      {/* Checkbox 44px touch target */}
+                      <div className="flex-shrink-0 flex items-center justify-center w-11 h-11 -ml-2">
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all
+                          ${sel ? 'bg-primary-500 border-primary-500' : 'border-surface-500 bg-surface-900/50'}`}>
+                          {sel && <MdCheckCircle className="text-white" size={14} />}
+                        </div>
                       </div>
-                      <span className="text-xs font-medium text-surface-300 truncate">{g.name}</span>
+                      <span className="text-sm font-medium text-surface-300 truncate">{g.name}</span>
                     </div>
-                    <span className="text-[10px] text-surface-500 flex-shrink-0">{g.member_count ?? g.total_membros ?? '?'} membros</span>
-                  </label>
+                    <span className="text-[11px] text-surface-500 flex-shrink-0 ml-auto">
+                      {g.member_count ?? g.total_membros ?? '?'} membros
+                    </span>
+                  </div>
                 )
               })
           }
@@ -530,7 +543,7 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
                   const sel = value.ddds.includes(d.ddd)
                   return (
                     <button key={d.ddd} type="button" onClick={() => toggleDdd(d.ddd)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                      className="flex items-center gap-1.5 px-3 min-h-[44px] rounded-xl text-xs font-bold transition-all"
                       style={sel
                         ? { background: 'rgba(157,78,221,0.25)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.5)' }
                         : { background: 'rgba(30,28,40,0.6)', color: '#64748b', border: '1px solid rgba(100,116,139,0.3)' }}>
@@ -554,25 +567,23 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
       )}
 
       {/* Opções de quantidade */}
-      <div className="flex flex-col gap-2 pt-1 border-t border-surface-800/50">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-surface-300">Limitar quantidade</p>
-          </div>
+      <div className="flex flex-col gap-1 pt-2 border-t border-surface-800/50">
+        <div className="flex items-center justify-between min-h-[48px]">
+          <p className="text-sm font-medium text-surface-300">Limitar quantidade</p>
           <Toggle checked={value.limite_habilitado} onChange={v => up({ limite_habilitado: v })} />
         </div>
         {value.limite_habilitado && (
           <input
             type="number" min={1} value={value.limite}
             onChange={e => up({ limite: Number(e.target.value) })}
-            className="input text-sm py-2"
+            className="input text-sm py-3"
             placeholder="Ex: 100"
           />
         )}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <MdShuffle size={14} className="text-surface-500" />
-            <p className="text-xs font-medium text-surface-300">Ordem aleatória</p>
+        <div className="flex items-center justify-between min-h-[48px]">
+          <div className="flex items-center gap-2">
+            <MdShuffle size={16} className="text-surface-500" />
+            <p className="text-sm font-medium text-surface-300">Ordem aleatória</p>
           </div>
           <Toggle checked={value.aleatorio} onChange={v => up({ aleatorio: v })} />
         </div>
@@ -1164,22 +1175,24 @@ export default function Campanhas() {
 
       {/* ── Modal Nova Campanha ─────────────────────────────────────────────── */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
-          <div className="glass-card w-full max-w-lg my-8 p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border-surface-600/50">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col sm:items-start sm:justify-center z-50 sm:p-4 sm:overflow-y-auto">
+          <div className="glass-card w-full sm:max-w-lg sm:my-8 sm:rounded-2xl rounded-none flex flex-col h-full sm:h-auto sm:max-h-[92vh] p-0 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-0 sm:border sm:border-surface-600/50">
 
-            {/* Header */}
-            <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/50 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            {/* Header — fixo no topo */}
+            <div className="flex-shrink-0 px-4 sm:px-6 py-4 sm:py-5 border-b border-surface-700/50 bg-surface-900/50 flex items-center justify-between">
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center"><MdPlayArrow size={20} /></div>
                 Nova Campanha
               </h2>
               <button onClick={() => { setShowModal(false); setForm(EMPTY_FORM); setAdv(EMPTY_ADVANCED) }}
-                className="w-8 h-8 rounded-full bg-surface-800 flex items-center justify-center text-surface-400 hover:text-white hover:bg-surface-700 transition-colors">
-                <MdClose size={18} />
+                className="w-10 h-10 rounded-full bg-surface-800 flex items-center justify-center text-surface-400 hover:text-white hover:bg-surface-700 transition-colors">
+                <MdClose size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="p-6 space-y-6">
+            {/* Conteúdo scrollável */}
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+            <form onSubmit={handleCreate} className="p-4 sm:p-6 space-y-6">
 
               {/* Nome */}
               <div>
@@ -1450,6 +1463,7 @@ export default function Campanhas() {
                 </button>
               </div>
             </form>
+            </div>{/* fim overflow-y-auto */}
           </div>
         </div>
       )}

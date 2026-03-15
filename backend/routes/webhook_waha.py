@@ -12,6 +12,9 @@ from models import FunnelContatoStatus as FunnelContatoStatus, FunnelTemperatura
 
 router = APIRouter(tags=["webhook"])
 
+# Mantém referência forte às tasks de auto-resposta para evitar GC prematuro
+_background_tasks: set[asyncio.Task] = set()
+
 
 async def resposta_automatica_virtual(
     session_waha_id: str,
@@ -37,47 +40,61 @@ async def resposta_automatica_virtual(
                     json=body,
                     headers=headers,
                 )
-            return r.status_code in (200, 201)
+            ok = r.status_code in (200, 201, 204)
+            if not ok:
+                print(f"[VIRTUAL-AUTO-RESP] ❌ {path} → HTTP {r.status_code}: {r.text[:200]}")
+            return ok
         except Exception as exc:
-            print(f"[VIRTUAL-AUTO-RESP] Erro em {path}: {exc}")
+            print(f"[VIRTUAL-AUTO-RESP] ❌ Exceção em {path}: {exc}")
             return False
 
     try:
+        print(f"🤖 [VIRTUAL] {session_waha_id} → auto-resposta iniciada para {to_phone[:6]}***")
+
         # a) Simula tempo para ler a mensagem (2-5s)
         delay_leitura = random.randint(2, 5)
-        print(f"🤖 Virtual recebeu de {to_phone[:6]}*** → aguardando {delay_leitura}s para ler")
+        print(f"🤖 [VIRTUAL] Aguardando {delay_leitura}s (leitura)...")
         await asyncio.sleep(delay_leitura)
 
         # b) Marca como lido (sendSeen)
-        await waha_post(f"/api/{session_waha_id}/sendSeen", {"chatId": chat_id})
-        print(f"🤖 Virtual marcou como lido ({to_phone[:6]}***)")
+        print(f"🤖 [VIRTUAL] Marcando como lido...")
+        visto = await waha_post(f"/api/{session_waha_id}/sendSeen", {"chatId": chat_id})
+        print(f"🤖 [VIRTUAL] sendSeen → {'ok' if visto else 'falhou (continua)'}")
 
         # c) Delay antes de começar a digitar (3-8s)
         delay_antes_digitar = random.randint(3, 8)
+        print(f"🤖 [VIRTUAL] Aguardando {delay_antes_digitar}s antes de digitar...")
         await asyncio.sleep(delay_antes_digitar)
 
         # d) Inicia indicador de digitação
+        print(f"🤖 [VIRTUAL] Digitando...")
         await waha_post(f"/api/{session_waha_id}/startTyping", {"chatId": chat_id})
-        print(f"🤖 Virtual digitando... ({session_waha_id} → {to_phone[:6]}***)")
 
         # e) Gera resposta com IA (ou fallback) enquanto "digita"
         import ia_service
+        print(f"🤖 [VIRTUAL] Gerando resposta (msg recebida: {mensagem_recebida[:40]!r})...")
         resposta = await ia_service.gerar_resposta_natural(mensagem_recebida, user_key)
+        print(f"🤖 [VIRTUAL] Resposta gerada: {resposta[:80]!r}")
 
         # f) Delay proporcional ao tamanho da resposta (simula digitação real, 2-4s)
         delay_digitar = max(2, min(4, len(resposta) // 15))
+        print(f"🤖 [VIRTUAL] Aguardando {delay_digitar}s (digitação)...")
         await asyncio.sleep(delay_digitar)
 
         # g) Para indicador de digitação
         await waha_post(f"/api/{session_waha_id}/stopTyping", {"chatId": chat_id})
 
-        # h) Envia resposta
+        # h) Envia resposta — mesmo formato usado no aquecimento e campanhas
+        print(f"🤖 [VIRTUAL] Enviando resposta via sendText...")
         ok = await waha_post("/api/sendText", {
+            "session": session_waha_id,
             "chatId": chat_id,
             "text": resposta,
-            "session": session_waha_id,
         })
-        print(f"🤖 Virtual {'respondeu' if ok else 'FALHOU ao responder'}: {resposta[:60]!r}")
+        if ok:
+            print(f"🤖 [VIRTUAL] ✅ Respondeu: {resposta[:60]!r}")
+        else:
+            print(f"🤖 [VIRTUAL] ❌ FALHOU ao enviar resposta para {to_phone[:6]}*** (veja log acima)")
 
         # Salva log no banco
         db: Session = SessionLocal()
@@ -96,7 +113,9 @@ async def resposta_automatica_virtual(
             db.close()
 
     except Exception as exc:
-        print(f"[VIRTUAL-AUTO-RESP] Erro inesperado: {exc}")
+        import traceback
+        print(f"[VIRTUAL-AUTO-RESP] ❌ Erro inesperado: {exc}")
+        print(traceback.format_exc())
 
 
 def normalize_phone(raw: str) -> str:
@@ -361,20 +380,34 @@ async def waha_webhook(request: Request, db: Session = Depends(get_db)):
                 .first()
             )
             if aq_virtual:
+                # Captura tudo ANTES do commit para não acessar ORM expirado
+                _session_waha_id = sess.session_id
+                _aq_id = aq_virtual.id
+                _body_text = payload.get("body") or payload.get("text") or ""
+                _user_key = None
+                try:
+                    if sess.user:
+                        _user_key = sess.user.gemini_api_key
+                except Exception:
+                    pass
+
                 aq_virtual.msgs_recebidas = (getattr(aq_virtual, "msgs_recebidas", 0) or 0) + 1
                 db.commit()
-                body_text = payload.get("body") or payload.get("text") or ""
-                user_key = getattr(sess.user, "gemini_api_key", None) if sess.user else None
-                print(f"🤖 Virtual '{sess.session_id}' (aq#{aq_virtual.id}) recebeu de {phone[:6]}*** — disparando auto-resposta")
-                asyncio.create_task(
+
+                print(f"🤖 Virtual '{_session_waha_id}' (aq#{_aq_id}) recebeu de {phone[:6]}*** — disparando auto-resposta")
+
+                # Armazena referência forte para evitar GC antes de completar
+                task = asyncio.create_task(
                     resposta_automatica_virtual(
-                        session_waha_id=sess.session_id,
+                        session_waha_id=_session_waha_id,
                         to_phone=phone,
-                        mensagem_recebida=body_text,
-                        aq_id=aq_virtual.id,
-                        user_key=user_key,
+                        mensagem_recebida=_body_text,
+                        aq_id=_aq_id,
+                        user_key=_user_key,
                     )
                 )
+                _background_tasks.add(task)
+                task.add_done_callback(_background_tasks.discard)
             else:
                 print(f"[WEBHOOK] Virtual '{sess.session_id}' sem AquecimentoConfig ativo — sem auto-resposta")
 

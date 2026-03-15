@@ -29,7 +29,7 @@ export default function Header({ onMenuOpen }) {
   }
 
   const badgeStyle = isAdmin
-    ? { background: 'rgba(157,78,221,0.18)', color: '#c084fc', border: '1px solid rgba(157,78,221,0.5)', boxShadow: '0 0 12px rgba(157,78,221,0.2)' }
+    ? { background: 'rgba(139,92,246,0.18)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,0.5)', boxShadow: '0 0 12px rgba(139,92,246,0.2)' }
     : isPlanActive
       ? { background: 'rgba(34,197,94,0.12)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.35)', boxShadow: '0 0 12px rgba(34,197,94,0.15)' }
       : { background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }
@@ -44,11 +44,9 @@ export default function Header({ onMenuOpen }) {
     <header
       className="h-16 flex items-center justify-between px-4 md:px-6 sticky top-0 z-20"
       style={{
-        background: 'rgba(26,22,37,0.85)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(157,78,221,0.2)',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+        background: '#0F172A',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 1px 0 rgba(255,255,255,0.04)',
       }}
     >
       {/* Esquerda: hamburguer (mobile) */}
@@ -56,7 +54,7 @@ export default function Header({ onMenuOpen }) {
         <button
           onClick={onMenuOpen}
           className="md:hidden w-10 h-10 flex items-center justify-center rounded-xl text-surface-300 hover:text-white transition-colors"
-          style={{ border: '1px solid rgba(157,78,221,0.15)' }}
+          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
           aria-label="Abrir menu"
         >
           <MdMenu className="text-2xl" />
@@ -65,7 +63,7 @@ export default function Header({ onMenuOpen }) {
         <span
           className="md:hidden font-bold text-sm tracking-wide"
           style={{
-            background: 'linear-gradient(90deg, #ffffff, #b07de6)',
+            background: 'linear-gradient(90deg, #ffffff, #a78bfa)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}
@@ -90,10 +88,10 @@ export default function Header({ onMenuOpen }) {
         {/* Notificações: oculto no mobile */}
         <button
           className="hidden md:flex relative w-10 h-10 items-center justify-center rounded-xl text-surface-400 transition-all"
-          style={{ border: '1px solid rgba(157,78,221,0.15)' }}
+          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
           onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(157,78,221,0.1)'
-            e.currentTarget.style.color = '#b07de6'
+            e.currentTarget.style.background = 'rgba(139,92,246,0.1)'
+            e.currentTarget.style.color = '#a78bfa'
           }}
           onMouseLeave={e => {
             e.currentTarget.style.background = 'transparent'
@@ -103,7 +101,7 @@ export default function Header({ onMenuOpen }) {
           <MdNotifications className="text-xl" />
           <span
             className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full animate-pulse"
-            style={{ background: '#9D4EDD', boxShadow: '0 0 8px #9D4EDD' }}
+            style={{ background: '#8B5CF6', boxShadow: '0 0 8px #8B5CF6' }}
           />
         </button>
 
@@ -111,11 +109,11 @@ export default function Header({ onMenuOpen }) {
         <button
           onClick={toggleTheme}
           className="w-10 h-10 flex items-center justify-center rounded-xl text-surface-400 transition-all"
-          style={{ border: '1px solid rgba(157,78,221,0.15)' }}
+          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
           title={theme === 'dark' ? 'Mudar para light mode' : 'Mudar para dark mode'}
           onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(157,78,221,0.1)'
-            e.currentTarget.style.color = '#b07de6'
+            e.currentTarget.style.background = 'rgba(139,92,246,0.1)'
+            e.currentTarget.style.color = '#a78bfa'
           }}
           onMouseLeave={e => {
             e.currentTarget.style.background = 'transparent'
@@ -129,15 +127,15 @@ export default function Header({ onMenuOpen }) {
         <div
           className="flex items-center gap-2 md:gap-3 rounded-xl px-2 md:px-4 py-2 cursor-pointer transition-all"
           style={{
-            background: 'rgba(26,22,37,0.6)',
-            border: '1px solid rgba(157,78,221,0.2)',
+            background: 'rgba(30,41,59,0.8)',
+            border: '1px solid rgba(255,255,255,0.08)',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(157,78,221,0.1)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(26,22,37,0.6)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.1)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(30,41,59,0.8)' }}
         >
           <div
             className="w-7 h-7 md:w-6 md:h-6 rounded-full flex items-center justify-center text-white shadow-sm"
-            style={{ background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)' }}
+            style={{ background: 'linear-gradient(135deg, #8B5CF6, #7c3aed)' }}
           >
             <MdPerson className="text-sm" />
           </div>

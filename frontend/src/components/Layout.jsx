@@ -53,8 +53,8 @@ export default function Layout() {
 
       <div className="flex flex-col flex-1 overflow-hidden relative min-w-0">
         {/* Background gradient effects */}
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary-900/10 blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary-800/10 blur-[120px] pointer-events-none" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary-950/20 blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary-900/15 blur-[140px] pointer-events-none" />
 
         <ImpersonateBanner />
         <Header onMenuOpen={() => setSidebarOpen(true)} />

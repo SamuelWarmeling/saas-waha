@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    background-color: #0B0914;
+    background-color: #0F172A;
     @apply text-surface-50 font-sans antialiased min-h-screen;
     overflow-x: hidden;
     scroll-behavior: smooth;
@@ -17,35 +17,37 @@
     }
   }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: #0B0914; }
+  ::-webkit-scrollbar-track { background: #0F172A; }
   ::-webkit-scrollbar-thumb {
-    background: rgba(157, 78, 221, 0.5);
+    background: rgba(139, 92, 246, 0.5);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(157, 78, 221, 0.8);
+    background: rgba(139, 92, 246, 0.8);
   }
 }
 
 @layer components {
   /* Glassmorphism Utilities */
   .glass-panel {
-    @apply bg-surface-800/60 backdrop-blur-xl border border-primary-500/10 shadow-xl;
+    @apply bg-surface-800/80 border shadow-xl;
+    border-color: rgba(255,255,255,0.05);
   }
 
   .glass-card {
-    background: rgba(26, 22, 37, 0.7);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    @apply border border-primary-500/10 rounded-xl p-5 shadow-lg transition-all
-           hover:border-primary-500/25 hover:shadow-[0_0_20px_rgba(157,78,221,0.15)];
+    background: #1E293B;
+    @apply border rounded-xl p-6 shadow-lg transition-all;
+    border-color: rgba(255,255,255,0.05);
+  }
+  .glass-card:hover {
+    border-color: rgba(255,255,255,0.1);
   }
 
   /* Buttons */
   .btn-primary {
-    background: linear-gradient(135deg, #9D4EDD, #6A0DAD);
+    background: linear-gradient(135deg, #8B5CF6, #7c3aed);
     @apply text-white font-semibold px-4 py-2 rounded-lg transition-all
-           shadow-lg shadow-primary-900/40 hover:shadow-[0_0_20px_rgba(157,78,221,0.4)]
+           shadow-lg shadow-primary-900/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)]
            hover:-translate-y-px min-h-[44px]
            disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0
            border border-primary-500/30;
@@ -68,12 +70,12 @@
   .input {
     @apply w-full rounded-lg px-3 py-2 text-surface-50 placeholder-surface-500
            focus:outline-none transition-all;
-    background: #1A1625;
-    border: 1px solid rgba(157, 78, 221, 0.25);
+    background: #1E293B;
+    border: 1px solid rgba(139, 92, 246, 0.25);
   }
   .input:focus {
-    border-color: #9D4EDD;
-    box-shadow: 0 0 0 2px rgba(157, 78, 221, 0.15);
+    border-color: #8B5CF6;
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
   }
   .label {
     @apply block text-sm font-medium text-surface-300 mb-1;
@@ -100,7 +102,7 @@
   --text-primary:  #1a1a2e;
   --text-secondary:#4b5563;
   --border:        #d8d5e8;
-  --accent:        #9D4EDD;
+  --accent:        #8B5CF6;
 }
 
 /* Body */
@@ -116,22 +118,22 @@
 
 [data-theme="light"] .glass-card {
   background: rgba(255, 255, 255, 0.92) !important;
-  border-color: rgba(157, 78, 221, 0.18) !important;
+  border-color: rgba(139, 92, 246, 0.18) !important;
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08) !important;
 }
 [data-theme="light"] .glass-card:hover {
-  box-shadow: 0 4px 24px rgba(157, 78, 221, 0.14) !important;
+  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.14) !important;
 }
 
 [data-theme="light"] .glass-panel {
   background: rgba(255, 255, 255, 0.85) !important;
-  border-color: rgba(157, 78, 221, 0.15) !important;
+  border-color: rgba(139, 92, 246, 0.15) !important;
 }
 
 [data-theme="light"] .input {
   background: #ffffff !important;
   color: #1a1a2e !important;
-  border-color: rgba(157, 78, 221, 0.3) !important;
+  border-color: rgba(139, 92, 246, 0.3) !important;
 }
 [data-theme="light"] .input::placeholder { color: #9ca3af !important; }
 
@@ -195,7 +197,7 @@
 [data-theme="light"] .badge-gray {
   background-color: rgba(216,213,232,0.5) !important;
   color: #4b5563 !important;
-  border-color: rgba(157,78,221,0.15) !important;
+  border-color: rgba(139,92,246,0.15) !important;
 }
 
 /* ── hover:bg-surface-* overrides ────────────────────────────────────────── */

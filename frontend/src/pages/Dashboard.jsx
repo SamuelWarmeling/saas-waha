@@ -70,7 +70,7 @@ function parseAtividade(a) {
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
   return (
-    <div style={{ background: '#120e1e', border: '1px solid rgba(157,78,221,0.2)', borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.6)' }}>
+    <div style={{ background: '#1E293B', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.6)' }}>
       <p className="text-surface-300 font-semibold text-xs mb-2">{label}</p>
       {payload.map((p, i) => (
         <p key={i} className="text-xs font-medium" style={{ color: p.color }}>
@@ -327,27 +327,27 @@ export default function Dashboard() {
               <AreaChart data={chartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradEnv" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#9D4EDD" stopOpacity={0.40} />
-                    <stop offset="95%" stopColor="#9D4EDD" stopOpacity={0} />
+                    <stop offset="5%"  stopColor="#8B5CF6" stopOpacity={0.40} />
+                    <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="gradExt" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%"  stopColor="#10b981" stopOpacity={0.35} />
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2d2244" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#253347" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} dy={8} />
                 <YAxis tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#3d3058', strokeWidth: 1, strokeDasharray: '4 4' }} />
                 <Area
-                  type="monotone" dataKey="enviados" stroke="#9D4EDD" fill="url(#gradEnv)"
+                  type="monotone" dataKey="enviados" stroke="#8B5CF6" fill="url(#gradEnv)"
                   strokeWidth={2.5}
-                  activeDot={{ r: 5, fill: '#9D4EDD', stroke: '#0B0914', strokeWidth: 2 }}
+                  activeDot={{ r: 5, fill: '#8B5CF6', stroke: '#0F172A', strokeWidth: 2 }}
                 />
                 <Area
                   type="monotone" dataKey="extraidos" stroke="#10b981" fill="url(#gradExt)"
                   strokeWidth={2}
-                  activeDot={{ r: 5, fill: '#10b981', stroke: '#0B0914', strokeWidth: 2 }}
+                  activeDot={{ r: 5, fill: '#10b981', stroke: '#0F172A', strokeWidth: 2 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -381,7 +381,7 @@ export default function Dashboard() {
                         className="h-full rounded-full transition-all duration-700"
                         style={{
                           width: `${row.pct}%`,
-                          background: `linear-gradient(90deg, #9d4edd ${100 - row.pct}%, #6a0dad)`,
+                          background: `linear-gradient(90deg, #8b5cf6 ${100 - row.pct}%, #7c3aed)`,
                           opacity: 0.7 + (row.pct / 300),
                         }}
                       />
@@ -577,7 +577,7 @@ export default function Dashboard() {
           {/* Card Funil de Leads */}
           <div className="glass-card">
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-surface-700/50">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(157,78,221,0.2)', color: '#9D4EDD' }}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(139,92,246,0.12)', color: '#8B5CF6' }}>
                 <MdFilterAlt size={18} />
               </div>
               <div>
@@ -612,7 +612,7 @@ export default function Dashboard() {
                   <div className="h-1.5 rounded-full bg-surface-800/60 overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${funnelStats.taxa_conversao}%`, background: 'linear-gradient(90deg, #9D4EDD, #eab308)' }}
+                      style={{ width: `${funnelStats.taxa_conversao}%`, background: 'linear-gradient(90deg, #8B5CF6, #eab308)' }}
                     />
                   </div>
                   <p className="text-[10px] text-surface-500 mt-1.5">{funnelStats.total_sequencias} sequência(s) · {funnelStats.total_contatos} leads</p>

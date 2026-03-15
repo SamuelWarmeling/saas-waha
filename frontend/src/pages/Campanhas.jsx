@@ -498,9 +498,9 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
       {/* Por Grupo */}
       {value.fonte === 'grupo' && (
         <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
-          {grupos.length === 0
+          {(grupos || []).length === 0
             ? <p className="text-xs text-surface-500 italic">Nenhum grupo extraído. Extraia grupos na página de Sessões.</p>
-            : grupos.map(g => {
+            : (grupos || []).map(g => {
                 const sel = value.grupo_ids.includes(g.id)
                 return (
                   <label key={g.id} onClick={() => toggleGrupo(g.id)}
@@ -522,11 +522,11 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
       {/* Por DDD */}
       {value.fonte === 'ddd' && (
         <div className="space-y-2">
-          {ddsDisponiveis.length === 0
+          {(ddsDisponiveis || []).length === 0
             ? <p className="text-xs text-surface-500 italic">Nenhum contato na base ainda.</p>
             : (
               <div className="flex flex-wrap gap-2">
-                {ddsDisponiveis.map(d => {
+                {(ddsDisponiveis || []).map(d => {
                   const sel = value.ddds.includes(d.ddd)
                   return (
                     <button key={d.ddd} type="button" onClick={() => toggleDdd(d.ddd)}
@@ -800,8 +800,14 @@ export default function Campanhas() {
       setDiagnosticos(map)
     }
     if (slRes.status === 'fulfilled') setSlots(slRes.value.data)
-    if (gRes.status === 'fulfilled') setGrupos(gRes.value.data || [])
-    if (dddRes.status === 'fulfilled') setDdsDisponiveis(dddRes.value.data || [])
+    if (gRes.status === 'fulfilled') {
+      const d = gRes.value.data
+      setGrupos(Array.isArray(d) ? d : (d.items || d.grupos || []))
+    }
+    if (dddRes.status === 'fulfilled') {
+      const d = dddRes.value.data
+      setDdsDisponiveis(Array.isArray(d) ? d : (d.ddds || d.items || []))
+    }
   }, [])
 
   useEffect(() => { load() }, [load])

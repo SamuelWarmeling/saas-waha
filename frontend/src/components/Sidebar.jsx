@@ -43,18 +43,18 @@ export default function Sidebar({ isOpen, onClose }) {
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}
       style={{
-        background: '#1E293B',
-        borderRight: '1px solid rgba(255,255,255,0.05)',
+        background: '#1A1625',
+        borderRight: '1px solid rgba(157,78,221,0.2)',
       }}
     >
       {/* Logo */}
       <div
         className="p-5 flex items-center gap-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+        style={{ borderBottom: '1px solid rgba(157,78,221,0.15)' }}
       >
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
-          style={{ background: 'linear-gradient(135deg, #8B5CF6, #7c3aed)' }}
+          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-primary-400/20"
+          style={{ background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)' }}
         >
           <MdWhatsapp className="text-white text-2xl" />
         </div>
@@ -62,7 +62,7 @@ export default function Sidebar({ isOpen, onClose }) {
           <p
             className="font-bold text-sm leading-none tracking-wide"
             style={{
-              background: 'linear-gradient(90deg, #ffffff, #a78bfa)',
+              background: 'linear-gradient(90deg, #ffffff, #b07de6)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
             }}
@@ -90,24 +90,15 @@ export default function Sidebar({ isOpen, onClose }) {
             style={({ isActive }) =>
               isActive
                 ? {
-                    background: 'rgba(139,92,246,0.12)',
-                    borderLeft: '3px solid #8B5CF6',
-                    paddingLeft: '9px',
+                    background: 'rgba(157,78,221,0.15)',
+                    borderLeft: '2px solid #9D4EDD',
+                    paddingLeft: '10px',
+                    boxShadow: '0 0 12px rgba(157,78,221,0.1)',
                   }
                 : {
-                    borderLeft: '3px solid transparent',
+                    borderLeft: '2px solid transparent',
                   }
             }
-            onMouseEnter={e => {
-              if (!e.currentTarget.style.background.includes('rgba(139,92,246,0.12)')) {
-                e.currentTarget.style.background = 'rgba(139,92,246,0.06)'
-              }
-            }}
-            onMouseLeave={e => {
-              if (!e.currentTarget.style.background.includes('rgba(139,92,246,0.12)')) {
-                e.currentTarget.style.background = ''
-              }
-            }}
           >
             {({ isActive }) => (
               <>
@@ -129,12 +120,13 @@ export default function Sidebar({ isOpen, onClose }) {
             style={({ isActive }) =>
               isActive
                 ? {
-                    background: 'rgba(139,92,246,0.12)',
-                    borderLeft: '3px solid #8B5CF6',
-                    paddingLeft: '9px',
+                    background: 'rgba(157,78,221,0.15)',
+                    borderLeft: '2px solid #9D4EDD',
+                    paddingLeft: '10px',
+                    boxShadow: '0 0 12px rgba(157,78,221,0.1)',
                   }
                 : {
-                    borderLeft: '3px solid transparent',
+                    borderLeft: '2px solid transparent',
                   }
             }
           >
@@ -149,7 +141,7 @@ export default function Sidebar({ isOpen, onClose }) {
       </nav>
 
       {/* Logout */}
-      <div className="p-3 mt-auto" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+      <div className="p-3 mt-auto" style={{ borderTop: '1px solid rgba(157,78,221,0.15)' }}>
         <button
           onClick={logout}
           className="w-full flex items-center justify-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:bg-red-900/20 hover:text-red-400 transition-all duration-200"

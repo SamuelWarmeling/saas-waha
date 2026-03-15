@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime, timezone
@@ -26,6 +26,8 @@ router = APIRouter(prefix="/api/campanhas", tags=["Campanhas"])
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
+_queue_lock = asyncio.Lock()
+
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
 class MessageItem(BaseModel):
@@ -36,12 +38,29 @@ class MessageItem(BaseModel):
     botoes: Optional[List[dict]] = None
 
 
+class ContatosPreviewRequest(BaseModel):
+    fonte: str = "lista"          # lista | grupo | ddd | manual
+    grupo_ids: Optional[List[int]] = None
+    ddds: Optional[List[str]] = None
+    limite: Optional[int] = None
+    aleatorio: bool = False
+    contatos_manual: Optional[List[str]] = None
+
+
 class CampaignCreate(BaseModel):
     name: str
     messages: Optional[List[str]] = None      # legado: lista de textos
     message_items: Optional[List[MessageItem]] = None  # novo: lista rica
     session_ids: List[int]
-    contact_ids: Optional[List[int]] = None
+    # Seleção de contatos por fonte
+    fonte: str = "lista"          # lista | grupo | ddd | manual
+    contact_ids: Optional[List[int]] = None   # legado / lista com IDs específicos
+    grupo_ids: Optional[List[int]] = None
+    ddds: Optional[List[str]] = None
+    limite: Optional[int] = None
+    aleatorio: bool = False
+    contatos_manual: Optional[List[str]] = None
+    # Config
     delay_min: Optional[int] = 3
     delay_max: Optional[int] = 8
     media_url: Optional[str] = None
@@ -105,6 +124,115 @@ class CampaignProgress(BaseModel):
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+def _normalizar_phone(raw: str) -> str:
+    """Normaliza número para formato 55XXXXXXXXXXX."""
+    digits = "".join(c for c in raw if c.isdigit())
+    if digits and not digits.startswith("55") and len(digits) in (10, 11):
+        digits = "55" + digits
+    return digits
+
+
+def _resolver_contatos(
+    fonte: str,
+    user_id: int,
+    db: Session,
+    grupo_ids: Optional[List[int]] = None,
+    ddds: Optional[List[str]] = None,
+    limite: Optional[int] = None,
+    aleatorio: bool = False,
+    contact_ids: Optional[List[int]] = None,
+    contatos_manual: Optional[List[str]] = None,
+) -> List[models.Contact]:
+    """Resolve lista de contatos de acordo com a fonte selecionada."""
+    contacts: List[models.Contact] = []
+
+    if fonte == "manual" and contatos_manual:
+        seen_phones: set = set()
+        for raw in contatos_manual:
+            phone = _normalizar_phone(raw.strip())
+            if not phone or len(phone) not in (12, 13) or phone in seen_phones:
+                continue
+            seen_phones.add(phone)
+            c = db.query(models.Contact).filter(
+                models.Contact.user_id == user_id,
+                models.Contact.phone == phone,
+            ).first()
+            if not c:
+                c = models.Contact(user_id=user_id, phone=phone)
+                db.add(c)
+                db.flush()
+            if not c.is_blacklisted:
+                contacts.append(c)
+
+    elif fonte == "grupo" and grupo_ids:
+        members = (
+            db.query(models.GroupMember)
+            .join(models.Group, models.GroupMember.group_id == models.Group.id)
+            .filter(
+                models.Group.id.in_(grupo_ids),
+                models.Group.user_id == user_id,
+                models.GroupMember.status == "ativo",
+            )
+            .all()
+        )
+        seen_phones: set = set()
+        for m in members:
+            phone = (m.phone or "").strip()
+            if not phone or phone in seen_phones:
+                continue
+            seen_phones.add(phone)
+            c = None
+            if m.contact_id:
+                c = db.query(models.Contact).filter(
+                    models.Contact.id == m.contact_id,
+                    models.Contact.user_id == user_id,
+                ).first()
+            if not c:
+                c = db.query(models.Contact).filter(
+                    models.Contact.user_id == user_id,
+                    models.Contact.phone == phone,
+                ).first()
+            if not c:
+                c = models.Contact(user_id=user_id, phone=phone, name=m.name)
+                db.add(c)
+                db.flush()
+            if c and not c.is_blacklisted:
+                contacts.append(c)
+
+    elif fonte == "ddd" and ddds:
+        ddd_filters = [
+            models.Contact.phone.like(f"55{ddd.strip()}%")
+            for ddd in ddds if ddd.strip()
+        ]
+        if ddd_filters:
+            contacts = (
+                db.query(models.Contact)
+                .filter(
+                    models.Contact.user_id == user_id,
+                    models.Contact.is_blacklisted == False,
+                    or_(*ddd_filters),
+                )
+                .all()
+            )
+
+    else:
+        # lista (padrão): todos os contatos, ou subset por contact_ids
+        base_q = db.query(models.Contact).filter(
+            models.Contact.user_id == user_id,
+            models.Contact.is_blacklisted == False,
+        )
+        if contact_ids:
+            base_q = base_q.filter(models.Contact.id.in_(contact_ids))
+        contacts = base_q.all()
+
+    if aleatorio:
+        random.shuffle(contacts)
+    if limite and limite > 0:
+        contacts = contacts[:limite]
+
+    return contacts
+
+
 def _chips_ativos_count(user_id: int, db: Session) -> int:
     """Retorna o número de campanhas em execução ativa para o usuário."""
     return (
@@ -119,28 +247,33 @@ def _chips_ativos_count(user_id: int, db: Session) -> int:
 
 async def _start_next_queued(user_id: int):
     """Se houver slot livre, inicia a campanha mais antiga na fila do usuário."""
-    db = SessionLocal()
-    try:
-        user = db.query(models.User).filter(models.User.id == user_id).first()
-        if not user:
-            return
-        limite = getattr(user, "chips_disparo_simultaneo", 3)
-        em_uso = _chips_ativos_count(user_id, db)
-        if em_uso >= limite:
-            return
-        queued = (
-            db.query(models.Campaign)
-            .filter(
-                models.Campaign.user_id == user_id,
-                models.Campaign.status == models.CampaignStatus.queued,
+    async with _queue_lock:
+        db = SessionLocal()
+        try:
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+            if not user:
+                return
+            limite = getattr(user, "chips_disparo_simultaneo", 3)
+            em_uso = _chips_ativos_count(user_id, db)
+            if em_uso >= limite:
+                return
+            queued = (
+                db.query(models.Campaign)
+                .filter(
+                    models.Campaign.user_id == user_id,
+                    models.Campaign.status == models.CampaignStatus.queued,
+                )
+                .order_by(models.Campaign.created_at.asc())
+                .first()
             )
-            .order_by(models.Campaign.created_at.asc())
-            .first()
-        )
-        if queued:
-            asyncio.create_task(send_campaign(queued.id, user_id))
-    finally:
-        db.close()
+            if queued:
+                # Marcar como running antes de criar a task para evitar race condition
+                queued.status = models.CampaignStatus.running
+                db.commit()
+                db.refresh(queued)
+                asyncio.create_task(send_campaign(queued.id, user_id))
+        finally:
+            db.close()
 
 
 def _load_campaign_q(db: Session):
@@ -486,20 +619,18 @@ def create_campaign(
     if not sessions:
         raise HTTPException(status_code=404, detail="Nenhuma sessão encontrada")
 
-    if data.contact_ids:
-        contacts = db.query(models.Contact).filter(
-            models.Contact.id.in_(data.contact_ids),
-            models.Contact.user_id == current_user.id,
-            models.Contact.is_blacklisted == False,
-        ).all()
-    else:
-        contacts = db.query(models.Contact).filter(
-            models.Contact.user_id == current_user.id,
-            models.Contact.is_blacklisted == False,
-        ).all()
-
-    if not contacts:
-        raise HTTPException(status_code=400, detail="Nenhum contato válido para a campanha")
+    contacts = _resolver_contatos(
+        fonte=data.fonte,
+        user_id=current_user.id,
+        db=db,
+        grupo_ids=data.grupo_ids,
+        ddds=data.ddds,
+        limite=data.limite,
+        aleatorio=data.aleatorio,
+        contact_ids=data.contact_ids,
+        contatos_manual=data.contatos_manual,
+    )
+    # Contatos 0 é permitido — campanha fica em rascunho até adicionar contatos depois
 
     message_items = data.get_message_items()
     if not message_items:
@@ -575,6 +706,119 @@ def get_slots(
         "disponiveis": max(0, limite - em_uso),
         "na_fila_count": na_fila,
     }
+
+
+@router.get("/ddds-disponiveis")
+def ddds_disponiveis(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Retorna DDDs disponíveis na base de contatos com quantidade por DDD."""
+    contacts = db.query(models.Contact.phone).filter(
+        models.Contact.user_id == current_user.id,
+        models.Contact.is_blacklisted == False,
+    ).all()
+
+    ddd_counts: dict = {}
+    for (phone,) in contacts:
+        if phone and len(phone) >= 4:
+            ddd = phone[2:4]
+            if ddd.isdigit():
+                ddd_counts[ddd] = ddd_counts.get(ddd, 0) + 1
+
+    return {
+        "ddds": [
+            {"ddd": ddd, "total": count}
+            for ddd, count in sorted(ddd_counts.items(), key=lambda x: -x[1])
+        ]
+    }
+
+
+@router.post("/contatos-preview")
+def contatos_preview(
+    data: ContatosPreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Preview de quantos contatos serão usados com os filtros fornecidos."""
+    if data.fonte == "manual":
+        # Conta sem criar registros no banco
+        seen: set = set()
+        valid: List[str] = []
+        for raw in (data.contatos_manual or []):
+            phone = _normalizar_phone(raw.strip())
+            if phone and len(phone) in (12, 13) and phone not in seen:
+                seen.add(phone)
+                valid.append(phone)
+        if data.limite and data.limite > 0:
+            valid = valid[:data.limite]
+        return {
+            "total": len(valid),
+            "amostra": [{"phone": p, "name": None} for p in valid[:10]],
+            "por_ddd": {},
+        }
+
+    contacts = _resolver_contatos(
+        fonte=data.fonte,
+        user_id=current_user.id,
+        db=db,
+        grupo_ids=data.grupo_ids,
+        ddds=data.ddds,
+        limite=data.limite,
+        aleatorio=data.aleatorio,
+    )
+    por_ddd: dict = {}
+    for c in contacts:
+        if c.phone and len(c.phone) >= 4:
+            ddd = c.phone[2:4]
+            por_ddd[ddd] = por_ddd.get(ddd, 0) + 1
+
+    return {
+        "total": len(contacts),
+        "amostra": [{"phone": c.phone, "name": c.name} for c in contacts[:10]],
+        "por_ddd": por_ddd,
+    }
+
+
+@router.post("/{campaign_id}/adicionar-contatos")
+def adicionar_contatos(
+    campaign_id: int,
+    data: ContatosPreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_active_plan),
+):
+    """Adiciona (substitui) contatos em uma campanha rascunho."""
+    campaign = db.query(models.Campaign).filter(
+        models.Campaign.id == campaign_id,
+        models.Campaign.user_id == current_user.id,
+    ).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campanha não encontrada")
+    if campaign.status not in (models.CampaignStatus.draft,):
+        raise HTTPException(status_code=400, detail="Só é possível editar contatos em campanhas rascunho")
+
+    contacts = _resolver_contatos(
+        fonte=data.fonte,
+        user_id=current_user.id,
+        db=db,
+        grupo_ids=data.grupo_ids,
+        ddds=data.ddds,
+        limite=data.limite,
+        aleatorio=data.aleatorio,
+        contatos_manual=data.contatos_manual,
+    )
+
+    db.query(models.CampaignContact).filter(
+        models.CampaignContact.campaign_id == campaign_id
+    ).delete(synchronize_session=False)
+
+    for c in contacts:
+        db.add(models.CampaignContact(campaign_id=campaign_id, contact_id=c.id))
+
+    campaign.total_contacts = len(contacts)
+    db.commit()
+
+    return {"total": len(contacts), "message": f"{len(contacts)} contatos adicionados à campanha"}
 
 
 @router.get("/{campaign_id}", response_model=CampaignOut)

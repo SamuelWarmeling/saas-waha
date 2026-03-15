@@ -4,6 +4,7 @@ import {
   MdAccessTime, MdSettings, MdShield, MdSchedule, MdFilterList,
   MdBarChart, MdDownload, MdImage, MdAudiotrack, MdAttachFile, MdSmartButton,
   MdMessage, MdCheckCircle, MdCancel, MdSkipNext, MdEmail, MdLink,
+  MdGroup, MdDialpad, MdEditNote, MdFormatListBulleted, MdShuffle,
 } from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
@@ -28,7 +29,16 @@ const MEDIA_TABS = [
 ]
 
 const EMPTY_MSG_ITEM = { tipo: 'text', text: '', media_url: '', media_filename: '', botoes: [{ texto: '', tipo: 'reply', valor: '' }] }
-const EMPTY_FORM = { name: '', message_items: [{ ...EMPTY_MSG_ITEM }], session_ids: [], ordem_mensagens: 'aleatorio' }
+const EMPTY_CONTACT_SEL = {
+  fonte: 'lista',
+  grupo_ids: [],
+  ddds: [],
+  limite_habilitado: false,
+  limite: 100,
+  aleatorio: false,
+  contatos_manual: '',
+}
+const EMPTY_FORM = { name: '', message_items: [{ ...EMPTY_MSG_ITEM }], session_ids: [], ordem_mensagens: 'aleatorio', contactSel: { ...EMPTY_CONTACT_SEL } }
 const EMPTY_ADVANCED = {
   delay_min: 5, delay_max: 15, max_per_chip_per_day: 200,
   stop_on_disconnect: true, business_hours_only: false,
@@ -243,6 +253,152 @@ function MessageItemEditor({ item, onChange, onUpload, uploadingIdx }) {
   )
 }
 
+// ── Seletor de fonte de contatos ───────────────────────────────────────────────
+
+const FONTES_CONTATOS = [
+  { id: 'lista',  icon: MdFormatListBulleted, label: '📋 Todas as Listas' },
+  { id: 'grupo',  icon: MdGroup,              label: '👥 Por Grupo' },
+  { id: 'ddd',    icon: MdDialpad,            label: '🔢 Por DDD' },
+  { id: 'manual', icon: MdEditNote,           label: '✏️ Manual' },
+]
+
+function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
+  const up = (patch) => onChange({ ...value, ...patch })
+
+  function toggleGrupo(id) {
+    const ids = value.grupo_ids.includes(id)
+      ? value.grupo_ids.filter(x => x !== id)
+      : [...value.grupo_ids, id]
+    up({ grupo_ids: ids })
+  }
+
+  function toggleDdd(ddd) {
+    const arr = value.ddds.includes(ddd)
+      ? value.ddds.filter(x => x !== ddd)
+      : [...value.ddds, ddd]
+    up({ ddds: arr })
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Tabs de fonte */}
+      <div className="flex rounded-xl p-0.5 gap-0.5" style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}>
+        {FONTES_CONTATOS.map(f => {
+          const active = value.fonte === f.id
+          return (
+            <button key={f.id} type="button"
+              onClick={() => up({ fonte: f.id })}
+              className="flex-1 min-w-0 text-[11px] font-semibold px-1 py-2 rounded-lg transition-all text-center"
+              style={active
+                ? { background: 'linear-gradient(135deg,rgba(157,78,221,0.3),rgba(106,13,173,0.25))', color: '#b07de6', border: '1px solid rgba(157,78,221,0.4)' }
+                : { color: '#64748b', background: 'transparent', border: '1px solid transparent' }}>
+              {f.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Lista (padrão) — sem filtro extra */}
+      {value.fonte === 'lista' && (
+        <p className="text-xs text-surface-400 italic px-1">Todos os contatos da base serão incluídos (exceto blacklist).</p>
+      )}
+
+      {/* Por Grupo */}
+      {value.fonte === 'grupo' && (
+        <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+          {grupos.length === 0
+            ? <p className="text-xs text-surface-500 italic">Nenhum grupo extraído. Extraia grupos na página de Sessões.</p>
+            : grupos.map(g => {
+                const sel = value.grupo_ids.includes(g.id)
+                return (
+                  <label key={g.id} onClick={() => toggleGrupo(g.id)}
+                    className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${sel ? 'border-primary-500/50 bg-primary-900/20' : 'border-surface-700 bg-surface-900/30 hover:border-surface-500'}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-primary-500 border-primary-500' : 'border-surface-600'}`}>
+                        {sel && <MdCheckCircle className="text-white text-[10px]" />}
+                      </div>
+                      <span className="text-xs font-medium text-surface-300 truncate">{g.name}</span>
+                    </div>
+                    <span className="text-[10px] text-surface-500 flex-shrink-0">{g.member_count ?? g.total_membros ?? '?'} membros</span>
+                  </label>
+                )
+              })
+          }
+        </div>
+      )}
+
+      {/* Por DDD */}
+      {value.fonte === 'ddd' && (
+        <div className="space-y-2">
+          {ddsDisponiveis.length === 0
+            ? <p className="text-xs text-surface-500 italic">Nenhum contato na base ainda.</p>
+            : (
+              <div className="flex flex-wrap gap-2">
+                {ddsDisponiveis.map(d => {
+                  const sel = value.ddds.includes(d.ddd)
+                  return (
+                    <button key={d.ddd} type="button" onClick={() => toggleDdd(d.ddd)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                      style={sel
+                        ? { background: 'rgba(157,78,221,0.25)', color: '#b07de6', border: '1px solid rgba(157,78,221,0.5)' }
+                        : { background: 'rgba(30,28,40,0.6)', color: '#64748b', border: '1px solid rgba(100,116,139,0.3)' }}>
+                      DDD {d.ddd}
+                      <span className="opacity-70">— {d.total}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          }
+        </div>
+      )}
+
+      {/* Manual */}
+      {value.fonte === 'manual' && (
+        <div className="space-y-2">
+          <label className="text-[11px] text-surface-400 font-semibold uppercase tracking-wider block">
+            Números (um por linha ou separados por vírgula)
+          </label>
+          <textarea
+            value={value.contatos_manual}
+            onChange={e => up({ contatos_manual: e.target.value })}
+            placeholder={'5521999123456\n5511888123456\n...'}
+            rows={5}
+            className="input resize-none text-xs font-mono"
+          />
+          <p className="text-[11px] text-surface-500">Formato: 55 + DDD + número (ex: 5521999123456)</p>
+        </div>
+      )}
+
+      {/* Opções de quantidade */}
+      <div className="flex flex-col gap-2 pt-1 border-t border-surface-800/50">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-medium text-surface-300">Limitar quantidade</p>
+          </div>
+          <Toggle checked={value.limite_habilitado} onChange={v => up({ limite_habilitado: v })} />
+        </div>
+        {value.limite_habilitado && (
+          <input
+            type="number" min={1} value={value.limite}
+            onChange={e => up({ limite: Number(e.target.value) })}
+            className="input text-sm py-2"
+            placeholder="Ex: 100"
+          />
+        )}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <MdShuffle size={14} className="text-surface-500" />
+            <p className="text-xs font-medium text-surface-300">Ordem aleatória</p>
+          </div>
+          <Toggle checked={value.aleatorio} onChange={v => up({ aleatorio: v })} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 // ── Modal de Relatório ─────────────────────────────────────────────────────────
 
 function ReportModal({ campaign, onClose }) {
@@ -437,13 +593,19 @@ export default function Campanhas() {
   const [drawerDraft, setDrawerDraft] = useState(EMPTY_ADVANCED)
   const [uploadingIdx, setUploadingIdx] = useState(null)
   const [reportCampaign, setReportCampaign] = useState(null)
+  const [grupos, setGrupos] = useState([])
+  const [ddsDisponiveis, setDdsDisponiveis] = useState([])
+  const [preview, setPreview] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const load = useCallback(async () => {
-    const [cRes, sRes, dRes, slRes] = await Promise.allSettled([
+    const [cRes, sRes, dRes, slRes, gRes, dddRes] = await Promise.allSettled([
       api.get('/campanhas?page_size=50'),
       api.get('/sessoes'),
       api.get('/chips/diagnostico'),
       api.get('/campanhas/slots'),
+      api.get('/grupos'),
+      api.get('/campanhas/ddds-disponiveis'),
     ])
     if (cRes.status === 'fulfilled') setCampaigns(cRes.value.data)
     else toast.error('Erro ao carregar campanhas')
@@ -455,9 +617,39 @@ export default function Campanhas() {
       setDiagnosticos(map)
     }
     if (slRes.status === 'fulfilled') setSlots(slRes.value.data)
+    if (gRes.status === 'fulfilled') setGrupos(gRes.value.data || [])
+    if (dddRes.status === 'fulfilled') setDdsDisponiveis(dddRes.value.data || [])
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Preview de contatos com debounce
+  useEffect(() => {
+    if (!showModal) return
+    const cs = form.contactSel
+    const t = setTimeout(async () => {
+      setPreviewLoading(true)
+      try {
+        const body = {
+          fonte: cs.fonte,
+          grupo_ids: cs.grupo_ids,
+          ddds: cs.ddds,
+          limite: cs.limite_habilitado ? cs.limite : null,
+          aleatorio: cs.aleatorio,
+          contatos_manual: cs.fonte === 'manual'
+            ? cs.contatos_manual.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+            : null,
+        }
+        const { data } = await api.post('/campanhas/contatos-preview', body)
+        setPreview(data)
+      } catch {
+        setPreview(null)
+      } finally {
+        setPreviewLoading(false)
+      }
+    }, 600)
+    return () => clearTimeout(t)
+  }, [form.contactSel, showModal])
 
   // Polling para campanhas ativas
   useEffect(() => {
@@ -549,6 +741,7 @@ export default function Campanhas() {
     }
 
     setLoading(true)
+    const cs = form.contactSel
     try {
       await api.post('/campanhas', {
         name: form.name,
@@ -558,6 +751,14 @@ export default function Campanhas() {
         delay_min: Number(adv.delay_min),
         delay_max: Number(adv.delay_max),
         scheduled_at: scheduledAt,
+        fonte: cs.fonte,
+        grupo_ids: cs.grupo_ids,
+        ddds: cs.ddds,
+        limite: cs.limite_habilitado ? cs.limite : null,
+        aleatorio: cs.aleatorio,
+        contatos_manual: cs.fonte === 'manual'
+          ? cs.contatos_manual.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+          : null,
       })
       toast.success(scheduledAt ? 'Campanha agendada!' : 'Campanha criada!')
       setShowModal(false)
@@ -872,6 +1073,25 @@ export default function Campanhas() {
                 </div>
               </div>
 
+              {/* Seleção de contatos */}
+              <div className="bg-surface-900/30 p-5 rounded-2xl border border-surface-800/50">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b border-surface-700/50">
+                  <label className="label mb-0 text-surface-200">Contatos</label>
+                  {previewLoading
+                    ? <span className="text-[11px] text-surface-500 italic">Carregando...</span>
+                    : preview != null
+                      ? <span className="text-[11px] font-bold text-primary-400">{preview.total} contatos</span>
+                      : null
+                  }
+                </div>
+                <ContactSourceSelector
+                  value={form.contactSel}
+                  onChange={cs => setForm(f => ({ ...f, contactSel: cs }))}
+                  grupos={grupos}
+                  ddsDisponiveis={ddsDisponiveis}
+                />
+              </div>
+
               {/* Chips */}
               <div>
                 <label className="label flex justify-between items-center mb-3">
@@ -992,7 +1212,7 @@ export default function Campanhas() {
 
               {/* Preview resumo */}
               <div className="bg-surface-950/80 border border-surface-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-inner">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                   <div className="text-center">
                     <div className="text-xl font-black text-primary-400">{validMsgCount}</div>
                     <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Msg{validMsgCount !== 1 ? 's' : ''}</div>
@@ -1001,6 +1221,14 @@ export default function Campanhas() {
                   <div className="text-center">
                     <div className="text-xl font-black text-primary-400">{chipCount}</div>
                     <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Chip{chipCount !== 1 ? 's' : ''}</div>
+                  </div>
+                  <div className="w-[1px] h-8 bg-surface-800" />
+                  <div className="text-center">
+                    {previewLoading
+                      ? <div className="w-5 h-5 border-2 border-primary-500/30 border-t-primary-400 rounded-full animate-spin mx-auto" />
+                      : <div className="text-xl font-black text-primary-400">{preview?.total ?? '—'}</div>
+                    }
+                    <div className="text-[10px] text-surface-500 uppercase font-bold tracking-widest mt-1">Contatos</div>
                   </div>
                   {adv.schedule_enabled && adv.schedule_date && adv.schedule_time && (
                     <>
@@ -1013,7 +1241,9 @@ export default function Campanhas() {
                   )}
                 </div>
                 {chipCount > 0 && validMsgCount > 0
-                  ? <p className="text-[11px] text-surface-400 font-medium leading-relaxed max-w-[220px]">Cada cliente receberá <strong className="text-surface-200">1</strong> mensagem enviada por <strong className="text-surface-200">1</strong> chip aleatório.</p>
+                  ? preview?.total === 0
+                    ? <p className="text-[11px] text-yellow-400/80 font-medium max-w-[220px]">Nenhum contato encontrado para esse filtro. A campanha será salva como rascunho.</p>
+                    : <p className="text-[11px] text-surface-400 font-medium leading-relaxed max-w-[220px]">Cada cliente receberá <strong className="text-surface-200">1</strong> mensagem enviada por <strong className="text-surface-200">1</strong> chip aleatório.</p>
                   : <p className="text-[11px] text-red-400/80 font-medium">Preencha as mensagens e selecione os chips.</p>
                 }
               </div>
@@ -1026,7 +1256,11 @@ export default function Campanhas() {
                   className="btn-primary flex-[2] py-3 text-sm flex items-center justify-center gap-2">
                   {loading
                     ? <><div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> Criando...</>
-                    : adv.schedule_enabled && adv.schedule_date ? 'Agendar Campanha' : 'Salvar e Iniciar Campanha'
+                    : preview?.total === 0
+                      ? 'Salvar como Rascunho'
+                      : adv.schedule_enabled && adv.schedule_date
+                        ? 'Agendar Campanha'
+                        : 'Salvar e Iniciar Campanha'
                   }
                 </button>
               </div>

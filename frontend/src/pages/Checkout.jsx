@@ -49,7 +49,7 @@ function PlanSummary() {
   return (
     <div className="space-y-6">
       {/* Plan card */}
-      <div className="bg-gray-800 border border-purple-600/50 rounded-2xl p-6">
+      <div className="bg-gray-800 border border-cyan-600/50 rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="font-bold text-white text-lg">Plano Pro</h3>
@@ -96,7 +96,7 @@ function PlanSummary() {
           "Em 30 dias usando o WahaSaaS, minha taxa de conversão subiu 340%. O sistema é simples e funciona de verdade."
         </p>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-purple-700 rounded-full flex items-center justify-center text-xs font-bold">MS</div>
+          <div className="w-8 h-8 bg-cyan-700 rounded-full flex items-center justify-center text-xs font-bold">MS</div>
           <div>
             <p className="text-white text-sm font-semibold">Marcos Silva</p>
             <p className="text-gray-500 text-xs">Consultor de marketing digital</p>
@@ -236,7 +236,7 @@ function RegistrationForm() {
             onChange={handleChange}
             placeholder="Seu nome"
             required
-            className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-600"
+            className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-cyan-500 transition-colors placeholder-gray-600"
           />
         </div>
 
@@ -250,7 +250,7 @@ function RegistrationForm() {
             onChange={handleChange}
             placeholder="seu@email.com"
             required
-            className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-600"
+            className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-cyan-500 transition-colors placeholder-gray-600"
           />
         </div>
 
@@ -266,7 +266,7 @@ function RegistrationForm() {
             inputMode="numeric"
             maxLength={14}
             required
-            className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-600"
+            className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-cyan-500 transition-colors placeholder-gray-600"
           />
           <p className="text-gray-600 text-xs mt-1">Usado apenas para identificação única da conta</p>
         </div>
@@ -282,7 +282,7 @@ function RegistrationForm() {
               onChange={handleChange}
               placeholder="Mínimo 8 caracteres"
               required
-              className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 pr-11 text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-600"
+              className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 pr-11 text-sm focus:outline-none focus:border-cyan-500 transition-colors placeholder-gray-600"
             />
             <button
               type="button"
@@ -306,7 +306,7 @@ function RegistrationForm() {
               onChange={handleChange}
               placeholder="Repita a senha"
               required
-              className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 pr-11 text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-600"
+              className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-3 pr-11 text-sm focus:outline-none focus:border-cyan-500 transition-colors placeholder-gray-600"
             />
             <button
               type="button"
@@ -323,7 +323,7 @@ function RegistrationForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl text-base transition-all mt-2"
+          className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl text-base transition-all mt-2"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
@@ -337,9 +337,9 @@ function RegistrationForm() {
 
         <p className="text-xs text-gray-500 text-center leading-relaxed">
           Ao continuar, você concorda com nossos{' '}
-          <a href="#" className="text-purple-400 hover:underline">Termos de uso</a>{' '}
+          <a href="#" className="text-cyan-400 hover:underline">Termos de uso</a>{' '}
           e{' '}
-          <a href="#" className="text-purple-400 hover:underline">Política de privacidade</a>.
+          <a href="#" className="text-cyan-400 hover:underline">Política de privacidade</a>.
         </p>
       </form>
 
@@ -348,7 +348,7 @@ function RegistrationForm() {
           Já tem uma conta?{' '}
           <button
             onClick={() => navigate('/login')}
-            className="text-purple-400 hover:text-purple-300 font-medium"
+            className="text-cyan-400 hover:text-cyan-300 font-medium"
           >
             Fazer login
           </button>
@@ -371,7 +371,7 @@ export default function Checkout() {
       <nav className="border-b border-gray-800 bg-gray-900">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <button onClick={() => navigate('/')} className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-gradient-to-br from-purple-600 to-violet-500 rounded flex items-center justify-center text-xs font-bold">W</div>
+            <div className="w-7 h-7 bg-gradient-to-br from-cyan-600 to-cyan-500 rounded flex items-center justify-center text-xs font-bold">W</div>
             <span className="font-bold text-base">WahaSaaS</span>
           </button>
           <div className="flex items-center gap-4 text-sm text-gray-500">

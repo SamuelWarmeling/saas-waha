@@ -57,8 +57,8 @@ const ETAPAS_PADRAO = [
 
 function FunnelChart({ total, ativos, responderam, convertidos }) {
   const niveis = [
-    { label: 'Total', count: total, pct: 100, color: '#9D4EDD' },
-    { label: 'Ativos', count: ativos, pct: total > 0 ? Math.round(ativos / total * 100) : 0, color: '#7c3aed' },
+    { label: 'Total', count: total, pct: 100, color: '#22D3EE' },
+    { label: 'Ativos', count: ativos, pct: total > 0 ? Math.round(ativos / total * 100) : 0, color: '#06B6D4' },
     { label: 'Responderam', count: responderam, pct: total > 0 ? Math.round(responderam / total * 100) : 0, color: '#10b981' },
     { label: 'Convertidos', count: convertidos, pct: total > 0 ? Math.round(convertidos / total * 100) : 0, color: '#eab308' },
   ]
@@ -431,7 +431,7 @@ function ModalDetalhes({ seq, sessoes, onClose, onUpdate }) {
           {/* Stats cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 pt-5">
             {[
-              { label: 'Total', value: total, color: '#9D4EDD', emoji: '👥' },
+              { label: 'Total', value: total, color: '#22D3EE', emoji: '👥' },
               { label: 'Ativos', value: ativos, color: '#3b82f6', emoji: '🔵' },
               { label: 'Responderam', value: responderam, color: '#10b981', emoji: '💬' },
               { label: 'Convertidos', value: convertidos, color: '#eab308', emoji: '⭐' },
@@ -590,7 +590,7 @@ function CardSequencia({ seq, onDetalhes, onEditar, onPausarRetomar, onDeletar }
             className="h-full rounded-full transition-all duration-700"
             style={{
               width: `${taxa}%`,
-              background: 'linear-gradient(90deg, #9D4EDD, #eab308)',
+              background: 'linear-gradient(90deg, #22D3EE, #eab308)',
             }}
           />
         </div>
@@ -706,7 +706,7 @@ export default function Funil() {
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Sequências', value: stats.total_sequencias, color: '#9D4EDD', emoji: '🎯' },
+            { label: 'Sequências', value: stats.total_sequencias, color: '#22D3EE', emoji: '🎯' },
             { label: 'Em andamento', value: stats.total_ativos, color: '#3b82f6', emoji: '🔵' },
             { label: 'Responderam', value: stats.total_responderam, color: '#10b981', emoji: '💬' },
             { label: 'Convertidos', value: stats.total_convertidos, color: '#eab308', emoji: '⭐' },

@@ -23,7 +23,7 @@ const DDD_STATE = {
   '91':'PA','92':'AM','93':'PA','94':'PA','95':'RR','96':'AP','97':'AM','98':'MA','99':'MA',
 }
 
-const LISTA_CORES = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#db2777','#0891b2','#65a30d']
+const LISTA_CORES = ['#06B6D4','#2563eb','#059669','#d97706','#dc2626','#db2777','#0891b2','#65a30d']
 
 function formatPhone(phone) {
   if (!phone) return ''
@@ -143,7 +143,7 @@ function AddContactModal({ onClose, onSave }) {
 
 function CreateListaModal({ onClose, onSave }) {
   const [nome, setNome] = useState('')
-  const [cor, setCor] = useState('#7c3aed')
+  const [cor, setCor] = useState('#06B6D4')
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {

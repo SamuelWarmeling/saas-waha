@@ -416,7 +416,7 @@ export default function Sessoes() {
                       {/* Em adaptação badge */}
                       {sess.em_adaptacao && (
                         <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
-                          style={{ background: 'rgba(157,78,221,0.12)', color: '#c4b5fd', border: '1px solid rgba(157,78,221,0.3)' }}>
+                          style={{ background: 'rgba(34,211,238,0.12)', color: '#67e8f9', border: '1px solid rgba(34,211,238,0.3)' }}>
                           ⏳ Em adaptação
                         </span>
                       )}
@@ -454,9 +454,9 @@ export default function Sessoes() {
                   {/* Recomendação de limite */}
                   {sess.em_adaptacao ? (
                     <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
-                      style={{ background: 'rgba(157,78,221,0.08)', border: '1px solid rgba(157,78,221,0.2)' }}>
+                      style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)' }}>
                       <span>⏳</span>
-                      <span className="text-purple-300 font-medium">Em adaptação — disparos em massa bloqueados</span>
+                      <span className="text-cyan-300 font-medium">Em adaptação — disparos em massa bloqueados</span>
                     </div>
                   ) : sess.is_veterano ? (
                     <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"

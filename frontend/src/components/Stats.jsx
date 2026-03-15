@@ -1,10 +1,10 @@
 export default function Stats({ title, value, sub, icon: Icon, color = 'green' }) {
   const iconColors = {
-    primary: { bg: 'rgba(139,92,246,0.12)', color: '#8B5CF6' },
-    green:   { bg: 'rgba(139,92,246,0.12)', color: '#8B5CF6' },
+    primary: { bg: 'rgba(34,211,238,0.12)', color: '#22D3EE' },
+    green:   { bg: 'rgba(34,211,238,0.12)', color: '#22D3EE' },
     blue:    { bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa' },
     yellow:  { bg: 'rgba(245,158,11,0.12)',  color: '#fbbf24' },
-    purple:  { bg: 'rgba(139,92,246,0.12)', color: '#8B5CF6' },
+    purple:  { bg: 'rgba(34,211,238,0.12)', color: '#22D3EE' },
     red:     { bg: 'rgba(239,68,68,0.12)',   color: '#f87171' },
   }
 

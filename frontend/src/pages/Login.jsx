@@ -72,12 +72,12 @@ export default function Login() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden font-sans"
-      style={{ background: '#0B0914', selection: 'rgba(157,78,221,0.3)' }}
+      style={{ background: '#0B0914', selection: 'rgba(34,211,238,0.3)' }}
     >
       {/* Animated background blobs */}
       <div
         className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] rounded-full pointer-events-none animate-[pulse_8s_ease-in-out_infinite]"
-        style={{ background: 'rgba(157,78,221,0.08)', filter: 'blur(120px)' }}
+        style={{ background: 'rgba(34,211,238,0.08)', filter: 'blur(120px)' }}
       />
       <div
         className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] rounded-full pointer-events-none animate-[pulse_10s_ease-in-out_infinite_reverse]"
@@ -85,7 +85,7 @@ export default function Login() {
       />
       <div
         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40vw] h-[40vw] rounded-full pointer-events-none"
-        style={{ background: 'rgba(157,78,221,0.04)', filter: 'blur(80px)' }}
+        style={{ background: 'rgba(34,211,238,0.04)', filter: 'blur(80px)' }}
       />
 
       <div className="w-full max-w-sm relative z-10">
@@ -94,8 +94,8 @@ export default function Login() {
           <div
             className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-5 shadow-2xl border border-primary-400/20"
             style={{
-              background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)',
-              boxShadow: '0 0 40px rgba(157,78,221,0.35)',
+              background: 'linear-gradient(135deg, #22D3EE, #6A0DAD)',
+              boxShadow: '0 0 40px rgba(34,211,238,0.35)',
             }}
           >
             <MdWhatsapp className="text-5xl text-white" />
@@ -122,8 +122,8 @@ export default function Login() {
             background: 'rgba(255,255,255,0.05)',
             backdropFilter: 'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',
-            border: '1px solid rgba(157,78,221,0.2)',
-            boxShadow: '0 25px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(157,78,221,0.05)',
+            border: '1px solid rgba(34,211,238,0.2)',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(34,211,238,0.05)',
           }}
         >
           {/* Forgot password screens */}
@@ -131,7 +131,7 @@ export default function Login() {
             <>
               <button
                 onClick={() => setMode('login')}
-                className="text-sm text-purple-400 hover:text-purple-300 mb-6 flex items-center gap-1"
+                className="text-sm text-cyan-400 hover:text-cyan-300 mb-6 flex items-center gap-1"
               >
                 ← Voltar ao login
               </button>
@@ -190,9 +190,9 @@ export default function Login() {
                   disabled={loading}
                   className="w-full mt-2 text-white font-semibold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{
-                    background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)',
-                    border: '1px solid rgba(157,78,221,0.4)',
-                    boxShadow: '0 0 20px rgba(157,78,221,0.3)',
+                    background: 'linear-gradient(135deg, #22D3EE, #6A0DAD)',
+                    border: '1px solid rgba(34,211,238,0.4)',
+                    boxShadow: '0 0 20px rgba(34,211,238,0.3)',
                   }}
                 >
                   {loading ? 'Processando...' : mode === 'forgot' ? 'Enviar código' : 'Redefinir senha'}
@@ -204,7 +204,7 @@ export default function Login() {
               {/* Tabs */}
               <div
                 className="flex rounded-xl p-1 mb-8"
-                style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(157,78,221,0.15)' }}
+                style={{ background: 'rgba(11,9,20,0.6)', border: '1px solid rgba(34,211,238,0.15)' }}
               >
                 {['login', 'register'].map((m) => (
                   <button
@@ -214,10 +214,10 @@ export default function Login() {
                     style={
                       mode === m
                         ? {
-                            background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)',
+                            background: 'linear-gradient(135deg, #22D3EE, #6A0DAD)',
                             color: 'white',
-                            boxShadow: '0 0 20px rgba(157,78,221,0.3)',
-                            border: '1px solid rgba(157,78,221,0.4)',
+                            boxShadow: '0 0 20px rgba(34,211,238,0.3)',
+                            border: '1px solid rgba(34,211,238,0.4)',
                           }
                         : { color: '#64748b', background: 'transparent' }
                     }
@@ -271,15 +271,15 @@ export default function Login() {
                   disabled={loading}
                   className="w-full mt-6 text-white font-semibold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{
-                    background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)',
-                    border: '1px solid rgba(157,78,221,0.4)',
-                    boxShadow: '0 0 20px rgba(157,78,221,0.3)',
+                    background: 'linear-gradient(135deg, #22D3EE, #6A0DAD)',
+                    border: '1px solid rgba(34,211,238,0.4)',
+                    boxShadow: '0 0 20px rgba(34,211,238,0.3)',
                   }}
                   onMouseEnter={e => {
-                    if (!loading) e.currentTarget.style.boxShadow = '0 0 30px rgba(157,78,221,0.5)'
+                    if (!loading) e.currentTarget.style.boxShadow = '0 0 30px rgba(34,211,238,0.5)'
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.boxShadow = '0 0 20px rgba(157,78,221,0.3)'
+                    e.currentTarget.style.boxShadow = '0 0 20px rgba(34,211,238,0.3)'
                   }}
                 >
                   {loading ? (
@@ -298,7 +298,7 @@ export default function Login() {
                 <div className="mt-4 text-center">
                   <button
                     onClick={() => setMode('forgot')}
-                    className="text-sm text-purple-400 hover:text-purple-300"
+                    className="text-sm text-cyan-400 hover:text-cyan-300"
                   >
                     Esqueci minha senha
                   </button>
@@ -308,12 +308,12 @@ export default function Login() {
               {mode === 'register' && (
                 <div
                   className="mt-6 pt-5 text-center"
-                  style={{ borderTop: '1px solid rgba(157,78,221,0.15)' }}
+                  style={{ borderTop: '1px solid rgba(34,211,238,0.15)' }}
                 >
                   <p className="text-sm font-medium text-surface-400 flex items-center justify-center gap-2">
                     <span
                       className="w-2 h-2 rounded-full"
-                      style={{ background: '#9D4EDD', boxShadow: '0 0 8px #9D4EDD' }}
+                      style={{ background: '#22D3EE', boxShadow: '0 0 8px #22D3EE' }}
                     />
                     7 dias de trial grátis liberados.
                   </p>

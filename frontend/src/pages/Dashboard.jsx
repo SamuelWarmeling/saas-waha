@@ -16,11 +16,11 @@ import api from '../api'
 const tipoConfig = {
   contato_extraido:  { emoji: '📱', bg: 'bg-blue-500/15',    ring: 'ring-blue-500/30' },
   grupos_extraidos:  { emoji: '✅', bg: 'bg-primary-500/15', ring: 'ring-primary-500/30' },
-  campanha_enviada:  { emoji: '📤', bg: 'bg-purple-500/15',  ring: 'ring-purple-500/30' },
+  campanha_enviada:  { emoji: '📤', bg: 'bg-cyan-500/15',  ring: 'ring-cyan-500/30' },
   sessao_conectada:  { emoji: '🟢', bg: 'bg-primary-500/15', ring: 'ring-primary-500/30' },
   grupo_auto_atualizado:    { emoji: '🔄', bg: 'bg-indigo-500/15',  ring: 'ring-indigo-500/30' },
   funnel_respondeu:         { emoji: '💬', bg: 'bg-emerald-500/15', ring: 'ring-emerald-500/30' },
-  funnel_mensagem_enviada:  { emoji: '🎯', bg: 'bg-purple-500/15',  ring: 'ring-purple-500/30' },
+  funnel_mensagem_enviada:  { emoji: '🎯', bg: 'bg-cyan-500/15',  ring: 'ring-cyan-500/30' },
   chip_risco:               { emoji: '⚠️', bg: 'bg-red-500/15',    ring: 'ring-red-500/30' },
   chip_banido:              { emoji: '🚨', bg: 'bg-red-800/20',    ring: 'ring-red-600/30' },
 }
@@ -327,8 +327,8 @@ export default function Dashboard() {
               <AreaChart data={chartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradEnv" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#8B5CF6" stopOpacity={0.40} />
-                    <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                    <stop offset="5%"  stopColor="#22D3EE" stopOpacity={0.40} />
+                    <stop offset="95%" stopColor="#22D3EE" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="gradExt" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%"  stopColor="#10b981" stopOpacity={0.35} />
@@ -340,9 +340,9 @@ export default function Dashboard() {
                 <YAxis tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#3d3058', strokeWidth: 1, strokeDasharray: '4 4' }} />
                 <Area
-                  type="monotone" dataKey="enviados" stroke="#8B5CF6" fill="url(#gradEnv)"
+                  type="monotone" dataKey="enviados" stroke="#22D3EE" fill="url(#gradEnv)"
                   strokeWidth={2.5}
-                  activeDot={{ r: 5, fill: '#8B5CF6', stroke: '#0F172A', strokeWidth: 2 }}
+                  activeDot={{ r: 5, fill: '#22D3EE', stroke: '#0F172A', strokeWidth: 2 }}
                 />
                 <Area
                   type="monotone" dataKey="extraidos" stroke="#10b981" fill="url(#gradExt)"
@@ -381,7 +381,7 @@ export default function Dashboard() {
                         className="h-full rounded-full transition-all duration-700"
                         style={{
                           width: `${row.pct}%`,
-                          background: `linear-gradient(90deg, #8b5cf6 ${100 - row.pct}%, #7c3aed)`,
+                          background: `linear-gradient(90deg, #8b5cf6 ${100 - row.pct}%, #06B6D4)`,
                           opacity: 0.7 + (row.pct / 300),
                         }}
                       />
@@ -577,7 +577,7 @@ export default function Dashboard() {
           {/* Card Funil de Leads */}
           <div className="glass-card">
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-surface-700/50">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(139,92,246,0.12)', color: '#8B5CF6' }}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(34,211,238,0.12)', color: '#22D3EE' }}>
                 <MdFilterAlt size={18} />
               </div>
               <div>
@@ -612,7 +612,7 @@ export default function Dashboard() {
                   <div className="h-1.5 rounded-full bg-surface-800/60 overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${funnelStats.taxa_conversao}%`, background: 'linear-gradient(90deg, #8B5CF6, #eab308)' }}
+                      style={{ width: `${funnelStats.taxa_conversao}%`, background: 'linear-gradient(90deg, #22D3EE, #eab308)' }}
                     />
                   </div>
                   <p className="text-[10px] text-surface-500 mt-1.5">{funnelStats.total_sequencias} sequência(s) · {funnelStats.total_contatos} leads</p>

@@ -453,7 +453,7 @@ export default function Grupos() {
                     <tr key={grupo.id} onClick={() => toggleGroup(grupo.id)} className={`cursor-pointer transition-all ${selectedIds.has(grupo.id) ? 'bg-primary-900/10 hover:bg-primary-900/20' : 'hover:bg-surface-800/40'}`}>
                       <td className="px-5 py-4" onClick={e => e.stopPropagation()}>
                         <button onClick={() => toggleGroup(grupo.id)}>
-                          {selectedIds.has(grupo.id) ? <MdCheckBox size={20} className="text-primary-500 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]" /> : <MdCheckBoxOutlineBlank size={20} className="text-surface-500" />}
+                          {selectedIds.has(grupo.id) ? <MdCheckBox size={20} className="text-primary-500 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" /> : <MdCheckBoxOutlineBlank size={20} className="text-surface-500" />}
                         </button>
                       </td>
                       <td className="px-5 py-4 font-medium text-surface-100 flex items-center gap-3">
@@ -631,14 +631,14 @@ export default function Grupos() {
               maxWidth: 900,
               maxHeight: '92vh',
               background: 'linear-gradient(160deg,#1a1228 0%,#120d1e 100%)',
-              border: '1px solid rgba(157,78,221,0.25)',
+              border: '1px solid rgba(34,211,238,0.25)',
               boxShadow: '0 0 80px rgba(0,0,0,0.7)',
             }}
           >
             {/* ── Header ─────────────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0" style={{ background: 'rgba(157,78,221,0.07)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0" style={{ background: 'rgba(34,211,238,0.07)' }}>
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg,rgba(157,78,221,0.3),rgba(106,13,173,0.2))', border: '1px solid rgba(157,78,221,0.3)' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg,rgba(34,211,238,0.3),rgba(106,13,173,0.2))', border: '1px solid rgba(34,211,238,0.3)' }}>
                   <MdPeople size={22} className="text-primary-400" />
                 </div>
                 <div className="min-w-0">
@@ -681,7 +681,7 @@ export default function Grupos() {
                       onClick={() => handleFilter(tab.key)}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
                       style={modalFilter === tab.key
-                        ? { background: 'linear-gradient(135deg,rgba(157,78,221,0.3),rgba(106,13,173,0.2))', color: '#c084fc', border: '1px solid rgba(157,78,221,0.4)' }
+                        ? { background: 'linear-gradient(135deg,rgba(34,211,238,0.3),rgba(106,13,173,0.2))', color: '#c084fc', border: '1px solid rgba(34,211,238,0.4)' }
                         : { color: '#64748b', background: 'transparent', border: '1px solid transparent' }
                       }
                     >
@@ -694,7 +694,7 @@ export default function Grupos() {
                   <button
                     onClick={() => openCampaignPicker(selectedWithContact.map(m => m.contact_id))}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                    style={{ background: 'linear-gradient(135deg,rgba(157,78,221,0.25),rgba(106,13,173,0.2))', color: '#c084fc', border: '1px solid rgba(157,78,221,0.4)' }}
+                    style={{ background: 'linear-gradient(135deg,rgba(34,211,238,0.25),rgba(106,13,173,0.2))', color: '#c084fc', border: '1px solid rgba(34,211,238,0.4)' }}
                   >
                     <MdCampaign size={15} />
                     Adicionar {selectedMemberIds.size} à campanha
@@ -760,7 +760,7 @@ export default function Grupos() {
                             <div className="flex items-center gap-3">
                               <div
                                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                                style={{ background: selected ? 'rgba(157,78,221,0.25)' : 'rgba(157,78,221,0.1)', color: '#c084fc', border: `1px solid ${selected ? 'rgba(157,78,221,0.4)' : 'rgba(157,78,221,0.2)'}` }}
+                                style={{ background: selected ? 'rgba(34,211,238,0.25)' : 'rgba(34,211,238,0.1)', color: '#c084fc', border: `1px solid ${selected ? 'rgba(34,211,238,0.4)' : 'rgba(34,211,238,0.2)'}` }}
                               >
                                 {initials}
                               </div>
@@ -847,7 +847,7 @@ export default function Grupos() {
                         onClick={() => handlePage(p)}
                         className="w-8 h-8 rounded-lg text-xs font-semibold transition-all"
                         style={p === modalPage
-                          ? { background: 'rgba(157,78,221,0.3)', color: '#c084fc', border: '1px solid rgba(157,78,221,0.4)' }
+                          ? { background: 'rgba(34,211,238,0.3)', color: '#c084fc', border: '1px solid rgba(34,211,238,0.4)' }
                           : { color: '#64748b' }
                         }
                       >
@@ -875,11 +875,11 @@ export default function Grupos() {
                 style={{
                   width: 420,
                   background: 'linear-gradient(160deg,#1e1630 0%,#150f25 100%)',
-                  border: '1px solid rgba(157,78,221,0.35)',
-                  boxShadow: '0 0 60px rgba(157,78,221,0.15)',
+                  border: '1px solid rgba(34,211,238,0.35)',
+                  boxShadow: '0 0 60px rgba(34,211,238,0.15)',
                 }}
               >
-                <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between" style={{ background: 'rgba(157,78,221,0.08)' }}>
+                <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between" style={{ background: 'rgba(34,211,238,0.08)' }}>
                   <div className="flex items-center gap-2">
                     <MdCampaign size={20} className="text-primary-400" />
                     <h3 className="text-sm font-bold text-white">Adicionar à campanha</h3>

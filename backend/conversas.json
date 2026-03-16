@@ -1,0 +1,60 @@
+[
+  {
+    "inicio": "Oi tudo bem?",
+    "respostas": [
+      "Tudo sim e você?",
+      "Tô bem! E aí?",
+      "Boa! Tudo certo por aí?"
+    ],
+    "continuacao": [
+      "Também! Que bom",
+      "Que ótimo!",
+      "Boa notícia!"
+    ]
+  },
+  {
+    "inicio": "Olá! Como vai?",
+    "respostas": ["Bem e você?", "Tudo ótimo!", "Indo bem!"],
+    "continuacao": ["Que bom!", "Fico feliz!", "Ótimo!"]
+  },
+  {
+    "inicio": "Ei, sumido!",
+    "respostas": ["Kkk correria do dia a dia", "É vida né", "Trabalho demais"],
+    "continuacao": ["Entendo demais", "Kkk eu também", "A vida é essa"]
+  },
+  {
+    "inicio": "Bom dia!",
+    "respostas": ["Bom dia!", "Bom dia! Tudo bem?", "Oi bom dia!"],
+    "continuacao": ["Bom dia pra você também!", "Tenha um ótimo dia!", "Igualmente!"]
+  },
+  {
+    "inicio": "Boa tarde!",
+    "respostas": ["Boa tarde!", "Oi boa tarde!", "Boa tarde tudo bem?"],
+    "continuacao": ["Boa tarde!", "Igualmente!", "Tudo ótimo!"]
+  },
+  {
+    "inicio": "Boa noite!",
+    "respostas": ["Boa noite!", "Oi boa noite!", "Boa noite tudo bem?"],
+    "continuacao": ["Boa noite!", "Igualmente!", "Descanse bem!"]
+  },
+  {
+    "inicio": "Você viu o jogo ontem?",
+    "respostas": ["Vi sim! Que jogo!", "Não vi, como foi?", "Vi demais kkk"],
+    "continuacao": ["Foi incrível!", "Perdeu muito!", "Kkk foi tenso"]
+  },
+  {
+    "inicio": "Tá chovendo aí?",
+    "respostas": ["Tá sim, muito!", "Não, tá sol aqui", "Tá nublado"],
+    "continuacao": ["Aqui também!", "Que sorte!", "Vai chover mais tarde"]
+  },
+  {
+    "inicio": "Você trabalha com o quê?",
+    "respostas": ["Trabalho na área de vendas", "Sou autônomo", "Trabalho com marketing"],
+    "continuacao": ["Legal!", "Que interessante!", "Bacana!"]
+  },
+  {
+    "inicio": "Feliz ano novo!",
+    "respostas": ["Feliz ano novo!", "Igualmente!", "Feliz ano novo pra você também!"],
+    "continuacao": ["Que venha cheio de bênçãos!", "Saúde e paz!", "Muito sucesso!"]
+  }
+]

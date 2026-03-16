@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+import os
 import random
 from datetime import datetime, timezone, timedelta, date
 from typing import List, Optional
@@ -15,6 +17,17 @@ from config import settings
 from database import get_db, SessionLocal
 
 logger = logging.getLogger(__name__)
+
+# ── Carregar conversas pré-gravadas ───────────────────────────────────────────
+
+_CONVERSAS_PATH = os.path.join(os.path.dirname(__file__), "..", "conversas.json")
+CONVERSAS: List[dict] = []
+try:
+    with open(_CONVERSAS_PATH, "r", encoding="utf-8") as _f:
+        CONVERSAS = json.load(_f)
+    logger.info(f"[AQUECIMENTO] {len(CONVERSAS)} conversas pré-gravadas carregadas")
+except Exception as _e:
+    logger.warning(f"[AQUECIMENTO] Não foi possível carregar conversas.json: {_e}")
 
 router = APIRouter(prefix="/api/aquecimento", tags=["Aquecimento"])
 
@@ -100,6 +113,19 @@ MENSAGENS_AQUECIMENTO: List[str] = [
     "Algum plano legal pros próximos dias? 😄",
 ]
 
+TEXTOS_STATUS: List[str] = [
+    "Bom dia! ☀️",
+    "Que semana produtiva! 💪",
+    "Gratidão pela vida! 🙏",
+    "Foco e determinação! 🎯",
+    "Família é tudo! ❤️",
+    "Trabalhando duro hoje! 💼",
+    "Deus é fiel! 🙌",
+    "Boa tarde a todos! 🌤️",
+    "Fim de semana chegando! 🎉",
+    "Café e trabalho! ☕",
+]
+
 
 def get_meta_dia(dia: int) -> int:
     """Retorna a meta de mensagens para o dia do aquecimento."""
@@ -182,6 +208,37 @@ def get_destinos_virtuais(db: Session, session_id: int) -> List[str]:
     return numeros
 
 
+def get_destinos_virtuais_com_sessao(db: Session, session_id: int) -> List[dict]:
+    """Retorna chips virtuais com phone + waha_session_id para conversas completas."""
+    active_sq = _active_session_ids_sq(db)
+
+    sessoes = (
+        db.query(models.WhatsAppSession)
+        .filter(
+            models.WhatsAppSession.id.in_(active_sq),
+            models.WhatsAppSession.status == models.SessionStatus.connected,
+            models.WhatsAppSession.id != session_id,
+            models.WhatsAppSession.phone_number.isnot(None),
+            models.WhatsAppSession.tipo_chip == "virtual",
+        )
+        .all()
+    )
+    result = [
+        {"phone": s.phone_number, "waha_id": s.session_id}
+        for s in sessoes if s.phone_number
+    ]
+    logger.info(f"🔥 Pool com sessão: {len(result)} virtuais disponíveis")
+
+    # Fallback: apenas phone, sem waha_id (não suporta conversa completa)
+    if not result and settings.AQUECIMENTO_NUMBERS:
+        nums = [n.strip() for n in settings.AQUECIMENTO_NUMBERS.split(",") if n.strip()]
+        result = [{"phone": n, "waha_id": None} for n in nums]
+        if result:
+            logger.info(f"🔥 Pool fallback: {len(result)} números de AQUECIMENTO_NUMBERS")
+
+    return result
+
+
 def count_fisicos_disponiveis(db: Session, session_id: int) -> int:
     """Virtual → conta chips FÍSICOS com aquecimento ativo disponíveis para enviar."""
     active_sq = _active_session_ids_sq(db)
@@ -240,6 +297,29 @@ async def enviar_msg_aquecimento(session_waha_id: str, phone: str, mensagem: str
         return r.status_code in (200, 201)
     except Exception as e:
         logger.error(f"[AQUECIMENTO] Erro WAHA: {e}")
+        return False
+
+
+async def enviar_status_waha(session_waha_id: str, texto: str) -> bool:
+    """Posta um status de texto (story) via WAHA no chatId status@broadcast."""
+    headers = {}
+    if settings.WAHA_API_KEY:
+        headers["X-Api-Key"] = settings.WAHA_API_KEY
+    payload = {
+        "chatId": "status@broadcast",
+        "text": texto,
+        "session": session_waha_id,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                f"{settings.WAHA_API_URL}/api/sendText",
+                json=payload,
+                headers=headers,
+            )
+        return r.status_code in (200, 201)
+    except Exception as e:
+        logger.error(f"[STATUS] Erro WAHA ao postar status em {session_waha_id}: {e}")
         return False
 
 
@@ -328,6 +408,8 @@ def _aq_out(aq: models.AquecimentoConfig, db: Session = None):
         "criado_em": aq.criado_em.isoformat() if aq.criado_em else None,
         "ultimo_envio": aq.ultimo_envio.isoformat() if aq.ultimo_envio else None,
         "proximo_envio": aq.proximo_envio.isoformat() if aq.proximo_envio else None,
+        "ultimo_status_texto": getattr(aq, "ultimo_status_texto", None),
+        "ultimo_status_em": aq.ultimo_status_em.isoformat() if getattr(aq, "ultimo_status_em", None) else None,
     }
 
 
@@ -835,9 +917,9 @@ async def processar_aquecimento():
                 # CHIP FÍSICO — inicia conversa com virtuais
                 # ════════════════════════════════════════════════════════
 
-                # ── Busca destinos (chips virtuais) ───────────────────────────
-                destinos = get_destinos_virtuais(db, aq.session_id)
-                if not destinos:
+                # ── Busca destinos com sessão (chips virtuais) ────────────────
+                destinos_info = get_destinos_virtuais_com_sessao(db, aq.session_id)
+                if not destinos_info:
                     logger.warning(f"[AQUECIMENTO] #{aq.id} físico — sem chips virtuais no pool")
                     db.add(models.AquecimentoLog(
                         aquecimento_id=aq.id,
@@ -849,53 +931,82 @@ async def processar_aquecimento():
                     db.commit()
                     continue
 
-                # ── Seleciona mensagem (IA ou pool fixo) ─────────────────────
-                usar_ia = getattr(aq, "usar_ia", True)
-                historico_recente = (
-                    db.query(models.AquecimentoLog.mensagem)
-                    .filter(models.AquecimentoLog.aquecimento_id == aq.id)
-                    .order_by(models.AquecimentoLog.criado_em.desc())
-                    .limit(10)
-                    .all()
-                )
-                historico_msgs = [r[0] for r in historico_recente]
+                destino_info = random.choice(destinos_info)
+                destino_phone = destino_info["phone"]
+                destino_waha_id = destino_info["waha_id"]
 
-                user = aq.user
-                user_key = getattr(user, "gemini_api_key", None) if user else None
-                gemini_habilitado = getattr(user, "gemini_habilitado", True) if user else True
+                # ── Conversa pré-gravada (quando temos sessão virtual real) ───
+                if CONVERSAS and destino_waha_id:
+                    conversa = random.choice(CONVERSAS)
+                    inicio = conversa["inicio"]
+                    resposta = random.choice(conversa["respostas"])
+                    continuacao = random.choice(conversa["continuacao"])
 
-                import ia_service
-                mensagem, gerada_por_ia = await ia_service.gerar_mensagem_aquecimento(
-                    historico=historico_msgs,
-                    user_key=user_key,
-                    gemini_habilitado=usar_ia and gemini_habilitado,
-                )
+                    logger.info(
+                        f"💬 Conversa: [{inicio}] → [{resposta}] → [{continuacao}] | "
+                        f"{session.session_id} ↔ {destino_phone}"
+                    )
 
-                if not gerada_por_ia:
-                    idx = random.randint(0, len(MENSAGENS_AQUECIMENTO) - 1)
-                    if aq.ultima_msg_idx is not None and idx == aq.ultima_msg_idx:
-                        idx = (idx + 1) % len(MENSAGENS_AQUECIMENTO)
-                    mensagem = MENSAGENS_AQUECIMENTO[idx]
-                    aq.ultima_msg_idx = idx
+                    # Passo 1: físico envia inicio ao virtual
+                    ok1 = await enviar_msg_aquecimento(session.session_id, destino_phone, inicio)
+                    if ok1:
+                        await asyncio.sleep(random.randint(3, 8))
+                        # Passo 2: virtual responde ao físico
+                        ok2 = await enviar_msg_aquecimento(destino_waha_id, session.phone_number, resposta)
+                        if ok2:
+                            await asyncio.sleep(random.randint(3, 8))
+                            # Passo 3: físico finaliza com continuacao
+                            await enviar_msg_aquecimento(session.session_id, destino_phone, continuacao)
 
-                destino = random.choice(destinos)
+                    mensagem = f"💬 {inicio} → {resposta} → {continuacao}"
+                    ok = ok1
+                    log_status = "enviado" if ok else "erro"
 
-                # ── Envia ─────────────────────────────────────────────────────
-                logger.info(
-                    f"🔥 Tentando enviar para chip virtual {destino} "
-                    f"via chip físico {session.phone_number} ({session.session_id})"
-                )
-                ok = await enviar_msg_aquecimento(session.session_id, destino, mensagem)
+                else:
+                    # ── Fallback: mensagem única (IA ou pool fixo) ────────────
+                    usar_ia = getattr(aq, "usar_ia", True)
+                    historico_recente = (
+                        db.query(models.AquecimentoLog.mensagem)
+                        .filter(models.AquecimentoLog.aquecimento_id == aq.id)
+                        .order_by(models.AquecimentoLog.criado_em.desc())
+                        .limit(10)
+                        .all()
+                    )
+                    historico_msgs = [r[0] for r in historico_recente]
+
+                    user = aq.user
+                    user_key = getattr(user, "gemini_api_key", None) if user else None
+                    gemini_habilitado = getattr(user, "gemini_habilitado", True) if user else True
+
+                    import ia_service
+                    mensagem, gerada_por_ia = await ia_service.gerar_mensagem_aquecimento(
+                        historico=historico_msgs,
+                        user_key=user_key,
+                        gemini_habilitado=usar_ia and gemini_habilitado,
+                    )
+
+                    if not gerada_por_ia:
+                        idx = random.randint(0, len(MENSAGENS_AQUECIMENTO) - 1)
+                        if aq.ultima_msg_idx is not None and idx == aq.ultima_msg_idx:
+                            idx = (idx + 1) % len(MENSAGENS_AQUECIMENTO)
+                        mensagem = MENSAGENS_AQUECIMENTO[idx]
+                        aq.ultima_msg_idx = idx
+
+                    logger.info(
+                        f"🔥 Tentando enviar para chip virtual {destino_phone} "
+                        f"via chip físico {session.phone_number} ({session.session_id})"
+                    )
+                    ok = await enviar_msg_aquecimento(session.session_id, destino_phone, mensagem)
+                    log_status = ("enviado_ia" if gerada_por_ia else "enviado") if ok else "erro"
 
                 if ok:
-                    logger.info(f"🔥 Enviado! {session.session_id} → {destino}")
+                    logger.info(f"🔥 Enviado! {session.session_id} → {destino_phone}")
                 else:
-                    logger.warning(f"🔥 Falhou: envio de {session.session_id} → {destino}")
+                    logger.warning(f"🔥 Falhou: envio de {session.session_id} → {destino_phone}")
 
-                log_status = ("enviado_ia" if gerada_por_ia else "enviado") if ok else "erro"
                 db.add(models.AquecimentoLog(
                     aquecimento_id=aq.id,
-                    telefone_destino=destino,
+                    telefone_destino=destino_phone,
                     mensagem=mensagem,
                     status=log_status,
                 ))
@@ -949,3 +1060,82 @@ async def aquecimento_worker_task():
         except Exception as e:
             logger.error(f"🔥 Aquecimento worker erro inesperado: {e}")
             await asyncio.sleep(60)  # espera 1min antes de tentar novamente após erro
+
+
+# ── Status diário (WhatsApp Stories) ─────────────────────────────────────────
+
+async def postar_status_diario():
+    """Posta status de texto no WhatsApp (status@broadcast) para chips em aquecimento/manutenção."""
+    db: Session = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        now_br = now.astimezone(BRAZIL_TZ)
+        hora_br = now_br.hour
+
+        # Só posta entre 08:00 e 20:00 horário de Brasília
+        if hora_br < 8 or hora_br >= 20:
+            return
+
+        ativos = (
+            db.query(models.AquecimentoConfig)
+            .filter(models.AquecimentoConfig.status.in_([
+                models.AquecimentoStatus.ativo,
+                models.AquecimentoStatus.manutencao,
+            ]))
+            .all()
+        )
+
+        hoje_br = now_br.date()
+
+        for aq in ativos:
+            try:
+                # Verificar se já postou hoje
+                ultimo_em = getattr(aq, "ultimo_status_em", None)
+                if ultimo_em:
+                    if ultimo_em.tzinfo is None:
+                        ultimo_em = ultimo_em.replace(tzinfo=timezone.utc)
+                    if ultimo_em.astimezone(BRAZIL_TZ).date() >= hoje_br:
+                        continue
+
+                session = aq.session
+                if not session or session.status != models.SessionStatus.connected:
+                    continue
+
+                # Probabilidade por ciclo: ~7% → em 72 ciclos (12h/10min) → ~99% de postar no dia
+                if random.random() > 0.07:
+                    continue
+
+                texto = random.choice(TEXTOS_STATUS)
+                ok = await enviar_status_waha(session.session_id, texto)
+
+                if ok:
+                    aq.ultimo_status_texto = texto
+                    aq.ultimo_status_em = now
+                    db.commit()
+                    logger.info(f"📱 Status postado no chip {session.session_id}: '{texto}'")
+                else:
+                    logger.warning(f"📱 Falha ao postar status no chip {session.session_id}")
+
+            except Exception as e:
+                logger.error(f"[STATUS] Erro no chip aq#{aq.id}: {e}")
+
+    except Exception as e:
+        logger.error(f"[STATUS] Erro geral: {e}")
+    finally:
+        db.close()
+
+
+async def status_diario_worker_task():
+    """Background task que tenta postar status diário a cada 10 minutos."""
+    logger.info("📱 Status diário worker iniciado.")
+    await asyncio.sleep(60)  # aguarda startup
+    while True:
+        try:
+            await postar_status_diario()
+            await asyncio.sleep(600)  # 10 minutos
+        except asyncio.CancelledError:
+            logger.info("📱 Status diário worker cancelado.")
+            break
+        except Exception as e:
+            logger.error(f"📱 Status diário worker erro: {e}")
+            await asyncio.sleep(60)

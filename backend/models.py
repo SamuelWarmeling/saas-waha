@@ -396,6 +396,8 @@ class AquecimentoConfig(Base):
     ultimo_envio = Column(DateTime(timezone=True), nullable=True)
     proximo_envio = Column(DateTime(timezone=True), nullable=True)
     inicio_dia_atual = Column(DateTime(timezone=True), nullable=True)
+    ultimo_status_texto = Column(String(200), nullable=True)
+    ultimo_status_em = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User")
     session = relationship("WhatsAppSession")

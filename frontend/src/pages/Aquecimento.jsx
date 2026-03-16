@@ -23,6 +23,17 @@ function formatDateTime(iso) {
   })
 }
 
+function formatRelativeTime(iso) {
+  if (!iso) return null
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'agora'
+  if (diffMin < 60) return `há ${diffMin} min`
+  const diffH = Math.floor(diffMin / 60)
+  if (diffH < 24) return `há ${diffH}h`
+  return `há ${Math.floor(diffH / 24)}d`
+}
+
 function getSaude(aq) {
   if (aq.status === 'cancelado') return { label: 'Cancelado', color: '#ef4444', emoji: '🔴' }
   if (aq.status === 'concluido') return { label: 'Concluído', color: '#22c55e', emoji: '✅' }
@@ -656,6 +667,20 @@ function CardAquecimento({ aq, onPausar, onRetomar, onLogs, onCancelar, onToggle
           </div>
         )}
       </div>
+
+      {/* Último status postado */}
+      {aq.ultimo_status_texto && (
+        <div className="rounded-lg border border-surface-700/30 px-3 py-2 text-xs flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.02)' }}>
+          <span className="flex-shrink-0">📱</span>
+          <span className="text-surface-400 truncate">
+            <span className="font-medium text-surface-300">Status:</span>{' '}
+            <span className="italic">'{aq.ultimo_status_texto}'</span>
+          </span>
+          {aq.ultimo_status_em && (
+            <span className="text-surface-600 flex-shrink-0 ml-auto">{formatRelativeTime(aq.ultimo_status_em)}</span>
+          )}
+        </div>
+      )}
 
       {/* Ações */}
       {!isFinalizado && (

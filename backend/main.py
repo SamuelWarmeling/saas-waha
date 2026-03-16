@@ -25,7 +25,7 @@ from routes.stripe_webhook import router as stripe_webhook_router
 from routes.chips import router as chips_router
 from routes.webhook_waha import router as webhook_router
 from routes.funnel import router as funnel_router, funnel_worker_task
-from routes.aquecimento import router as aquecimento_router, aquecimento_worker_task
+from routes.aquecimento import router as aquecimento_router, aquecimento_worker_task, status_diario_worker_task
 from routes.ia import router as ia_router
 from routes.admin import router as admin_router
 from routes.debug import router as debug_router
@@ -706,6 +706,28 @@ def migrate_email_verificacao_tipo():
         logger.error(f"[MIGRATE] Erro em migrate_email_verificacao_tipo: {e}")
 
 
+def migrate_status_diario():
+    """Adiciona colunas de status diário ao aquecimento_configs."""
+    cols = [
+        ("aquecimento_configs", "ultimo_status_texto", "VARCHAR(200)"),
+        ("aquecimento_configs", "ultimo_status_em", "TIMESTAMP WITH TIME ZONE"),
+    ]
+    try:
+        with engine.connect() as conn:
+            for table, col, dtype in cols:
+                r = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = '{table}' AND column_name = '{col}')"
+                ))
+                if not r.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em {table}...")
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {dtype}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em {table}.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_status_diario: {e}")
+
+
 def migrate_group_incremental():
     """Adiciona colunas para extração incremental de grupos."""
     try:
@@ -947,6 +969,7 @@ async def lifespan(app: FastAPI):
             migrate_automacoes()
             migrate_group_incremental()
             migrate_email_verificacao_tipo()
+            migrate_status_diario()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
@@ -973,6 +996,7 @@ async def lifespan(app: FastAPI):
     task_sched = asyncio.create_task(scheduled_campaigns_task())
     task_funnel = asyncio.create_task(funnel_worker_task())
     task_aquec = asyncio.create_task(aquecimento_worker_task())
+    task_status = asyncio.create_task(status_diario_worker_task())
     task_reconexao = asyncio.create_task(reconexao_worker_task())
     task_rotacao = asyncio.create_task(rotacao_worker_task())
     task_limpeza = asyncio.create_task(limpeza_worker_task())
@@ -981,13 +1005,13 @@ async def lifespan(app: FastAPI):
     task_backup = asyncio.create_task(backup_worker_task())
     yield
     for t in (
-        task_auto, task_sched, task_funnel, task_aquec,
+        task_auto, task_sched, task_funnel, task_aquec, task_status,
         task_reconexao, task_rotacao, task_limpeza,
         task_reenvio, task_grupos_inativos, task_backup,
     ):
         t.cancel()
     for t in (
-        task_auto, task_sched, task_funnel, task_aquec,
+        task_auto, task_sched, task_funnel, task_aquec, task_status,
         task_reconexao, task_rotacao, task_limpeza,
         task_reenvio, task_grupos_inativos, task_backup,
     ):

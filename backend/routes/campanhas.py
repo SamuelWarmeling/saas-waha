@@ -18,6 +18,9 @@ import csv
 
 import models
 import auth
+import ban_wave_detector
+import health_monitor
+import content_variator
 from database import get_db, SessionLocal
 from config import settings, PLANS
 
@@ -67,6 +70,7 @@ class CampaignCreate(BaseModel):
     delay_max: Optional[int] = 8
     media_url: Optional[str] = None
     ordem_mensagens: Optional[str] = "aleatorio"
+    usar_chips_sistema: bool = False           # usa chips is_system do admin
     scheduled_at: Optional[datetime] = None   # agendamento
 
     def get_message_items(self) -> List[MessageItem]:
@@ -119,6 +123,22 @@ class CampaignProgress(BaseModel):
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+_OPT_OUT_FOOTER = "\n\n_Responda PARAR para sair da lista._"
+# Pausa longa após enviar N mensagens seguidas (simula pausa humana)
+_PAUSE_EVERY_N = 50
+_PAUSE_MIN_SECS = 600   # 10 minutos
+_PAUSE_MAX_SECS = 900   # 15 minutos
+
+
+def human_delay(min_ms: int, max_ms: int, text: str = "") -> float:
+    """Delay gaussiano em segundos simulando digitacao humana."""
+    mean = (min_ms + max_ms) / 2
+    std = (max_ms - min_ms) / 6
+    base = max(float(min_ms), min(float(max_ms), random.gauss(mean, std)))
+    typing_ms = len(text) * 30  # 30ms por caractere
+    return (base + typing_ms) / 1000.0
+
 
 def _normalizar_phone(raw: str) -> str:
     """Normaliza número para formato 55XXXXXXXXXXX."""
@@ -321,6 +341,7 @@ def _campaign_out(c: models.Campaign) -> dict:
         "delay_max": c.delay_max,
         "ordem_mensagens": c.ordem_mensagens or "aleatorio",
         "media_url": c.media_url,
+        "usar_chips_sistema": getattr(c, "usar_chips_sistema", False),
         "scheduled_at": c.scheduled_at,
         "created_at": c.created_at,
         "started_at": c.started_at,
@@ -443,24 +464,48 @@ async def send_campaign(campaign_id: int, user_id: int):
             return
 
         # Sessões (chips)
-        camp_sess = db.query(models.CampaignSession).filter(
-            models.CampaignSession.campaign_id == campaign_id
-        ).all()
-        session_ids = [cs.session_id for cs in camp_sess] if camp_sess else (
-            [campaign.session_id] if campaign.session_id else []
-        )
-        if not session_ids:
-            campaign.status = models.CampaignStatus.cancelled
-            db.commit()
-            return
+        usar_sistema = getattr(campaign, "usar_chips_sistema", False)
+        if usar_sistema:
+            sessoes_candidatas = db.query(models.WhatsAppSession).filter(
+                models.WhatsAppSession.is_system == True,
+                models.WhatsAppSession.system_disponivel == True,
+                models.WhatsAppSession.status == models.SessionStatus.connected,
+            ).order_by(models.WhatsAppSession.system_msgs_hoje.asc()).all()
+            if not sessoes_candidatas:
+                campaign.status = models.CampaignStatus.cancelled
+                db.commit()
+                print(f"[CAMPANHA-{campaign_id}] ❌ Nenhum chip do sistema disponível")
+                return
+        else:
+            camp_sess = db.query(models.CampaignSession).filter(
+                models.CampaignSession.campaign_id == campaign_id
+            ).all()
+            session_ids = [cs.session_id for cs in camp_sess] if camp_sess else (
+                [campaign.session_id] if campaign.session_id else []
+            )
+            if not session_ids:
+                campaign.status = models.CampaignStatus.cancelled
+                db.commit()
+                return
 
-        sessoes_candidatas = db.query(models.WhatsAppSession).filter(
-            models.WhatsAppSession.id.in_(session_ids)
-        ).all()
+            sessoes_candidatas = db.query(models.WhatsAppSession).filter(
+                models.WhatsAppSession.id.in_(session_ids)
+            ).all()
+            if not sessoes_candidatas:
+                campaign.status = models.CampaignStatus.cancelled
+                db.commit()
+                return
+
         n_chips = len(sessoes_candidatas)
 
-        if n_chips == 0:
-            campaign.status = models.CampaignStatus.cancelled
+        # ── Ban wave check antes de disparar ─────────────────────────────────
+        if ban_wave_detector.is_system_paused():
+            until = ban_wave_detector.paused_until()
+            print(
+                f"[CAMPANHA-{campaign_id}] Sistema pausado por ban wave ate "
+                f"{until.strftime('%H:%M UTC') if until else '?'} — abortando"
+            )
+            campaign.status = models.CampaignStatus.paused
             db.commit()
             return
 
@@ -484,21 +529,19 @@ async def send_campaign(campaign_id: int, user_id: int):
             return
 
         # ── Pré-distribuição: cada contato recebe exatamente 1 chip ─────────
-        # Divide contatos em fatias contíguas: Chip A: 0..k-1, Chip B: k..2k-1, ...
         session_map: dict[int, models.WhatsAppSession] = {s.id: s for s in sessoes_candidatas}
 
         for i, cc in enumerate(pending):
-            chip_idx = i * n_chips // total   # partição proporcional
+            chip_idx = i * n_chips // total
             cc.session_id = sessoes_candidatas[chip_idx].id
         db.commit()
 
-        # Log da distribuição
         for chip_idx, sess in enumerate(sessoes_candidatas):
             start_i = chip_idx * total // n_chips
             end_i = (chip_idx + 1) * total // n_chips
             if start_i < end_i:
                 print(
-                    f"[CAMPANHA-{campaign_id}] 📋 Chip {sess.session_id}: "
+                    f"[CAMPANHA-{campaign_id}] Chip {sess.session_id}: "
                     f"contatos {start_i + 1}–{end_i} ({end_i - start_i} contatos)"
                 )
 
@@ -506,6 +549,26 @@ async def send_campaign(campaign_id: int, user_id: int):
         headers = {}
         if settings.WAHA_API_KEY:
             headers["X-Api-Key"] = settings.WAHA_API_KEY
+
+        # ── Rastreamento de block rate por chip ──────────────────────────────
+        # chip_waha_id -> (enviados, falhas)
+        _chip_stats: dict[str, list[int]] = {}
+
+        def _check_block_rate(chip_waha_id: str) -> str:
+            """Verifica block rate do chip. Retorna 'ok' | 'alert' | 'pause'."""
+            stats = _chip_stats.get(chip_waha_id, [0, 0])
+            total_sent, total_failed = stats
+            if total_sent < 10:
+                return "ok"
+            rate = total_failed / total_sent
+            if rate > 0.10:
+                return "pause"
+            if rate > 0.05:
+                return "alert"
+            return "ok"
+
+        # Contador de msgs enviadas na sessao atual (para pausa a cada 50)
+        msgs_nesta_sessao = 0
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             for contact_index, cc in enumerate(pending):
@@ -516,13 +579,19 @@ async def send_campaign(campaign_id: int, user_id: int):
                     models.CampaignStatus.paused,
                     models.CampaignStatus.cancelled,
                 ):
-                    print(f"[CAMPANHA-{campaign_id}] ⏸️  Interrompido (status={campaign.status})")
+                    print(f"[CAMPANHA-{campaign_id}] Interrompido (status={campaign.status})")
                     break
 
-                # Re-check status: pula se já foi processado (race condition guard)
+                # Ban wave check periodico
+                if ban_wave_detector.is_system_paused():
+                    print(f"[CAMPANHA-{campaign_id}] Ban wave detectada durante disparo — pausando")
+                    campaign.status = models.CampaignStatus.paused
+                    db.commit()
+                    break
+
+                # Re-check status: pula se já foi processado
                 db.refresh(cc)
                 if cc.status != models.ContactStatus.pending:
-                    print(f"[CAMPANHA-{campaign_id}] ⏭️  Contato {cc.contact_id} status={cc.status} — pulando")
                     continue
 
                 contact = cc.contact
@@ -535,8 +604,53 @@ async def send_campaign(campaign_id: int, user_id: int):
                 # Chip pré-atribuído
                 used_session = session_map.get(cc.session_id)
                 if not used_session:
-                    # Fallback improvável
                     used_session = sessoes_candidatas[contact_index % n_chips]
+
+                # Para chips do sistema: checar limite diário
+                if usar_sistema:
+                    db.refresh(used_session)
+                    if used_session.system_msgs_hoje >= used_session.system_max_msgs_dia:
+                        chips_com_capacidade = [
+                            s for s in sessoes_candidatas
+                            if s.system_msgs_hoje < s.system_max_msgs_dia
+                            and s.system_disponivel
+                        ]
+                        if not chips_com_capacidade:
+                            print(f"[CAMPANHA-{campaign_id}] Todos os chips do sistema atingiram o limite diário")
+                            break
+                        used_session = min(chips_com_capacidade, key=lambda s: s.system_msgs_hoje)
+
+                # Health monitor: verifica risco do chip
+                hm_action = health_monitor.get_action(used_session.session_id)
+                if hm_action == "stop":
+                    score = health_monitor.get_score(used_session.session_id)
+                    print(
+                        f"[CAMPANHA-{campaign_id}] Chip {used_session.session_id} "
+                        f"score critico ({score}) — parando campanha"
+                    )
+                    campaign.status = models.CampaignStatus.paused
+                    db.commit()
+                    break
+
+                # Block rate: verifica antes de enviar
+                br_status = _check_block_rate(used_session.session_id)
+                if br_status == "pause":
+                    blk_stats = _chip_stats.get(used_session.session_id, [0, 0])
+                    rate_pct = round(blk_stats[1] / blk_stats[0] * 100, 1) if blk_stats[0] else 0
+                    print(
+                        f"[CAMPANHA-{campaign_id}] Block rate CRITICO {used_session.session_id}: "
+                        f"{rate_pct}% — pausando campanha"
+                    )
+                    campaign.status = models.CampaignStatus.paused
+                    db.commit()
+                    break
+                elif br_status == "alert":
+                    blk_stats = _chip_stats.get(used_session.session_id, [0, 0])
+                    rate_pct = round(blk_stats[1] / blk_stats[0] * 100, 1) if blk_stats[0] else 0
+                    print(
+                        f"[CAMPANHA-{campaign_id}] Block rate ALERTA {used_session.session_id}: "
+                        f"{rate_pct}% (>5%) — alertando"
+                    )
 
                 # Escolher mensagem
                 if ordem == "sequencial":
@@ -544,31 +658,49 @@ async def send_campaign(campaign_id: int, user_id: int):
                 else:
                     msg = random.choice(db_msgs)
 
-                # Personalizar texto com {nome}
+                # Personalizar texto com {nome} e aplicar content variator
                 if msg.text:
                     msg_copy = models.CampaignMessage.__new__(models.CampaignMessage)
                     msg_copy.__dict__.update(msg.__dict__)
-                    msg_copy.text = msg.text.replace("{nome}", contact.name or "Cliente")
+                    personalized = msg.text.replace("{nome}", contact.name or "Cliente")
+                    # Adicionar opt-out footer na primeira mensagem (somente texto)
+                    is_first_msg = (contact_index == 0)
+                    if is_first_msg and msg.tipo in ("text", None, ""):
+                        personalized += _OPT_OUT_FOOTER
+                    # Variar conteudo para evitar fingerprint de spam
+                    msg_copy.text = content_variator.vary_message(personalized)
                     msg = msg_copy
 
                 phone = contact.phone
                 print(
-                    f"[CAMPANHA-{campaign_id}] 📤 Chip {used_session.session_id} "
-                    f"enviando para {phone} ({contact_index + 1}/{total})"
+                    f"[CAMPANHA-{campaign_id}] Chip {used_session.session_id} "
+                    f"-> {phone} ({contact_index + 1}/{total})"
                 )
+
+                # Calcula delay com jitter gaussiano + risco do chip
+                delay_min_ms = user_delay_min * 1000
+                delay_max_ms = user_delay_max * 1000
+                hm_multiplier = health_monitor.get_delay_multiplier(used_session.session_id)
+                if hm_multiplier > 1.0:
+                    delay_min_ms = int(delay_min_ms * hm_multiplier)
+                    delay_max_ms = int(delay_max_ms * hm_multiplier)
+                base_delay = human_delay(delay_min_ms, delay_max_ms, msg.text or "")
 
                 try:
                     status_code, resp_text = await _send_waha_message(
                         client, used_session.session_id, phone, msg, headers
                     )
 
+                    # Atualiza chip_stats
+                    if used_session.session_id not in _chip_stats:
+                        _chip_stats[used_session.session_id] = [0, 0]
+                    _chip_stats[used_session.session_id][0] += 1
+
                     if status_code == 201:
                         cc.status = models.ContactStatus.sent
                         campaign.success_count += 1
-                        print(
-                            f"[CAMPANHA-{campaign_id}] ✅ {phone} enviado pelo chip "
-                            f"{used_session.session_id} — pulando nos outros chips"
-                        )
+                        msgs_nesta_sessao += 1
+                        print(f"[CAMPANHA-{campaign_id}] OK {phone} via {used_session.session_id}")
                         try:
                             resp_json = json.loads(resp_text)
                             waha_id = resp_json.get("id") or resp_json.get("key", {}).get("id")
@@ -580,21 +712,43 @@ async def send_campaign(campaign_id: int, user_id: int):
                         cc.status = models.ContactStatus.failed
                         cc.error_message = resp_text[:200]
                         campaign.fail_count += 1
-                        print(f"[CAMPANHA-{campaign_id}] ❌ {phone} falhou (HTTP {status_code}): {resp_text[:100]}")
+                        _chip_stats[used_session.session_id][1] += 1
+                        # Health monitor: registra erro HTTP
+                        health_monitor.record_http_error(used_session.session_id, status_code)
+                        if status_code not in (200, 201):
+                            health_monitor.record_send_failure(used_session.session_id)
+                        print(
+                            f"[CAMPANHA-{campaign_id}] FALHA {phone} "
+                            f"HTTP {status_code}: {resp_text[:100]}"
+                        )
 
                 except Exception as e:
                     cc.status = models.ContactStatus.failed
                     cc.error_message = str(e)[:200]
                     campaign.fail_count += 1
-                    print(f"[CAMPANHA-{campaign_id}] ❌ {phone} exceção: {e}")
+                    if used_session.session_id in _chip_stats:
+                        _chip_stats[used_session.session_id][1] += 1
+                    health_monitor.record_send_failure(used_session.session_id)
+                    print(f"[CAMPANHA-{campaign_id}] EXCECAO {phone}: {e}")
 
                 cc.sent_at = datetime.now(timezone.utc)
                 campaign.sent_count += 1
-                used_session.messages_sent_today += 1
+                if usar_sistema:
+                    used_session.system_msgs_hoje += 1
+                else:
+                    used_session.messages_sent_today += 1
                 db.commit()
 
-                delay = random.uniform(user_delay_min, user_delay_max)
-                await asyncio.sleep(delay)
+                # Pausa longa a cada 50 mensagens (simula pausa humana)
+                if msgs_nesta_sessao > 0 and msgs_nesta_sessao % _PAUSE_EVERY_N == 0:
+                    pause_secs = random.randint(_PAUSE_MIN_SECS, _PAUSE_MAX_SECS)
+                    print(
+                        f"[CAMPANHA-{campaign_id}] Pausa de {pause_secs // 60}min "
+                        f"apos {msgs_nesta_sessao} msgs (anti-ban)"
+                    )
+                    await asyncio.sleep(pause_secs)
+                else:
+                    await asyncio.sleep(base_delay)
 
         # Finaliza
         db.refresh(campaign)
@@ -719,6 +873,7 @@ def create_campaign(
         delay_max=data.delay_max,
         media_url=data.media_url,
         ordem_mensagens=data.ordem_mensagens or "aleatorio",
+        usar_chips_sistema=data.usar_chips_sistema,
         total_contacts=len(contacts),
         scheduled_at=data.scheduled_at,
         status=camp_status,
@@ -1198,7 +1353,8 @@ async def fire_campaign(
         models.CampaignStatus.scheduled,
     ):
         raise HTTPException(status_code=400, detail=f"Campanha não pode ser disparada (status: {campaign.status})")
-    campaign = _resolve_session(campaign, current_user.id, db)
+    if not getattr(campaign, "usar_chips_sistema", False):
+        campaign = _resolve_session(campaign, current_user.id, db)
     limite = getattr(current_user, "chips_disparo_simultaneo", 3)
     em_uso = _chips_ativos_count(current_user.id, db)
     if em_uso >= limite:
@@ -1238,7 +1394,8 @@ async def start_campaign(
         models.CampaignStatus.scheduled,
     ):
         raise HTTPException(status_code=400, detail=f"Campanha não pode ser iniciada (status: {campaign.status})")
-    campaign = _resolve_session(campaign, current_user.id, db)
+    if not getattr(campaign, "usar_chips_sistema", False):
+        campaign = _resolve_session(campaign, current_user.id, db)
     limite = getattr(current_user, "chips_disparo_simultaneo", 3)
     em_uso = _chips_ativos_count(current_user.id, db)
     if em_uso >= limite:

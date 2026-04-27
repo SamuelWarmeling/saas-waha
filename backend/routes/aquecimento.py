@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 
 import auth
 import models
+import ban_wave_detector
+import content_variator
 from config import settings
 from database import get_db, SessionLocal
 
@@ -127,15 +129,22 @@ TEXTOS_STATUS: List[str] = [
 ]
 
 
+def human_delay(min_ms: int, max_ms: int, text: str = "") -> float:
+    """Delay gaussiano em segundos simulando digitacao humana."""
+    mean = (min_ms + max_ms) / 2
+    std = (max_ms - min_ms) / 6
+    base = max(float(min_ms), min(float(max_ms), random.gauss(mean, std)))
+    typing_ms = len(text) * 30  # 30ms por caractere
+    return (base + typing_ms) / 1000.0
+
+
+# Warm-up schedule baseado no baileys-antiban (progressao 1.8x por dia)
+_WARMUP_SCHEDULE = {1: 20, 2: 36, 3: 65, 4: 117, 5: 210, 6: 378, 7: 500}
+
+
 def get_meta_dia(dia: int) -> int:
-    """Retorna a meta de mensagens para o dia do aquecimento."""
-    if dia <= 3:
-        return 3
-    if dia <= 7:
-        return 8
-    if dia <= 14:
-        return 20
-    return 40
+    """Retorna a meta de mensagens para o dia do aquecimento (schedule otimizado)."""
+    return _WARMUP_SCHEDULE.get(dia, 500)  # dia 8+: sem limite fixo (usa 500)
 
 
 def get_meta_adaptacao(dia: int) -> int:
@@ -279,9 +288,11 @@ def count_fisicos_disponiveis(db: Session, session_id: int) -> int:
 
 
 async def enviar_msg_aquecimento(session_waha_id: str, phone: str, mensagem: str) -> bool:
+    """Envia mensagem simples sem simulacao humana (fallback / chip fisico iniciando)."""
     headers = {}
     if settings.WAHA_API_KEY:
         headers["X-Api-Key"] = settings.WAHA_API_KEY
+    mensagem = content_variator.vary_message(mensagem)
     payload = {
         "chatId": f"{phone}@c.us",
         "text": mensagem,
@@ -297,6 +308,72 @@ async def enviar_msg_aquecimento(session_waha_id: str, phone: str, mensagem: str
         return r.status_code in (200, 201)
     except Exception as e:
         logger.error(f"[AQUECIMENTO] Erro WAHA: {e}")
+        return False
+
+
+async def enviar_msg_aquecimento_humano(session_waha_id: str, phone: str, mensagem: str) -> bool:
+    """
+    Envia mensagem simulando comportamento humano completo:
+    sendSeen -> startTyping -> delay de digitacao -> stopTyping -> sendText
+    Usar para respostas do chip virtual (mais natural).
+    """
+    headers = {}
+    if settings.WAHA_API_KEY:
+        headers["X-Api-Key"] = settings.WAHA_API_KEY
+    chat_id = f"{phone}@c.us"
+    base = settings.WAHA_API_URL
+    mensagem = content_variator.vary_message(mensagem)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # a) Pausa inicial (humano lendo a mensagem)
+            await asyncio.sleep(human_delay(2000, 5000))
+
+            # b) Marcar como lido
+            try:
+                await client.post(
+                    f"{base}/api/sendSeen",
+                    json={"chatId": chat_id, "session": session_waha_id},
+                    headers=headers,
+                )
+            except Exception:
+                pass
+
+            # c) Pausa antes de comecar a digitar
+            await asyncio.sleep(human_delay(1000, 3000))
+
+            # d) Iniciar indicador de digitacao
+            try:
+                await client.post(
+                    f"{base}/api/startTyping",
+                    json={"chatId": chat_id, "session": session_waha_id},
+                    headers=headers,
+                )
+            except Exception:
+                pass
+
+            # e) Simular tempo de digitacao baseado no tamanho da mensagem
+            await asyncio.sleep(human_delay(2000, 8000, mensagem))
+
+            # f) Parar indicador de digitacao
+            try:
+                await client.post(
+                    f"{base}/api/stopTyping",
+                    json={"chatId": chat_id, "session": session_waha_id},
+                    headers=headers,
+                )
+            except Exception:
+                pass
+
+            # g) Enviar mensagem
+            r = await client.post(
+                f"{base}/api/sendText",
+                json={"chatId": chat_id, "text": mensagem, "session": session_waha_id},
+                headers=headers,
+            )
+        return r.status_code in (200, 201)
+    except Exception as e:
+        logger.error(f"[AQUECIMENTO] Erro WAHA (humano): {e}")
         return False
 
 
@@ -675,7 +752,8 @@ def toggle_manutencao(
         aq.manutencao_ativa = True
         aq.msgs_hoje = 0
         aq.meta_hoje = random.randint(3, 5)
-        aq.proximo_envio = datetime.now(timezone.utc) + timedelta(minutes=random.randint(10, 30))
+        _mt = int(human_delay(10 * 60 * 1000, 30 * 60 * 1000) / 60)
+        aq.proximo_envio = datetime.now(timezone.utc) + timedelta(minutes=max(10, _mt))
     else:
         raise HTTPException(status_code=400, detail="Aquecimento deve estar concluído ou em manutenção")
     db.commit()
@@ -740,6 +818,15 @@ async def processar_aquecimento():
             .all()
         )
 
+        # Ban wave check: se sistema pausado, abortar todo aquecimento
+        if ban_wave_detector.is_system_paused():
+            until = ban_wave_detector.paused_until()
+            logger.warning(
+                f"[AQUECIMENTO] Sistema pausado por ban wave ate "
+                f"{until.strftime('%H:%M UTC') if until else '?'} — pulando ciclo"
+            )
+            return
+
         logger.info(f"🔥 Processando {len(ativos)} chips em aquecimento")
 
         for aq in ativos:
@@ -785,7 +872,8 @@ async def processar_aquecimento():
                         aq.msgs_sem_pausa = 0
                         aq.meta_hoje = random.randint(3, 5)
                         aq.inicio_dia_atual = now
-                        aq.proximo_envio = now + timedelta(minutes=random.randint(15, 45))
+                        _md = int(human_delay(15 * 60 * 1000, 45 * 60 * 1000) / 60)
+                        aq.proximo_envio = now + timedelta(minutes=max(15, _md))
                         db.commit()
                         logger.info(f"[AQUECIMENTO] #{aq.id} manutenção — novo dia (meta: {aq.meta_hoje} msgs)")
                         continue
@@ -804,7 +892,8 @@ async def processar_aquecimento():
                             aq.msgs_hoje = 0
                             aq.meta_hoje = random.randint(3, 5)
                             aq.inicio_dia_atual = now
-                            aq.proximo_envio = now + timedelta(minutes=random.randint(30, 60))
+                            maint_delay = int(human_delay(30 * 60 * 1000, 60 * 60 * 1000) / 60)
+                        aq.proximo_envio = now + timedelta(minutes=max(30, maint_delay))
                             descricao_status = "manutenção contínua ativada"
                         else:
                             aq.status = models.AquecimentoStatus.concluido
@@ -826,7 +915,8 @@ async def processar_aquecimento():
                     aq.msgs_sem_pausa = 0
                     aq.meta_hoje = get_meta_adaptacao(aq.dia_atual) if is_adapt else get_meta_dia(aq.dia_atual)
                     aq.inicio_dia_atual = now
-                    aq.proximo_envio = now + timedelta(minutes=random.randint(5, 15))
+                    first_delay = int(human_delay(5 * 60 * 1000, 15 * 60 * 1000) / 60)
+                    aq.proximo_envio = now + timedelta(minutes=max(5, first_delay))
                     db.commit()
                     logger.info(f"[AQUECIMENTO] #{aq.id} avançou para dia {aq.dia_atual} (meta: {aq.meta_hoje} msgs{'- FASE PASSIVA' if aq.meta_hoje == 0 else ''})")
                     continue
@@ -950,11 +1040,11 @@ async def processar_aquecimento():
                     # Passo 1: físico envia inicio ao virtual
                     ok1 = await enviar_msg_aquecimento(session.session_id, destino_phone, inicio)
                     if ok1:
-                        await asyncio.sleep(random.randint(3, 8))
-                        # Passo 2: virtual responde ao físico
-                        ok2 = await enviar_msg_aquecimento(destino_waha_id, session.phone_number, resposta)
+                        await asyncio.sleep(human_delay(3000, 8000, resposta))
+                        # Passo 2: virtual responde ao físico com simulacao humana completa
+                        ok2 = await enviar_msg_aquecimento_humano(destino_waha_id, session.phone_number, resposta)
                         if ok2:
-                            await asyncio.sleep(random.randint(3, 8))
+                            await asyncio.sleep(human_delay(3000, 8000, continuacao))
                             # Passo 3: físico finaliza com continuacao
                             await enviar_msg_aquecimento(session.session_id, destino_phone, continuacao)
 
@@ -1016,18 +1106,20 @@ async def processar_aquecimento():
                     aq.ultimo_envio = now
                     aq.msgs_sem_pausa = (aq.msgs_sem_pausa or 0) + 1
 
-                    # Após 3 msgs seguidas, pausa longa (45-90 min)
+                    # Após 3 msgs seguidas, pausa longa com jitter gaussiano (45-90 min)
                     if aq.msgs_sem_pausa >= 3:
-                        delay = random.randint(45, 90)
+                        delay = int(human_delay(45 * 60 * 1000, 90 * 60 * 1000) / 60)
+                        delay = max(45, delay)
                         aq.msgs_sem_pausa = 0
                     else:
-                        delay = random.randint(10, 40)
+                        delay = int(human_delay(10 * 60 * 1000, 40 * 60 * 1000) / 60)
+                        delay = max(10, delay)
 
                     aq.proximo_envio = now + timedelta(minutes=delay)
                     mode = "manutenção" if is_manutencao else f"dia {aq.dia_atual}"
                     logger.info(
                         f"[AQUECIMENTO] #{aq.id} físico {mode} — "
-                        f"msg {aq.msgs_hoje}/{aq.meta_hoje} → {destino[:6]}*** "
+                        f"msg {aq.msgs_hoje}/{aq.meta_hoje} -> {destino_phone[:6]}*** "
                         f"(próxima em {delay}min)"
                     )
                 else:

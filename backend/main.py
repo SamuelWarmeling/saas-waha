@@ -728,6 +728,31 @@ def migrate_status_diario():
         logger.error(f"[MIGRATE] Erro em migrate_status_diario: {e}")
 
 
+def migrate_system_chips():
+    """Adiciona colunas de chips do sistema em whatsapp_sessions e usar_chips_sistema em campaigns."""
+    cols = [
+        ("whatsapp_sessions", "is_system", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("whatsapp_sessions", "system_disponivel", "BOOLEAN NOT NULL DEFAULT TRUE"),
+        ("whatsapp_sessions", "system_max_msgs_dia", "INTEGER NOT NULL DEFAULT 200"),
+        ("whatsapp_sessions", "system_msgs_hoje", "INTEGER NOT NULL DEFAULT 0"),
+        ("campaigns", "usar_chips_sistema", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ]
+    try:
+        with engine.connect() as conn:
+            for table, col, dtype in cols:
+                r = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = '{table}' AND column_name = '{col}')"
+                ))
+                if not r.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em {table}...")
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {dtype}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em {table}.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_system_chips: {e}")
+
+
 def migrate_group_incremental():
     """Adiciona colunas para extração incremental de grupos."""
     try:
@@ -970,6 +995,7 @@ async def lifespan(app: FastAPI):
             migrate_group_incremental()
             migrate_email_verificacao_tipo()
             migrate_status_diario()
+            migrate_system_chips()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
@@ -1064,6 +1090,8 @@ app.include_router(chips_router)
 app.include_router(listas_router)
 app.include_router(auth_verificacao_router)
 app.include_router(stripe_webhook_router)
+from routes.antiban import router as antiban_router
+app.include_router(antiban_router)
 
 
 @app.get("/")

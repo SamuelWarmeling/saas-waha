@@ -1,713 +1,293 @@
 import { useEffect, useState, useCallback } from 'react'
-import {
-  MdAdd, MdRefresh, MdQrCode, MdDelete, MdCheckCircle, MdInfo, MdContentCopy,
-  MdPhoneAndroid, MdComputer,
-} from 'react-icons/md'
+import { motion } from 'framer-motion'
+import { Plus, QrCode, Flame, Pause, Trash2, WifiOff, RotateCcw, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../api'
 
-// ── Gauge de Score Fuzzy ───────────────────────────────────────────────────────
-function ScoreGauge({ diag }) {
-  if (!diag) return null
-  const { score, label, razao } = diag
-  const color = label === 'HIGH' ? '#22c55e' : label === 'MED' ? '#f59e0b' : label === 'OFFLINE' || label === 'BLOCKED' ? '#6b7280' : '#ef4444'
-  const bg    = label === 'HIGH' ? 'rgba(34,197,94,0.08)'   : label === 'MED' ? 'rgba(245,158,11,0.08)'  : label === 'OFFLINE' || label === 'BLOCKED' ? 'rgba(107,114,128,0.08)' : 'rgba(239,68,68,0.08)'
-  const bdr   = label === 'HIGH' ? 'rgba(34,197,94,0.2)'    : label === 'MED' ? 'rgba(245,158,11,0.2)'   : label === 'OFFLINE' || label === 'BLOCKED' ? 'rgba(107,114,128,0.2)'  : 'rgba(239,68,68,0.2)'
-
-  // SVG arc: circunferência = 2πr ≈ 100 para r=15.9155
-  const dash = `${score} 100`
-
+const FuzzyGauge = ({ score }) => {
+  const circumference = 2 * Math.PI * 28
+  const offset = circumference - (score / 100) * circumference
+  const color = score > 60 ? 'text-success' : score > 30 ? 'text-warning' : 'text-destructive'
   return (
-    <div title={razao}
-      className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl"
-      style={{ background: bg, border: `1px solid ${bdr}` }}>
-      {/* Mini gauge circular */}
-      <svg width="32" height="32" viewBox="0 0 36 36">
-        {/* Trilha de fundo */}
-        <path
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none" stroke="#1e1e2e" strokeWidth="3.5"
-        />
-        {/* Arco do score */}
-        <path
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none" stroke={color} strokeWidth="3.5"
-          strokeDasharray={dash} strokeLinecap="round"
-        />
-        <text x="18" y="20.5" textAnchor="middle"
-          style={{ fontSize: '8px', fontWeight: 900, fill: color }}>
-          {score}
-        </text>
+    <div className="relative h-16 w-16">
+      <svg className="transform -rotate-90 w-16 h-16">
+        <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-muted/50" />
+        <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent"
+          strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
+          className={`${color} transition-all duration-1000 ease-out`} />
       </svg>
-      {/* Label */}
-      <div>
-        <p className="text-[11px] font-black leading-none" style={{ color }}>
-          {label === 'OFFLINE' ? 'OFFLINE' : label === 'BLOCKED' ? 'BLOQ.' : label}
-        </p>
-        <p className="text-[9px] text-surface-500 mt-0.5 max-w-[80px] truncate leading-none" title={razao}>{razao}</p>
-      </div>
+      <span className="absolute inset-0 flex items-center justify-center font-mono text-xs font-bold text-foreground/90">{score}</span>
     </div>
   )
 }
 
-// ── Barra de risco de ban ──────────────────────────────────────────────────────
-function RiscoBar({ ri }) {
-  if (!ri || ri.risco <= 30) return null   // chip seguro: não polui o UI
-  const { risco, label } = ri
-  const color = risco <= 60 ? '#f59e0b' : risco <= 80 ? '#ef4444' : '#dc2626'
-  const bg    = risco <= 60 ? 'rgba(245,158,11,0.08)'  : risco <= 80 ? 'rgba(239,68,68,0.08)'  : 'rgba(220,38,38,0.12)'
-  const bdr   = risco <= 60 ? 'rgba(245,158,11,0.2)'   : risco <= 80 ? 'rgba(239,68,68,0.2)'   : 'rgba(220,38,38,0.35)'
-  const emoji = risco <= 60 ? '🟡' : risco <= 80 ? '🔴' : '🚨'
-
-  return (
-    <div className="rounded-xl p-2.5" style={{ background: bg, border: `1px solid ${bdr}` }}>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-bold" style={{ color }}>
-          {emoji} Risco de Ban: {risco}%
-        </span>
-        <span className={`text-[10px] font-black uppercase tracking-wider ${risco > 60 ? 'animate-pulse' : ''}`}
-          style={{ color }}>
-          {label}
-        </span>
-      </div>
-      <div className="h-1.5 rounded-full bg-surface-800/60 overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${risco}%`, background: `linear-gradient(90deg, ${color}88, ${color})` }}
-        />
-      </div>
-    </div>
-  )
+function getStatusKey(s) {
+  const st = (s.status || '').toLowerCase()
+  if (['connected', 'working'].includes(st)) return 'online'
+  if (['qr', 'scan_qr_code', 'starting'].includes(st)) return 'attention'
+  return 'offline'
 }
 
-const STATUS_CONFIG = {
-  connected:    { label: '🟢 Online',      cls: 'badge-green'  },
-  connecting:   { label: '🔵 Conectando',  cls: 'badge-yellow' },
-  disconnected: { label: '🔴 Offline',     cls: 'badge-gray'   },
-  error:        { label: '🟡 Erro',        cls: 'badge-red'    },
-}
-
-function formatPhone(raw) {
-  if (!raw) return null
-  const digits = raw.replace(/\D/g, '')
-  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
-    const ddd = digits.slice(2, 4)
-    const num = digits.slice(4)
-    if (num.length === 9) return `(${ddd}) ${num.slice(0, 5)}-${num.slice(5)}`
-    if (num.length === 8) return `(${ddd}) ${num.slice(0, 4)}-${num.slice(4)}`
-  }
-  return raw
-}
-
-function SessionIdBadge({ sessionId }) {
-  const [copied, setCopied] = useState(false)
-
-  function copy(e) {
-    e.stopPropagation()
-    navigator.clipboard.writeText(sessionId).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <div
-      className="inline-flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md max-w-full overflow-hidden"
-      style={{
-        background: 'rgba(88,28,135,0.2)',
-        border: '1px solid rgba(107,33,168,0.45)',
-      }}
-    >
-      <span className="text-[10px] text-surface-500 select-none flex-shrink-0">ID:</span>
-      <span className="font-mono text-[11px] text-primary-400 tracking-wide truncate max-w-[120px] sm:max-w-[200px]">{sessionId}</span>
-      <button
-        onClick={copy}
-        title="Copiar ID"
-        className="ml-0.5 transition-all duration-150 opacity-30 hover:opacity-100 hover:text-primary-400 text-surface-300 flex items-center"
-      >
-        {copied
-          ? <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wide">Copiado!</span>
-          : <MdContentCopy size={12} />
-        }
-      </button>
-    </div>
-  )
+const statusConfig = {
+  online:    { label: 'Online',  color: 'bg-success/10 text-success',     dot: 'bg-success pulse-online' },
+  offline:   { label: 'Offline', color: 'bg-destructive/10 text-destructive', dot: 'bg-destructive' },
+  attention: { label: 'Atenção', color: 'bg-warning/10 text-warning',     dot: 'bg-warning' },
 }
 
 export default function Sessoes() {
   const [sessions, setSessions] = useState([])
-  const [diagnosticos, setDiagnosticos] = useState({})
-  const [riscos, setRiscos] = useState({})
-  const [showModal, setShowModal] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [qrSession, setQrSession] = useState(null)
-  const [tipoModal, setTipoModal] = useState(null) // { id, name, required }
-  const [form, setForm] = useState({ name: '' })
+  const [loading, setLoading] = useState(true)
+  const [showCreate, setShowCreate] = useState(false)
+  const [qrModal, setQrModal] = useState(null)
+  const [newName, setNewName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [antiBan, setAntiBan] = useState(null)
 
   const load = useCallback(async () => {
     try {
-      const [sessRes, diagRes] = await Promise.allSettled([
-        api.get('/sessoes'),
-        api.get('/chips/diagnostico'),
-      ])
-      if (sessRes.status === 'fulfilled') setSessions(sessRes.value.data)
-      if (diagRes.status === 'fulfilled') {
-        const map = {}
-        for (const d of diagRes.value.data) map[d.session_id] = d
-        setDiagnosticos(map)
-      }
-    } catch {
-      toast.error('Erro ao carregar sessões')
-    }
+      const { data } = await api.get('/sessoes')
+      setSessions(Array.isArray(data) ? data : [])
+    } catch {}
+    setLoading(false)
   }, [])
 
-  useEffect(() => { load() }, [load])
-
-  // Polling geral a cada 30s — sincroniza status de TODOS os chips
   useEffect(() => {
-    const id = setInterval(load, 30_000)
-    return () => clearInterval(id)
+    load()
+    const interval = setInterval(load, 15000)
+    return () => clearInterval(interval)
   }, [load])
 
-  // Polling de risco de ban a cada 5 minutos
   useEffect(() => {
-    const fetchRiscos = async () => {
-      try {
-        const { data } = await api.get('/chips/risco')
-        const map = {}
-        for (const r of data) map[r.session_id] = r
-        setRiscos(map)
-      } catch {}
-    }
-    fetchRiscos()
-    const id = setInterval(fetchRiscos, 5 * 60 * 1000)
-    return () => clearInterval(id)
+    let mounted = true
+    const poll = () => api.get('/antiban/status').then(r => { if (mounted) setAntiBan(r.data) }).catch(() => {})
+    poll()
+    const id = setInterval(poll, 30000)
+    return () => { mounted = false; clearInterval(id) }
   }, [])
 
-  // Polling de status para sessões conectando
-  useEffect(() => {
-    const connecting = sessions.filter(s => s.status === 'connecting')
-    if (connecting.length === 0) return
+  function getAntiBanForChip(chip) {
+    if (!antiBan) return { score: 0, paused: null, reconnects: 0 }
+    const sid = chip.session_id || chip.name
+    const score = antiBan.health_monitor?.scores?.[sid] ?? 0
+    const paused = antiBan.circuit_breaker?.chips_pausados?.find(c => c.session_id === sid) ?? null
+    const reconnects = antiBan.circuit_breaker?.reconexoes_ultima_hora?.[sid] ?? 0
+    return { score, paused, reconnects }
+  }
 
-    const interval = setInterval(async () => {
-      for (const sess of connecting) {
-        try {
-          const { data } = await api.get(`/sessoes/${sess.id}/status`)
-          if (data.status !== 'connecting') {
-            load()
-            if (data.status === 'connected') {
-              toast.success(`Sessão "${sess.name}" conectada!`)
-              setQrSession(null)
-            } else if (data.status === 'error') {
-              toast.error(`Sessão "${sess.name}" com erro`)
-            } else if (data.status === 'disconnected') {
-              toast(`Sessão "${sess.name}" desconectada`, { icon: '⚠️' })
-            }
-          }
-        } catch { /* ignora */ }
-      }
-    }, 4000)
-
-    return () => clearInterval(interval)
-  }, [sessions, load])
-
-  const update = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }))
-
-  async function handleCreate(e) {
-    e.preventDefault()
-    setLoading(true)
+  async function createSession() {
+    if (!newName.trim()) return
+    setCreating(true)
     try {
-      await api.post('/sessoes', { name: form.name })
+      await api.post('/sessoes', { name: newName.trim() })
       toast.success('Sessão criada!')
-      setShowModal(false)
-      setForm({ name: '' })
+      setNewName('')
+      setShowCreate(false)
       load()
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Erro ao criar sessão')
-    } finally {
-      setLoading(false)
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao criar sessão')
     }
+    setCreating(false)
   }
 
-  async function connect(sess) {
+  async function connectSession(chip) {
     try {
-      const { data } = await api.post(`/sessoes/${sess.id}/conectar`)
-      setQrSession({ id: sess.id, name: sess.name, qr: data.qr_code || null, status: 'connecting' })
-      toast.success('Aguardando QR Code…')
+      const { data } = await api.post(`/sessoes/${chip.id}/conectar`)
+      setQrModal({ id: chip.id, name: chip.name, qr_code: data.qr_code })
       load()
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Erro ao conectar')
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao conectar')
     }
   }
 
-  // Auto-refresh QR a cada 5min até conectar
-  useEffect(() => {
-    if (!qrSession) return
-    const interval = setInterval(async () => {
-      try {
-        const { data } = await api.get(`/sessoes/${qrSession.id}/qrcode`)
-        if (data.status === 'connected') {
-          setQrSession(null)
-          toast.success(`Sessão "${qrSession.name}" conectada!`)
-          load()
-          setTipoModal({ id: qrSession.id, name: qrSession.name, required: true })
-          return
-        }
-        setQrSession(prev => ({ ...prev, qr: data.qr, status: data.status }))
-      } catch { /* ignora */ }
-    }, 300_000)
-    return () => clearInterval(interval)
-  }, [qrSession, load])
-
-  async function disconnect(id) {
-    if (!confirm('Desconectar sessão?')) return
+  async function disconnectSession(id) {
     try {
       await api.post(`/sessoes/${id}/desconectar`)
       toast.success('Sessão desconectada')
       load()
-    } catch {
-      toast.error('Erro ao desconectar')
-    }
+    } catch {}
   }
 
   async function deleteSession(id) {
-    if (!confirm('Deletar sessão permanentemente?')) return
+    if (!window.confirm('Remover esta sessão?')) return
     try {
       await api.delete(`/sessoes/${id}`)
-      toast.success('Sessão deletada')
+      toast.success('Sessão removida')
       load()
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Erro ao deletar')
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao remover')
     }
   }
 
-  async function definirTipoChip(sessId, tipo) {
-    try {
-      await api.patch(`/sessoes/${sessId}/tipo-chip`, { tipo_chip: tipo })
-      toast.success(`Chip definido como ${tipo === 'virtual' ? '💻 Virtual' : '📱 Físico'}`)
-      setTipoModal(null)
-      load()
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Erro ao alterar tipo')
-    }
-  }
+  const onlineCount = sessions.filter(s => getStatusKey(s) === 'online').length
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-50 tracking-tight">Sessões WhatsApp</h1>
-          <p className="text-sm text-surface-400 mt-1">Gerencie suas conexões de números</p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button onClick={load} className="btn-secondary flex items-center gap-2 px-3 md:px-4 shadow-sm">
-            <MdRefresh size={18} /> <span className="hidden sm:inline">Atualizar</span>
-          </button>
-          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2 px-3 md:px-5">
-            <MdAdd size={20} /> <span className="hidden sm:inline">Nova Sessão</span>
-          </button>
-        </div>
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-muted-foreground">{onlineCount} de {sessions.length} chips conectados</p>
+        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors glow-primary">
+          <Plus className="h-4 w-4" /> Nova Sessão
+        </button>
       </div>
 
-      {/* Aviso: nenhum chip virtual no pool de aquecimento */}
-      {sessions.length > 0 && !sessions.some(s => s.tipo_chip === 'virtual' && s.status === 'connected') && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm"
-          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}>
-          <span className="text-lg flex-shrink-0">⚠️</span>
-          <div>
-            <p className="text-yellow-300 font-semibold">Nenhum chip virtual conectado no pool de aquecimento</p>
-            <p className="text-yellow-500/80 text-xs mt-0.5">
-              Chips físicos precisam de pelo menos 1 chip virtual para trocar mensagens e aquecer.
-              Conecte um chip virtual ou defina um dos chips existentes como <strong>Virtual</strong>.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Grid de sessões */}
-      {sessions.length === 0 ? (
-        <div className="glass-card text-center py-20 border-dashed border-2 border-surface-700 bg-surface-900/20">
-          <div className="w-20 h-20 rounded-full bg-surface-800 flex items-center justify-center mx-auto mb-6 shadow-inner">
-            <MdQrCode className="text-4xl text-surface-500" />
-          </div>
-          <p className="text-lg font-semibold text-surface-300">Nenhuma sessão criada</p>
-          <p className="text-sm text-surface-500 mt-2 max-w-sm mx-auto">
-            Para começar a enviar mensagens e extrair contatos, crie uma nova sessão e escaneie o QR Code com seu WhatsApp.
-          </p>
+      {loading ? (
+        <div className="glass-card p-12 text-center text-muted-foreground text-sm">Carregando...</div>
+      ) : sessions.length === 0 ? (
+        <div className="glass-card p-12 text-center">
+          <p className="text-muted-foreground text-sm">Nenhuma sessão criada ainda.</p>
+          <button onClick={() => setShowCreate(true)} className="mt-4 px-6 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90">
+            Criar primeira sessão
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {sessions.map(sess => {
-            const st = STATUS_CONFIG[sess.status] || STATUS_CONFIG.disconnected
-            const pct = sess.max_daily_messages > 0
-              ? Math.round((sess.messages_sent_today / sess.max_daily_messages) * 100) : 0
-            const phoneFormatted = formatPhone(sess.phone_number)
-
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+          {sessions.map((chip, i) => {
+            const stKey = getStatusKey(chip)
+            const st = statusConfig[stKey]
+            const score = chip.fuzzy_score ?? 0
+            const risk = chip.risco ?? 0
+            const ab = getAntiBanForChip(chip)
             return (
-              <div
-                key={sess.id}
-                className="glass-card space-y-5 p-0 overflow-hidden flex flex-col transition-all hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)] group"
+              <motion.div
+                key={chip.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+                whileHover={{ y: -4, borderColor: 'rgba(157,78,221,0.4)' }}
+                className={`glass-card p-5 ${risk > 60 && risk < 100 ? 'risk-pulse' : ''}`}
               >
-                {/* Banner ban iminente */}
-                {riscos[sess.id]?.risco > 80 && (
-                  <div className="px-4 py-2.5 text-center text-xs font-black uppercase tracking-widest animate-pulse"
-                    style={{ background: 'rgba(220,38,38,0.18)', color: '#f87171', borderBottom: '1px solid rgba(220,38,38,0.3)' }}>
-                    🚨 BAN IMINENTE — Pare os disparos imediatamente!
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground/90">{chip.name}</p>
+                    <p className="text-xs font-mono-data text-muted-foreground mt-0.5">
+                      {chip.phone_number || 'Aguardando conexão'}
+                    </p>
+                  </div>
+                  <span className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full ${st.color}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
+                    {st.label}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-4 mb-4">
+                  <FuzzyGauge score={score} />
+                  <div className="space-y-1.5 text-xs">
+                    <p className="text-muted-foreground">Tipo: <span className="text-foreground/80">{chip.tipo_chip === 'virtual' ? 'Virtual' : 'Físico'}</span></p>
+                    <p className="text-muted-foreground">Msgs hoje: <span className="font-mono-data text-foreground/80">{chip.messages_sent_today ?? 0}</span></p>
+                    <p className="text-muted-foreground">Máx/dia: <span className="font-mono-data text-foreground/80">{chip.max_daily_messages ?? '—'}</span></p>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">Risco de ban</span>
+                    <span className="font-mono-data text-muted-foreground">{risk}%</span>
+                  </div>
+                  <div className="h-1 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${risk > 60 ? 'bg-destructive' : risk > 30 ? 'bg-warning' : 'bg-success'}`}
+                      style={{ width: `${risk}%` }} />
+                  </div>
+                </div>
+
+                {(ab.score > 0 || ab.paused || ab.reconnects > 0) && (
+                  <div className="mb-4 px-2.5 py-2 rounded-xl bg-muted/20 border border-white/5">
+                    <div className="flex items-center gap-1 mb-2">
+                      <ShieldCheck className="h-3 w-3 text-muted-foreground" />
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Anti-Ban Live</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 text-center">
+                      <div className={`rounded-lg py-1.5 ${ab.score >= 85 ? 'bg-destructive/15' : ab.score >= 60 ? 'bg-warning/15' : ab.score >= 30 ? 'bg-yellow-500/10' : 'bg-success/10'}`}>
+                        <p className={`text-[12px] font-bold ${ab.score >= 85 ? 'text-destructive' : ab.score >= 60 ? 'text-warning' : ab.score >= 30 ? 'text-yellow-400' : 'text-success'}`}>{ab.score}</p>
+                        <p className="text-[9px] text-muted-foreground">Health</p>
+                      </div>
+                      <div className={`rounded-lg py-1.5 ${ab.paused ? 'bg-destructive/15' : 'bg-success/10'}`}>
+                        <p className={`text-[12px] font-bold ${ab.paused ? 'text-destructive' : 'text-success'}`}>{ab.paused ? `${ab.paused.minutos_restantes}m` : 'OK'}</p>
+                        <p className="text-[9px] text-muted-foreground">Circuit</p>
+                      </div>
+                      <div className="rounded-lg py-1.5 bg-muted/30">
+                        <p className="text-[12px] font-bold text-muted-foreground">{ab.reconnects}</p>
+                        <p className="text-[9px] text-muted-foreground">Reconex/h</p>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {/* Header do card */}
-                <div className={`p-6 border-b ${
-                  sess.status === 'connected'
-                    ? 'bg-primary-900/10 border-primary-900/30'
-                    : sess.status === 'error'
-                      ? 'bg-red-900/10 border-red-900/30'
-                      : sess.status === 'connecting'
-                        ? 'bg-amber-900/10 border-amber-900/30'
-                        : 'bg-surface-900/30 border-surface-800/50'
-                }`}>
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1 pr-3">
-                      {/* Nome */}
-                      <h3 className="text-lg font-bold text-surface-100 group-hover:text-primary-300 transition-colors truncate">
-                        {sess.name}
-                      </h3>
-
-                      {/* Telefone formatado ou status de conexão */}
-                      <div className="mt-1.5">
-                        {phoneFormatted ? (
-                          <span
-                            className="inline-flex items-center text-xs font-mono px-2 py-0.5 rounded"
-                            style={{
-                              background: 'rgba(11,9,20,0.5)',
-                              border: '1px solid rgba(45,34,68,0.8)',
-                              color: '#cbd5e1',
-                            }}
-                          >
-                            {phoneFormatted}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-surface-500 italic">
-                            {sess.status === 'connected' ? 'WhatsApp conectado' : 'Aguardando número'}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Badge tech do session_id com botão copiar */}
-                      <SessionIdBadge sessionId={sess.session_id} />
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                      <span className={`${st.cls} shadow-sm px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold`}>
-                        {st.label}
-                      </span>
-                      {/* Aquecido badge */}
-                      {sess.is_aquecido && !sess.is_veterano && (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
-                          style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.3)' }}>
-                          🔥 Aquecido
-                        </span>
-                      )}
-                      {/* Veterano badge */}
-                      {sess.is_veterano && (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
-                          style={{ background: 'rgba(234,179,8,0.2)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.4)' }}>
-                          ⭐ Veterano
-                        </span>
-                      )}
-                      {/* Em adaptação badge */}
-                      {sess.em_adaptacao && (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
-                          style={{ background: 'rgba(157,78,221,0.12)', color: '#c4b5fd', border: '1px solid rgba(157,78,221,0.3)' }}>
-                          ⏳ Em adaptação
-                        </span>
-                      )}
-                      {/* Risco de ban badge */}
-                      {riscos[sess.id]?.risco > 60 && (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold animate-pulse"
-                          style={{
-                            background: riscos[sess.id].risco > 80 ? 'rgba(220,38,38,0.18)' : 'rgba(239,68,68,0.12)',
-                            color: riscos[sess.id].risco > 80 ? '#f87171' : '#fca5a5',
-                            border: riscos[sess.id].risco > 80 ? '1px solid rgba(220,38,38,0.4)' : '1px solid rgba(239,68,68,0.3)',
-                          }}>
-                          ⚠️ {riscos[sess.id].risco > 80 ? 'BAN IMINENTE' : 'ATENÇÃO'}
-                        </span>
-                      )}
-                      {/* Chip type badge — clicável para trocar */}
-                      <button
-                        onClick={() => setTipoModal({ id: sess.id, name: sess.name, required: false })}
-                        title="Clique para alterar o tipo deste chip"
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                          sess.tipo_chip === 'virtual'
-                            ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25'
-                            : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
-                        }`}
-                      >
-                        {sess.tipo_chip === 'virtual'
-                          ? <><MdComputer size={13} /> 💻 Virtual</>
-                          : <><MdPhoneAndroid size={13} /> 📱 Físico</>
-                        }
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-6 pt-2 flex-1 space-y-5">
-                  {/* Recomendação de limite */}
-                  {sess.em_adaptacao ? (
-                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
-                      style={{ background: 'rgba(157,78,221,0.08)', border: '1px solid rgba(157,78,221,0.2)' }}>
-                      <span>⏳</span>
-                      <span className="text-purple-300 font-medium">Em adaptação — disparos em massa bloqueados</span>
-                    </div>
-                  ) : sess.is_veterano ? (
-                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
-                      style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.25)' }}>
-                      <span>⭐</span>
-                      <span className="text-yellow-300 font-medium">Chip veterano — limite recomendado: <strong>150 msgs/dia</strong></span>
-                    </div>
-                  ) : sess.is_aquecido ? (
-                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
-                      style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }}>
-                      <span>🔥</span>
-                      <span className="text-yellow-400 font-medium">Chip aquecido — limite recomendado: <strong>100 msgs/dia</strong></span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
-                      style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
-                      <span>⚠️</span>
-                      <span className="text-red-400/80 font-medium">Não aquecido — limite recomendado: <strong>30 msgs/dia</strong></span>
-                    </div>
-                  )}
-
-                  {/* Barra de limite diário */}
-                  <div className="bg-surface-900/40 rounded-xl p-3.5 border border-surface-800/60 shadow-inner">
-                    <div className="flex justify-between text-xs text-surface-400 font-medium mb-2">
-                      <span className="flex items-center gap-1.5">
-                        <div className="w-1 h-3 rounded-full bg-primary-500"></div>
-                        Disparos hoje
-                      </span>
-                      <span><strong className="text-surface-200">{sess.messages_sent_today}</strong> / {sess.max_daily_messages}</span>
-                    </div>
-                    <div className="w-full bg-surface-950 rounded-full h-2 overflow-hidden border border-surface-800 shadow-inner">
-                      <div
-                        className={`h-full rounded-full transition-all duration-1000 ease-out relative ${
-                          pct >= 90
-                            ? 'bg-red-500 shadow-[0_0_10px_theme(colors.red.500)]'
-                            : 'bg-gradient-to-r from-primary-600 to-primary-400 shadow-[0_0_10px_theme(colors.primary.500/50)]'
-                        }`}
-                        style={{ width: `${Math.min(pct, 100)}%` }}
-                      >
-                        <div className="absolute top-0 left-0 w-full h-full bg-white/20"></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Score Fuzzy */}
-                  <ScoreGauge diag={diagnosticos[sess.id]} />
-
-                  {/* Risco de Ban */}
-                  <RiscoBar ri={riscos[sess.id]} />
-
-                </div>
-
-                {/* Ações */}
-                <div className="p-4 bg-surface-900/50 border-t border-surface-700/50 flex gap-3">
-                  {sess.status === 'disconnected' || sess.status === 'error' ? (
-                    <button
-                      onClick={() => connect(sess)}
-                      className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm py-2.5 shadow-lg shadow-primary-900/20"
-                    >
-                      <MdQrCode size={18} /> Conectar
-                    </button>
-                  ) : sess.status === 'connected' ? (
-                    <button
-                      onClick={() => disconnect(sess.id)}
-                      className="btn-secondary flex-1 text-sm py-2.5 hover:bg-red-900/20 hover:text-red-400 hover:border-red-500/30 transition-all border border-transparent"
-                    >
-                      Desconectar
-                    </button>
-                  ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center py-1">
-                      <div className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-                        Aguardando QR Code
-                      </div>
-                      <div className="text-[10px] text-surface-500 mt-0.5">Clique em conectar novamente se demorar</div>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => deleteSession(sess.id)}
-                    className="p-2.5 rounded-xl bg-surface-800 hover:bg-red-900/30 text-surface-500 hover:text-red-400 transition-all border border-surface-700 hover:border-red-500/30 shadow-sm"
-                    title="Excluir sessão"
-                  >
-                    <MdDelete size={18} />
+                <div className="flex gap-2">
+                  <button onClick={() => connectSession(chip)} title="Conectar / QR Code"
+                    className="flex-1 h-8 rounded-lg bg-muted/50 border border-white/5 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                    <QrCode className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => disconnectSession(chip.id)} title="Desconectar"
+                    className="flex-1 h-8 rounded-lg bg-muted/50 border border-white/5 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                    <WifiOff className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={load} title="Atualizar"
+                    className="flex-1 h-8 rounded-lg bg-muted/50 border border-white/5 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => deleteSession(chip.id)} title="Remover"
+                    className="flex-1 h-8 rounded-lg bg-muted/50 border border-white/5 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-muted transition-colors">
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              </div>
+              </motion.div>
             )
           })}
         </div>
       )}
 
-      {/* Modal: Tipo do Chip (obrigatório ao conectar, opcional via badge) */}
-      {tipoModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="glass-card w-full max-w-sm p-0 overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.6)] border-surface-600/50 animate-[slideIn_0.3s_ease-out]">
-            <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/80 text-center">
-              <h2 className="text-lg font-bold text-white">Qual é o tipo deste chip?</h2>
-              <p className="text-sm text-surface-400 mt-1 font-mono">{tipoModal.name}</p>
-              {tipoModal.required && (
-                <p className="text-xs text-yellow-400/80 mt-2">⚠️ Escolha obrigatória para o aquecimento funcionar corretamente</p>
-              )}
-            </div>
-
-            <div className="p-6 space-y-3">
-              <button
-                onClick={() => definirTipoChip(tipoModal.id, 'fisico')}
-                className="w-full flex items-center gap-4 px-5 py-4 rounded-xl text-left transition-all border"
-                style={{ background: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.25)' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(34,197,94,0.15)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(34,197,94,0.08)'}
-              >
-                <span className="text-3xl">📱</span>
-                <div>
-                  <p className="text-white font-bold">Físico</p>
-                  <p className="text-xs text-surface-400 mt-0.5">Tem chip SIM real. Inicia conversas no aquecimento.</p>
-                </div>
+      {/* Modal: Nova Sessão */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          onClick={() => setShowCreate(false)}>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md glass-card p-8"
+            onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-foreground/90 mb-2">Nova Sessão</h2>
+            <p className="text-sm text-muted-foreground mb-6">Crie uma nova sessão do WhatsApp</p>
+            <input
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && createSession()}
+              placeholder="Nome da sessão (ex: Chip 01)"
+              className="w-full bg-muted/30 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 mb-4"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setShowCreate(false)}
+                className="flex-1 py-2 rounded-xl bg-muted text-foreground text-sm hover:bg-muted/80 transition-colors">
+                Cancelar
               </button>
-
-              <button
-                onClick={() => definirTipoChip(tipoModal.id, 'virtual')}
-                className="w-full flex items-center gap-4 px-5 py-4 rounded-xl text-left transition-all border"
-                style={{ background: 'rgba(59,130,246,0.08)', borderColor: 'rgba(59,130,246,0.25)' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.15)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(59,130,246,0.08)'}
-              >
-                <span className="text-3xl">💻</span>
-                <div>
-                  <p className="text-white font-bold">Virtual</p>
-                  <p className="text-xs text-surface-400 mt-0.5">Número VoIP / virtual. Recebe mensagens no aquecimento.</p>
-                </div>
+              <button onClick={createSession} disabled={creating || !newName.trim()}
+                className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
+                {creating ? 'Criando...' : 'Criar Sessão'}
               </button>
-
-              {!tipoModal.required && (
-                <button
-                  onClick={() => setTipoModal(null)}
-                  className="w-full btn-secondary py-2.5 text-sm mt-1"
-                >
-                  Cancelar
-                </button>
-              )}
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
-      {/* Modal QR Code */}
-      {qrSession && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-[fadeIn_0.2s_ease-out]">
-          <div className="glass-card w-full max-w-sm p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border-surface-600/50 animate-[slideIn_0.3s_ease-out] text-center">
-            <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/80">
-              <h2 className="text-lg font-bold text-white flex items-center justify-center gap-2">
-                <MdQrCode className="text-primary-400" size={22} />
-                Conectar Sessão
-              </h2>
-              <p className="text-sm text-surface-400 mt-1 font-medium">{qrSession.name}</p>
-            </div>
-
-            <div className="p-8">
-              <p className="text-xs text-surface-400 mb-6 bg-surface-800/50 p-3 rounded-lg border border-surface-700/50 text-left leading-relaxed">
-                1. Abra o WhatsApp no celular<br />
-                2. Toque em <strong>Menu</strong> ou <strong>Configurações</strong><br />
-                3. Selecione <strong>Aparelhos conectados</strong><br />
-                4. Toque em <strong>Conectar aparelho</strong>
-              </p>
-
-              {qrSession.status === 'connected' ? (
-                <div className="w-[240px] h-[240px] mx-auto bg-primary-900/20 border border-primary-500/30 rounded-2xl flex flex-col items-center justify-center gap-4 relative overflow-hidden shadow-inner">
-                  <div className="absolute inset-0 bg-gradient-to-t from-primary-500/10 to-transparent"></div>
-                  <div className="w-20 h-20 rounded-full bg-primary-500/20 flex items-center justify-center relative z-10 shadow-[0_0_20px_theme(colors.primary.500/30)]">
-                    <MdCheckCircle className="text-5xl text-primary-400" />
-                  </div>
-                  <p className="text-primary-300 font-bold text-lg relative z-10">Conectado com sucesso!</p>
-                </div>
-              ) : qrSession.qr ? (
-                <div className="relative inline-block">
-                  <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-primary-700 blur-xl opacity-20 rounded-2xl"></div>
-                  <img
-                    key={qrSession.qr}
-                    src={qrSession.qr}
-                    alt="QR Code"
-                    className="relative mx-auto rounded-2xl border-4 border-surface-800 bg-white p-3 shadow-2xl"
-                    width={240}
-                    height={240}
-                  />
-                </div>
-              ) : (
-                <div className="w-[240px] h-[240px] mx-auto bg-surface-900/50 border border-surface-700/50 rounded-2xl flex flex-col items-center justify-center gap-4 shadow-inner">
-                  <div className="w-12 h-12 border-4 border-surface-700 border-t-primary-500 rounded-full animate-spin" />
-                  <p className="text-surface-400 text-sm font-medium">Gerando QR Code...</p>
-                </div>
-              )}
-
-              <p className="text-[11px] font-medium text-surface-500 mt-6 flex items-center justify-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse"></span>
-                Atualiza automaticamente a cada 5 minutos
-              </p>
-            </div>
-
-            <div className="p-4 border-t border-surface-700/50 bg-surface-900/30">
-              <button
-                onClick={() => { setQrSession(null); load() }}
-                className="btn-secondary w-full py-2.5 font-medium"
-              >
-                Fechar janela
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Nova Sessão */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-[fadeIn_0.2s_ease-out]">
-          <div className="glass-card w-full max-w-md p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border-surface-600/50 animate-[slideIn_0.3s_ease-out]">
-            <div className="px-6 py-5 border-b border-surface-700/50 bg-surface-900/50">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center">
-                  <MdAdd size={20} />
-                </div>
-                Nova Sessão
-              </h2>
-            </div>
-
-            <form onSubmit={handleCreate} className="p-6 space-y-5">
-              <div>
-                <label className="label">Nome de identificação</label>
-                <input
-                  name="name" value={form.name} onChange={update}
-                  placeholder="Ex: Atendimento Comercial" required className="input"
-                />
-                <p className="text-[11px] font-medium text-surface-500 mt-1.5 ml-1 flex items-center gap-1">
-                  <MdInfo size={12} className="text-surface-400" />
-                  Um ID técnico será gerado automaticamente para esta sessão
-                </p>
+      {/* Modal: QR Code */}
+      {qrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          onClick={() => setQrModal(null)}>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md glass-card p-8 text-center"
+            onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-foreground/90 mb-2">Conectar: {qrModal.name}</h2>
+            <p className="text-sm text-muted-foreground mb-6">Escaneie o QR Code com seu WhatsApp</p>
+            {qrModal.qr_code ? (
+              <img src={qrModal.qr_code} alt="QR Code" className="mx-auto rounded-xl border border-white/10" style={{ maxWidth: 220 }} />
+            ) : (
+              <div className="h-48 w-48 mx-auto bg-muted/50 rounded-xl border border-white/10 flex items-center justify-center">
+                <QrCode className="h-24 w-24 text-muted-foreground/30" />
               </div>
-
-              <div className="flex gap-3 pt-4 border-t border-surface-700/50 mt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1 py-2.5">
-                  Cancelar
-                </button>
-                <button type="submit" disabled={loading} className="btn-primary flex-1 py-2.5">
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                      Criando...
-                    </span>
-                  ) : 'Criar Sessão'}
-                </button>
-              </div>
-            </form>
-          </div>
+            )}
+            <p className="text-xs text-muted-foreground mt-4">Aguardando leitura do QR Code...</p>
+            <button onClick={() => setQrModal(null)}
+              className="mt-6 px-6 py-2 rounded-xl bg-muted text-foreground text-sm hover:bg-muted/80 transition-colors">
+              Fechar
+            </button>
+          </motion.div>
         </div>
       )}
     </div>

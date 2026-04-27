@@ -96,3 +96,21 @@ def reset_score(session_waha_id: str):
     """Reseta score de risco (ex: apos reconexao bem-sucedida e estavel)."""
     _risk_scores[session_waha_id] = 0
     logger.info(f"[HM] {session_waha_id} score resetado para 0")
+
+
+def get_all_scores() -> dict[str, int]:
+    """Retorna todos os scores de risco atuais (session_waha_id -> score)."""
+    return {k: v for k, v in _risk_scores.items() if v > 0}
+
+
+def get_chips_em_risco() -> list[dict]:
+    """Retorna lista de chips com score > 0, ordenado pelo score desc."""
+    return sorted(
+        [
+            {"session_id": sid, "score": score, "action": get_action(sid)}
+            for sid, score in _risk_scores.items()
+            if score > 0
+        ],
+        key=lambda x: x["score"],
+        reverse=True,
+    )

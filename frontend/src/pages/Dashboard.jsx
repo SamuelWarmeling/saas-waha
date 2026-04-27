@@ -92,6 +92,7 @@ export default function Dashboard() {
   const [aquecStats, setAquecStats] = useState(null)
   const [chipRiscos, setChipRiscos] = useState([])
   const [trialInfo, setTrialInfo] = useState(null)
+  const [antiBan, setAntiBan] = useState(null)
   const activityRef = useRef(null)
   const sessionsRef = useRef(null)
   const riscosRef   = useRef(null)
@@ -112,6 +113,7 @@ export default function Dashboard() {
     api.get('/funnel/stats').then(r => setFunnelStats(r.data)).catch(() => {})
     api.get('/aquecimento/stats').then(r => setAquecStats(r.data)).catch(() => {})
     api.get('/chips/risco').then(r => setChipRiscos(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    api.get('/antiban/status').then(r => setAntiBan(r.data)).catch(() => {})
 
     // Activity polling: 10s
     activityRef.current = setInterval(loadAtividades, 10000)
@@ -573,6 +575,54 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+
+          {/* Card Status Anti-Ban */}
+          {antiBan && (
+            <div className="glass-card">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-surface-700/50">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>
+                  <MdCheckCircle size={18} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-surface-100">Anti-Ban Status</h2>
+                  <p className="text-[10px] text-surface-500">{antiBan.protecoes_ativas} protecoes ativas</p>
+                </div>
+              </div>
+              {antiBan.ban_wave?.sistema_pausado ? (
+                <div className="rounded-xl px-3 py-2 mb-3 text-xs font-semibold text-red-300" style={{ background: 'rgba(127,29,29,0.4)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  Sistema pausado — onda de ban detectada
+                </div>
+              ) : (
+                <div className="rounded-xl px-3 py-2 mb-3 text-xs font-semibold text-green-300" style={{ background: 'rgba(21,128,61,0.15)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                  Sistema operando normalmente
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="rounded-xl p-2.5 text-center" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                  <div className="text-base font-bold text-green-400">{antiBan.protecoes_ativas}</div>
+                  <div className="text-[9px] text-surface-500">Protecoes</div>
+                </div>
+                <div className="rounded-xl p-2.5 text-center" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                  <div className="text-base font-bold text-red-400">{antiBan.bans_hoje}</div>
+                  <div className="text-[9px] text-surface-500">Bans/hora</div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                {(antiBan.protecoes_lista || []).map(p => (
+                  <div key={p} className="flex items-center gap-2 text-[10px]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                    <span className="text-surface-400">{p}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex justify-between text-[10px] text-surface-500">
+                <span>Block rate 24h</span>
+                <span className={`font-bold ${antiBan.block_rate_medio > 10 ? 'text-red-400' : antiBan.block_rate_medio > 5 ? 'text-yellow-400' : 'text-green-400'}`}>
+                  {antiBan.block_rate_medio}%
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Card Funil de Leads */}
           <div className="glass-card">

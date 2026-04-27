@@ -78,3 +78,29 @@ def circuit_open_until(session_waha_id: str) -> datetime | None:
     if is_circuit_open(session_waha_id):
         return _circuit_open_until.get(session_waha_id)
     return None
+
+
+def get_all_open_circuits() -> list[dict]:
+    """Retorna lista de chips com circuit aberto (pausados)."""
+    now = datetime.now(timezone.utc)
+    result = []
+    for sid, until in list(_circuit_open_until.items()):
+        if now < until:
+            mins = int((until - now).total_seconds() / 60)
+            result.append({
+                "session_id": sid,
+                "pausado_ate": until.isoformat(),
+                "minutos_restantes": mins,
+            })
+    return result
+
+
+def get_reconnect_counts() -> dict[str, int]:
+    """Retorna contagem de reconexoes na ultima hora por chip."""
+    now = datetime.now(timezone.utc)
+    one_hour_ago = now - timedelta(hours=1)
+    return {
+        sid: len([t for t in times if t > one_hour_ago])
+        for sid, times in _reconnect_history.items()
+        if any(t > one_hour_ago for t in times)
+    }

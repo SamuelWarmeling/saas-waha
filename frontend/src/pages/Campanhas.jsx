@@ -58,11 +58,12 @@ export default function Campanhas() {
 
   async function createCampaign() {
     if (!form.name.trim()) { toast.error('Nome obrigatório'); return }
+    if (!form.message.trim()) { toast.error('Adicione ao menos 1 mensagem'); return }
     setSaving(true)
     try {
       await api.post('/campanhas', {
         name: form.name.trim(),
-        messages: form.message.trim() ? [form.message.trim()] : [],
+        messages: [form.message.trim()],
         session_ids: form.session_ids,
         fonte: 'lista',
       })
@@ -406,7 +407,7 @@ export default function Campanhas() {
                 className="flex-1 py-2.5 rounded-xl bg-muted text-foreground text-sm hover:bg-muted/80 transition-colors">
                 Cancelar
               </button>
-              <button onClick={createCampaign} disabled={saving || !form.name.trim()}
+              <button onClick={createCampaign} disabled={saving || !form.name.trim() || !form.message.trim()}
                 className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
                 {saving ? 'Criando...' : 'Criar Campanha'}
               </button>

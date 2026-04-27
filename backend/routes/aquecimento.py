@@ -893,7 +893,7 @@ async def processar_aquecimento():
                             aq.meta_hoje = random.randint(3, 5)
                             aq.inicio_dia_atual = now
                             maint_delay = int(human_delay(30 * 60 * 1000, 60 * 60 * 1000) / 60)
-                        aq.proximo_envio = now + timedelta(minutes=max(30, maint_delay))
+                            aq.proximo_envio = now + timedelta(minutes=max(30, maint_delay))
                             descricao_status = "manutenção contínua ativada"
                         else:
                             aq.status = models.AquecimentoStatus.concluido

@@ -79,6 +79,7 @@ class User(Base):
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
     daily_stats = relationship("DailyStat", back_populates="user", cascade="all, delete-orphan")
     atividade_logs = relationship("AtividadeLog", back_populates="user", cascade="all, delete-orphan")
+    alertas = relationship("Alerta", back_populates="user", cascade="all, delete-orphan")
 
 
 class WhatsAppSession(Base):
@@ -102,6 +103,10 @@ class WhatsAppSession(Base):
     em_adaptacao = Column(Boolean, default=False, server_default="false", nullable=False)
     reconexao_tentativas = Column(Integer, default=0, server_default="0", nullable=False)
     reconexao_ultima_em = Column(DateTime(timezone=True), nullable=True)
+    is_system = Column(Boolean, default=False, server_default="false", nullable=False)
+    system_disponivel = Column(Boolean, default=True, server_default="true", nullable=False)
+    system_max_msgs_dia = Column(Integer, default=200, server_default="200", nullable=False)
+    system_msgs_hoje = Column(Integer, default=0, server_default="0", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -151,6 +156,7 @@ class Campaign(Base):
     delay_min = Column(Integer, default=5)
     delay_max = Column(Integer, default=15)
     ordem_mensagens = Column(String(20), default="aleatorio", nullable=False, server_default="aleatorio")
+    usar_chips_sistema = Column(Boolean, default=False, server_default="false", nullable=False)
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -628,6 +634,25 @@ class TentativaSuspeita(Base):
     __table_args__ = (
         Index("ix_tentativas_suspeitas_ip", "ip"),
         Index("ix_tentativas_suspeitas_criado_em", "criado_em"),
+    )
+
+
+class Alerta(Base):
+    """Alertas em tempo real para o usuário."""
+    __tablename__ = "alertas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    tipo = Column(String(50), nullable=False)
+    mensagem = Column(String(500), nullable=False)
+    lido = Column(Boolean, default=False, nullable=False, server_default="false")
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="alertas")
+
+    __table_args__ = (
+        Index("ix_alertas_user_id", "user_id"),
+        Index("ix_alertas_lido", "lido"),
     )
 
 

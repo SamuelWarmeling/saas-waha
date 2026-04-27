@@ -26,6 +26,7 @@ export default function Campanhas() {
   const [form, setForm] = useState({ name: '', message: '', session_ids: [] })
   const [saving, setSaving] = useState(false)
   const [antiBan, setAntiBan] = useState(null)
+  const [riskModal, setRiskModal] = useState(null) // { campaign, data, loading }
 
   const load = useCallback(async () => {
     try {
@@ -75,13 +76,35 @@ export default function Campanhas() {
   }
 
   async function action(campaign, tipo) {
-    const endpoints = { start: 'iniciar', pause: 'pausar', stop: 'parar' }
+    if (tipo === 'start') {
+      // Primeiro: análise de risco
+      setRiskModal({ campaign, data: null, loading: true })
+      try {
+        const { data } = await api.get(`/campanhas/${campaign.id}/analise-risco`)
+        setRiskModal({ campaign, data, loading: false })
+      } catch {
+        setRiskModal(null)
+        await _doStart(campaign)
+      }
+      return
+    }
+    const endpoints = { pause: 'pausar', stop: 'parar' }
     try {
       await api.post(`/campanhas/${campaign.id}/${endpoints[tipo]}`)
-      toast.success(tipo === 'start' ? 'Campanha iniciada!' : tipo === 'pause' ? 'Campanha pausada' : 'Campanha parada')
+      toast.success(tipo === 'pause' ? 'Campanha pausada' : 'Campanha parada')
       load()
     } catch (e) {
-      toast.error(e.response?.data?.detail || `Erro ao ${tipo === 'start' ? 'iniciar' : tipo === 'pause' ? 'pausar' : 'parar'}`)
+      toast.error(e.response?.data?.detail || `Erro ao ${tipo === 'pause' ? 'pausar' : 'parar'}`)
+    }
+  }
+
+  async function _doStart(campaign) {
+    try {
+      await api.post(`/campanhas/${campaign.id}/iniciar`)
+      toast.success('Campanha iniciada!')
+      load()
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao iniciar')
     }
   }
 
@@ -213,6 +236,106 @@ export default function Campanhas() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Modal: Análise de Risco */}
+      {riskModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          onClick={() => setRiskModal(null)}>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-lg glass-card p-6"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-foreground/90">Análise de Risco</h2>
+              <button onClick={() => setRiskModal(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {riskModal.loading ? (
+              <div className="py-12 text-center text-muted-foreground text-sm">Analisando risco...</div>
+            ) : riskModal.data ? (() => {
+              const d = riskModal.data
+              const nivelConfig = {
+                baixo:   { color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/20',  label: 'Campanha segura para disparar' },
+                medio:   { color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', label: 'Atencao: alguns riscos detectados' },
+                alto:    { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', label: 'Alto risco de ban. Recomendamos corrigir.' },
+                critico: { color: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/20', label: 'Nao recomendamos disparar agora' },
+              }
+              const nc = nivelConfig[d.nivel] || nivelConfig.baixo
+              const circ = 2 * Math.PI * 36
+              const offset = circ - (d.score / 100) * circ
+              return (
+                <div>
+                  {/* Score gauge */}
+                  <div className={`flex items-center gap-5 p-4 rounded-xl mb-4 ${nc.bg} border ${nc.border}`}>
+                    <div className="relative h-20 w-20 flex-shrink-0">
+                      <svg className="transform -rotate-90 w-20 h-20">
+                        <circle cx="40" cy="40" r="36" stroke="currentColor" strokeWidth="5" fill="transparent" className="text-muted/30" />
+                        <circle cx="40" cy="40" r="36" stroke="currentColor" strokeWidth="5" fill="transparent"
+                          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+                          className={`${nc.color} transition-all duration-700`} />
+                      </svg>
+                      <span className={`absolute inset-0 flex items-center justify-center font-bold text-xl ${nc.color}`}>{d.score}</span>
+                    </div>
+                    <div>
+                      <p className={`text-sm font-bold ${nc.color}`}>{d.nivel.charAt(0).toUpperCase() + d.nivel.slice(1)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{nc.label}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{d.chips_total} chip(s) · {d.contatos_total} contatos</p>
+                    </div>
+                  </div>
+
+                  {/* Fatores */}
+                  {d.fatores.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Fatores de risco</p>
+                      <ul className="space-y-1">
+                        {d.fatores.map((f, i) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-foreground/80">
+                            <span className="text-destructive mt-0.5">•</span> {f}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Recomendações */}
+                  {d.recomendacoes.length > 0 && (
+                    <div className="mb-5">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Recomendacoes</p>
+                      <ul className="space-y-1">
+                        {d.recomendacoes.map((r, i) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                            <span className="text-success mt-0.5">→</span> {r}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Botões */}
+                  <div className="flex gap-3">
+                    <button onClick={() => setRiskModal(null)}
+                      className="flex-1 py-2 rounded-xl bg-muted text-foreground text-sm hover:bg-muted/80 transition-colors">
+                      Cancelar
+                    </button>
+                    <button onClick={() => setRiskModal(null)}
+                      className="flex-1 py-2 rounded-xl bg-muted/50 border border-white/10 text-foreground text-sm hover:bg-muted transition-colors">
+                      Corrigir problemas
+                    </button>
+                    <button
+                      onClick={async () => { setRiskModal(null); await _doStart(riskModal.campaign) }}
+                      disabled={!d.pode_disparar}
+                      className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      {d.nivel === 'critico' ? 'Bloqueado' : 'Disparar mesmo assim'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })() : null}
+          </motion.div>
         </div>
       )}
 

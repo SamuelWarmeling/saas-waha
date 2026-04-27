@@ -498,6 +498,39 @@ async def send_campaign(campaign_id: int, user_id: int):
 
         n_chips = len(sessoes_candidatas)
 
+        # ── Hot leads: prioriza contatos que já responderam (funil quente/morno) ─
+        contact_ids_list = [cc.contact_id for cc in pending]
+        if contact_ids_list:
+            try:
+                funnel_rows = db.query(
+                    models.FunnelContato.contato_id,
+                    models.FunnelContato.temperatura,
+                ).filter(
+                    models.FunnelContato.contato_id.in_(contact_ids_list),
+                ).all()
+                funnel_temp_map: dict[int, str] = {}
+                _priority_order = {
+                    models.FunnelTemperatura.convertido: 0,
+                    models.FunnelTemperatura.quente: 0,
+                    models.FunnelTemperatura.morno: 1,
+                    models.FunnelTemperatura.frio: 2,
+                }
+                for row in funnel_rows:
+                    curr = funnel_temp_map.get(row.contato_id)
+                    new_p = _priority_order.get(row.temperatura, 2)
+                    if curr is None or new_p < _priority_order.get(curr, 2):
+                        funnel_temp_map[row.contato_id] = row.temperatura
+
+                def _lead_priority(cc):
+                    return _priority_order.get(funnel_temp_map.get(cc.contact_id), 2)
+
+                hot_count = sum(1 for cc in pending if _lead_priority(cc) == 0)
+                pending.sort(key=_lead_priority)
+                if hot_count > 0:
+                    print(f"[CAMPANHA-{campaign_id}] {hot_count} leads quentes priorizados na fila")
+            except Exception as _e:
+                print(f"[CAMPANHA-{campaign_id}] Aviso: hot leads prioritization falhou: {_e}")
+
         # ── Ban wave check antes de disparar ─────────────────────────────────
         if ban_wave_detector.is_system_paused():
             until = ban_wave_detector.paused_until()
@@ -739,6 +772,26 @@ async def send_campaign(campaign_id: int, user_id: int):
                     used_session.messages_sent_today += 1
                 db.commit()
 
+                # ── Reply ratio guard: verifica a cada 50 msgs ───────────────
+                if msgs_nesta_sessao > 0 and msgs_nesta_sessao % 50 == 0:
+                    rr_stats = _chip_stats.get(used_session.session_id, [0, 0])
+                    if rr_stats[0] >= 10:
+                        fail_ratio = rr_stats[1] / rr_stats[0]
+                        if fail_ratio > 0.20:
+                            print(
+                                f"[CAMPANHA-{campaign_id}] Chip {used_session.session_id} "
+                                f"ratio muito baixo ({fail_ratio:.0%}) — pausando campanha"
+                            )
+                            campaign.status = models.CampaignStatus.paused
+                            db.commit()
+                            break
+                        elif fail_ratio > 0.10:
+                            print(
+                                f"[CAMPANHA-{campaign_id}] Chip {used_session.session_id} "
+                                f"reply ratio baixo ({fail_ratio:.0%}) — reduzindo velocidade 50%"
+                            )
+                            await asyncio.sleep(base_delay * 1.5)
+
                 # Pausa longa a cada 50 mensagens (simula pausa humana)
                 if msgs_nesta_sessao > 0 and msgs_nesta_sessao % _PAUSE_EVERY_N == 0:
                     pause_secs = random.randint(_PAUSE_MIN_SECS, _PAUSE_MAX_SECS)
@@ -927,6 +980,149 @@ def get_slots(
         "limite": limite,
         "disponiveis": max(0, limite - em_uso),
         "na_fila_count": na_fila,
+    }
+
+
+@router.get("/{campaign_id}/analise-risco")
+def analise_risco_campanha(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Análise de risco anti-ban antes de disparar uma campanha. Score 0-100."""
+    campaign = db.query(models.Campaign).filter(
+        models.Campaign.id == campaign_id,
+        models.Campaign.user_id == current_user.id,
+    ).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campanha não encontrada")
+
+    msgs = db.query(models.CampaignMessage).filter(
+        models.CampaignMessage.campaign_id == campaign_id
+    ).order_by(models.CampaignMessage.ordem).all()
+
+    camp_sessions_rows = db.query(models.CampaignSession).filter(
+        models.CampaignSession.campaign_id == campaign_id
+    ).all()
+    session_ids = [cs.session_id for cs in camp_sessions_rows]
+    sessions = (
+        db.query(models.WhatsAppSession).filter(
+            models.WhatsAppSession.id.in_(session_ids)
+        ).all()
+        if session_ids else []
+    )
+
+    score = 0
+    fatores = []
+    recomendacoes = []
+
+    # Fator 1: chip sem aquecimento (+20)
+    if not sessions:
+        score += 15
+        fatores.append("Nenhum chip selecionado para a campanha")
+        recomendacoes.append("Selecione pelo menos um chip conectado antes de disparar")
+    else:
+        chips_frios = [s for s in sessions if not getattr(s, "is_aquecido", False)]
+        if chips_frios:
+            score += 20
+            names = ", ".join(s.name for s in chips_frios[:3])
+            fatores.append(f"Chip(s) sem aquecimento completo: {names}")
+            recomendacoes.append("Aqueça o chip por pelo menos 7 dias antes de usar em campanhas")
+
+    # Fator 2: limite diário alto (+15)
+    user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if user and getattr(user, "dispatch_daily_limit", 200) > 200:
+        score += 15
+        fatores.append(f"Limite diário elevado: {user.dispatch_daily_limit} msgs/dia")
+        recomendacoes.append("Reduza o limite para no máximo 200 msgs/dia inicialmente")
+
+    # Fator 3: mensagens idênticas/sem variação (+25)
+    if msgs:
+        textos = [m.text or "" for m in msgs if m.tipo in ("text", "text", None)]
+        textos_unicos = set(t for t in textos if t.strip())
+        if len(textos_unicos) == 1:
+            score += 25
+            fatores.append("Todas as mensagens são idênticas (fingerprint de spam)")
+            recomendacoes.append("Crie 2-3 variações da mensagem para reduzir detecção de spam")
+    else:
+        score += 20
+        fatores.append("Nenhuma mensagem configurada na campanha")
+        recomendacoes.append("Configure pelo menos uma mensagem antes de disparar")
+
+    # Fator 4: chip com health score > 60 (+20)
+    chips_risco = []
+    for s in sessions:
+        hs = health_monitor.get_score(s.session_id)
+        if hs > 60:
+            chips_risco.append(f"{s.name} (score={hs})")
+    if chips_risco:
+        score += 20
+        fatores.append(f"Chips com risco elevado: {', '.join(chips_risco[:2])}")
+        recomendacoes.append("Aguarde os chips de alto risco se recuperarem antes de disparar")
+
+    # Fator 5: horário fora do comercial (+10) — usa BRT (UTC-3)
+    now_utc_hour = datetime.now(timezone.utc).hour
+    brt_hour = (now_utc_hour - 3) % 24
+    if not (8 <= brt_hour <= 20):
+        score += 10
+        fatores.append(f"Horário fora do período comercial ({brt_hour}h BRT)")
+        recomendacoes.append("Dispare entre 8h e 20h (horário de Brasília) para maior entrega")
+
+    # Fator 6: contatos inválidos (+15)
+    invalid_count = (
+        db.query(models.CampaignContact)
+        .join(models.Contact, models.CampaignContact.contact_id == models.Contact.id)
+        .filter(
+            models.CampaignContact.campaign_id == campaign_id,
+            models.Contact.is_invalid == True,
+        )
+        .count()
+    )
+    if invalid_count > 0 and campaign.total_contacts > 0:
+        pct = round(invalid_count / campaign.total_contacts * 100, 1)
+        score += 15
+        fatores.append(f"{invalid_count} contatos inválidos ({pct}% da lista)")
+        recomendacoes.append("Remova os contatos inválidos antes de disparar para proteger o chip")
+
+    # Fator 7: sem instrução de opt-out (+20) — opt-out é adicionado automaticamente
+    # Apenas alerta se a campanha não tem nenhum texto (impossível adicionar footer)
+    has_any_text = any((m.text or "").strip() for m in msgs)
+    if msgs and not has_any_text:
+        score += 20
+        fatores.append("Campanha sem texto — opt-out automático não pode ser adicionado")
+        recomendacoes.append("Adicione texto na mensagem para que o opt-out seja incluído automaticamente")
+
+    # Fator 8: link na primeira mensagem (+10)
+    if msgs:
+        first_text = msgs[0].text or ""
+        if "http://" in first_text or "https://" in first_text:
+            score += 10
+            fatores.append("Link detectado na primeira mensagem")
+            recomendacoes.append("Envie o link em uma mensagem separada — links na 1ª msg aumentam detecção de spam")
+
+    score = min(100, score)
+
+    if score <= 30:
+        nivel = "baixo"
+        pode_disparar = True
+    elif score <= 60:
+        nivel = "medio"
+        pode_disparar = True
+    elif score <= 80:
+        nivel = "alto"
+        pode_disparar = True
+    else:
+        nivel = "critico"
+        pode_disparar = False
+
+    return {
+        "score": score,
+        "nivel": nivel,
+        "fatores": fatores,
+        "recomendacoes": recomendacoes,
+        "pode_disparar": pode_disparar,
+        "chips_total": len(sessions),
+        "contatos_total": campaign.total_contacts,
     }
 
 

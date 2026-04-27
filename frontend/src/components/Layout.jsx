@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bell, User, ShieldAlert } from "lucide-react";
+import { Bell, User, ShieldAlert, X, Check, CheckCheck } from "lucide-react";
 import Sidebar from "./Sidebar";
 import api from "../api";
 
@@ -81,9 +81,78 @@ function BanWaveBanner({ data }) {
   );
 }
 
+const ALERTA_ICONS = {
+  ban_wave: "🚨",
+  chip_risco: "⚠️",
+  circuit_breaker: "🔌",
+  block_rate: "📊",
+  campanha_concluida: "✅",
+  lead_quente: "🔥",
+  trial_expirando: "⏰",
+};
+
+function AlertasDropdown({ alertas, onLer, onLerTodos, onClose }) {
+  const naoLidos = alertas.filter(a => !a.lido);
+  function formatTempo(iso) {
+    const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
+    if (diff < 60) return `${diff}s`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}min`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    return `${Math.floor(diff / 86400)}d`;
+  }
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.96 }}
+      transition={{ duration: 0.15 }}
+      className="absolute right-0 top-10 w-80 glass-card shadow-2xl border border-white/10 z-50 overflow-hidden"
+      style={{ maxHeight: "420px" }}
+    >
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+        <span className="text-sm font-semibold text-foreground/90">Alertas</span>
+        <div className="flex items-center gap-2">
+          {naoLidos.length > 0 && (
+            <button onClick={onLerTodos} title="Marcar todos como lidos"
+              className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
+              <CheckCheck className="h-3 w-3" /> Todos lidos
+            </button>
+          )}
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      {alertas.length === 0 ? (
+        <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+          Nenhum alerta por enquanto
+        </div>
+      ) : (
+        <ul className="overflow-y-auto" style={{ maxHeight: "340px" }}>
+          {alertas.map(a => (
+            <li key={a.id}
+              onClick={() => !a.lido && onLer(a.id)}
+              className={`flex items-start gap-3 px-4 py-3 border-b border-white/5 cursor-pointer transition-colors hover:bg-muted/20 ${a.lido ? "opacity-50" : ""}`}>
+              <span className="text-base flex-shrink-0 mt-0.5">{ALERTA_ICONS[a.tipo] || "🔔"}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-foreground/90 leading-snug">{a.mensagem}</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">{formatTempo(a.criado_em)} atrás</p>
+              </div>
+              {!a.lido && <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </motion.div>
+  );
+}
+
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [antiBan, setAntiBan] = useState(null);
+  const [alertas, setAlertas] = useState([]);
+  const [alertasOpen, setAlertasOpen] = useState(false);
+  const bellRef = useRef(null);
   const location = useLocation();
   const title = pageTitles[location.pathname] || "WahaSaaS";
 
@@ -99,6 +168,41 @@ export default function Layout() {
     const id = setInterval(poll, 30000);
     return () => { mounted = false; clearInterval(id); };
   }, []);
+
+  // Polling de alertas a cada 30s
+  useEffect(() => {
+    let mounted = true;
+    const poll = () => {
+      api.get("/alertas")
+        .then(r => { if (mounted) setAlertas(Array.isArray(r.data) ? r.data : []) })
+        .catch(() => {});
+    };
+    poll();
+    const id = setInterval(poll, 30000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    if (!alertasOpen) return;
+    const handler = (e) => {
+      if (bellRef.current && !bellRef.current.contains(e.target)) setAlertasOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [alertasOpen]);
+
+  async function lerAlerta(id) {
+    setAlertas(prev => prev.map(a => a.id === id ? { ...a, lido: true } : a));
+    api.post(`/alertas/${id}/ler`).catch(() => {});
+  }
+
+  async function lerTodos() {
+    setAlertas(prev => prev.map(a => ({ ...a, lido: true })));
+    api.post("/alertas/ler-todos").catch(() => {});
+  }
+
+  const naoLidosCount = alertas.filter(a => !a.lido).length;
 
   return (
     <div className="min-h-screen bg-background grid-pattern">
@@ -124,10 +228,29 @@ export default function Layout() {
                 </span>
               </div>
             )}
-            <button className="relative text-muted-foreground hover:text-foreground transition-colors">
-              <Bell className="h-5 w-5" />
-              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary border-2 border-background" />
-            </button>
+            <div className="relative" ref={bellRef}>
+              <button
+                onClick={() => setAlertasOpen(v => !v)}
+                className="relative text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Bell className="h-5 w-5" />
+                {naoLidosCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] rounded-full bg-primary border-2 border-background flex items-center justify-center text-[8px] font-bold text-primary-foreground px-0.5">
+                    {naoLidosCount > 9 ? "9+" : naoLidosCount}
+                  </span>
+                )}
+              </button>
+              <AnimatePresence>
+                {alertasOpen && (
+                  <AlertasDropdown
+                    alertas={alertas}
+                    onLer={lerAlerta}
+                    onLerTodos={lerTodos}
+                    onClose={() => setAlertasOpen(false)}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
             <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
               <User className="h-4 w-4" />
             </div>

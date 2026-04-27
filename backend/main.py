@@ -728,6 +728,33 @@ def migrate_status_diario():
         logger.error(f"[MIGRATE] Erro em migrate_status_diario: {e}")
 
 
+def migrate_alertas():
+    """Cria tabela alertas para o sistema de notificações em tempo real."""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'alertas')"
+            ))
+            if not result.scalar():
+                logger.info("[MIGRATE] Criando tabela alertas...")
+                conn.execute(text("""
+                    CREATE TABLE alertas (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        tipo VARCHAR(50) NOT NULL,
+                        mensagem VARCHAR(500) NOT NULL,
+                        lido BOOLEAN NOT NULL DEFAULT FALSE,
+                        criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """))
+                conn.execute(text("CREATE INDEX ix_alertas_user_id ON alertas (user_id)"))
+                conn.execute(text("CREATE INDEX ix_alertas_lido ON alertas (lido)"))
+                conn.commit()
+                logger.info("[MIGRATE] Tabela alertas criada.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_alertas: {e}")
+
+
 def migrate_system_chips():
     """Adiciona colunas de chips do sistema em whatsapp_sessions e usar_chips_sistema em campaigns."""
     cols = [
@@ -996,6 +1023,7 @@ async def lifespan(app: FastAPI):
             migrate_email_verificacao_tipo()
             migrate_status_diario()
             migrate_system_chips()
+            migrate_alertas()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")
@@ -1092,6 +1120,8 @@ app.include_router(auth_verificacao_router)
 app.include_router(stripe_webhook_router)
 from routes.antiban import router as antiban_router
 app.include_router(antiban_router)
+from routes.alertas import router as alertas_router
+app.include_router(alertas_router)
 
 
 @app.get("/")

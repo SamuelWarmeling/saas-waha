@@ -93,6 +93,7 @@ export default function Dashboard() {
   const [chipRiscos, setChipRiscos] = useState([])
   const [trialInfo, setTrialInfo] = useState(null)
   const [antiBan, setAntiBan] = useState(null)
+  const [healthData, setHealthData] = useState(null)
   const activityRef = useRef(null)
   const sessionsRef = useRef(null)
   const riscosRef   = useRef(null)
@@ -114,6 +115,7 @@ export default function Dashboard() {
     api.get('/aquecimento/stats').then(r => setAquecStats(r.data)).catch(() => {})
     api.get('/chips/risco').then(r => setChipRiscos(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     api.get('/antiban/status').then(r => setAntiBan(r.data)).catch(() => {})
+    api.get('/chips/health-dashboard').then(r => setHealthData(r.data)).catch(() => {})
 
     // Activity polling: 10s
     activityRef.current = setInterval(loadAtividades, 10000)
@@ -304,6 +306,59 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ── Saúde dos Chips ──────────────────────────────────────────────────── */}
+      {healthData && healthData.chips && healthData.chips.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-surface-300">Saude dos Chips</h2>
+            <div className="flex items-center gap-3 text-[11px] text-surface-400">
+              <span>Score medio: <strong className={`${healthData.resumo.score_medio >= 60 ? 'text-red-400' : healthData.resumo.score_medio >= 30 ? 'text-yellow-400' : 'text-green-400'}`}>{healthData.resumo.score_medio}</strong></span>
+              {healthData.resumo.ban_wave?.sistema_pausado
+                ? <span className="text-red-400 font-semibold">Ban wave ativa</span>
+                : <span className="text-green-400">Sistema normal</span>}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+            {healthData.chips.map(chip => {
+              const hScore = chip.health_score
+              const scoreColor = hScore >= 85 ? 'text-destructive' : hScore >= 60 ? 'text-orange-400' : hScore >= 30 ? 'text-yellow-400' : 'text-green-400'
+              const scoreBg = hScore >= 85 ? 'bg-destructive/10' : hScore >= 60 ? 'bg-orange-500/10' : hScore >= 30 ? 'bg-yellow-500/10' : 'bg-green-500/10'
+              const nivelLabel = hScore >= 85 ? 'Critico' : hScore >= 60 ? 'Risco' : hScore >= 30 ? 'Atencao' : 'Saudavel'
+              const circ = 2 * Math.PI * 20
+              const offset = circ - (hScore / 100) * circ
+              return (
+                <div key={chip.id} className={`glass-card p-4 ${hScore >= 60 ? 'border border-red-500/20' : ''}`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-foreground/90 truncate">{chip.name}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{chip.phone_number || '—'}</p>
+                    </div>
+                    <div className={`relative h-11 w-11 flex-shrink-0`}>
+                      <svg className="transform -rotate-90 w-11 h-11">
+                        <circle cx="22" cy="22" r="20" stroke="currentColor" strokeWidth="3" fill="transparent" className="text-muted/40" />
+                        <circle cx="22" cy="22" r="20" stroke="currentColor" strokeWidth="3" fill="transparent"
+                          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+                          className={`${scoreColor} transition-all duration-700`} />
+                      </svg>
+                      <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold ${scoreColor}`}>{hScore}</span>
+                    </div>
+                  </div>
+                  <div className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full w-fit mb-2 ${scoreBg} ${scoreColor}`}>{nivelLabel}</div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[9px] text-muted-foreground">
+                    <span>Block rate <span className={`font-bold ${chip.block_rate > 10 ? 'text-destructive' : chip.block_rate > 5 ? 'text-warning' : 'text-foreground/70'}`}>{chip.block_rate}%</span></span>
+                    <span>Reconex <span className="font-bold text-foreground/70">{chip.reconexoes_hora}/h</span></span>
+                    <span>Msgs hoje <span className="font-bold text-foreground/70">{chip.messages_sent_today}</span></span>
+                    <span className={chip.circuit_aberto ? 'text-destructive font-semibold' : ''}>
+                      {chip.circuit_aberto ? `CB ${chip.circuit_min_restantes}min` : 'CB OK'}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Main layout ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

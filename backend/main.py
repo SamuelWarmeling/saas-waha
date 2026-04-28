@@ -729,34 +729,34 @@ def migrate_status_diario():
 
 
 def migrate_alertas():
-    """Cria tabela alertas para o sistema de notificações em tempo real."""
+    """Cria tabela alertas para o sistema de notificações em tempo real (usa IF NOT EXISTS)."""
     try:
         with engine.connect() as conn:
-            result = conn.execute(text(
-                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'alertas')"
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS alertas (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    tipo VARCHAR(50) NOT NULL,
+                    mensagem VARCHAR(500) NOT NULL,
+                    lido BOOLEAN NOT NULL DEFAULT FALSE,
+                    criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_alertas_user_id ON alertas (user_id)"
             ))
-            if not result.scalar():
-                logger.info("[MIGRATE] Criando tabela alertas...")
-                conn.execute(text("""
-                    CREATE TABLE alertas (
-                        id SERIAL PRIMARY KEY,
-                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                        tipo VARCHAR(50) NOT NULL,
-                        mensagem VARCHAR(500) NOT NULL,
-                        lido BOOLEAN NOT NULL DEFAULT FALSE,
-                        criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                    )
-                """))
-                conn.execute(text("CREATE INDEX ix_alertas_user_id ON alertas (user_id)"))
-                conn.execute(text("CREATE INDEX ix_alertas_lido ON alertas (lido)"))
-                conn.commit()
-                logger.info("[MIGRATE] Tabela alertas criada.")
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_alertas_lido ON alertas (lido)"
+            ))
+            conn.commit()
+            logger.info("[MIGRATE] Tabela alertas verificada/criada.")
     except Exception as e:
         logger.error(f"[MIGRATE] Erro em migrate_alertas: {e}")
 
 
 def migrate_system_chips():
-    """Adiciona colunas de chips do sistema em whatsapp_sessions e usar_chips_sistema em campaigns."""
+    """Adiciona colunas de chips do sistema em whatsapp_sessions e usar_chips_sistema em campaigns.
+    Usa ADD COLUMN IF NOT EXISTS (atômico no PostgreSQL ≥9.6) para evitar falhas por race condition."""
     cols = [
         ("whatsapp_sessions", "is_system", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("whatsapp_sessions", "system_disponivel", "BOOLEAN NOT NULL DEFAULT TRUE"),
@@ -767,17 +767,35 @@ def migrate_system_chips():
     try:
         with engine.connect() as conn:
             for table, col, dtype in cols:
-                r = conn.execute(text(
-                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
-                    f"WHERE table_name = '{table}' AND column_name = '{col}')"
-                ))
-                if not r.scalar():
-                    logger.info(f"[MIGRATE] Adicionando {col} em {table}...")
-                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {dtype}"))
+                try:
+                    conn.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {dtype}"
+                    ))
                     conn.commit()
-                    logger.info(f"[MIGRATE] Coluna {col} adicionada em {table}.")
+                except Exception as col_err:
+                    conn.rollback()
+                    logger.warning(f"[MIGRATE] Aviso ao adicionar {col} em {table}: {col_err}")
     except Exception as e:
         logger.error(f"[MIGRATE] Erro em migrate_system_chips: {e}")
+
+
+def migrate_campaign_sessions_table():
+    """Garante que a tabela campaign_sessions existe (caso create_all tenha falhado)."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS campaign_sessions (
+                    id SERIAL PRIMARY KEY,
+                    campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+                    session_id INTEGER NOT NULL REFERENCES whatsapp_sessions(id) ON DELETE CASCADE
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_campaign_sessions_campaign_id ON campaign_sessions (campaign_id)"
+            ))
+            conn.commit()
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_campaign_sessions_table: {e}")
 
 
 def migrate_group_incremental():
@@ -1023,6 +1041,7 @@ async def lifespan(app: FastAPI):
             migrate_email_verificacao_tipo()
             migrate_status_diario()
             migrate_system_chips()
+            migrate_campaign_sessions_table()
             migrate_alertas()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)

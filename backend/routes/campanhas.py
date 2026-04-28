@@ -952,9 +952,16 @@ def create_campaign(
     for contact in contacts:
         db.add(models.CampaignContact(campaign_id=campaign.id, contact_id=contact.id))
 
-    db.commit()
-    db.refresh(campaign)
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao salvar campanha no banco de dados: {str(e)}"
+        )
 
+    db.refresh(campaign)
     c = _load_campaign_q(db).filter(models.Campaign.id == campaign.id).first()
     return _campaign_out(c)
 

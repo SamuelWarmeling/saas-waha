@@ -87,3 +87,90 @@
   .badge-gray    { @apply inline-flex items-center gap-1 text-xs bg-surface-700/60 text-surface-300 px-2 py-0.5 rounded-full border border-surface-600/50; }
   .badge-blue    { @apply inline-flex items-center gap-1 text-xs bg-blue-900/40 text-blue-400 px-2 py-0.5 rounded-full border border-blue-800/40; }
 }
+
+/* ── Light mode ─────────────────────────────────────────────────────────── */
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-primary:    #f8f9fa;
+  --bg-secondary:  #ffffff;
+  --bg-card:       #ffffff;
+  --text-primary:  #1a1a1a;
+  --text-secondary:#666666;
+  --border-color:  #e0e0e0;
+}
+
+[data-theme="light"] body {
+  background-color: #f8f9fa !important;
+  color: #1a1a1a !important;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-track { background: #f0f0f0; }
+
+[data-theme="light"] .glass-card {
+  background: rgba(255,255,255,0.95) !important;
+  border-color: rgba(157,78,221,0.15) !important;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08) !important;
+}
+[data-theme="light"] .glass-panel {
+  background: rgba(255,255,255,0.85) !important;
+  border-color: rgba(157,78,221,0.15) !important;
+}
+
+[data-theme="light"] .input {
+  background: #ffffff !important;
+  color: #1a1a1a !important;
+  border-color: rgba(157,78,221,0.3) !important;
+}
+[data-theme="light"] .input::placeholder { color: #9ca3af !important; }
+[data-theme="light"] .label { color: #4b5563 !important; }
+
+[data-theme="light"] .btn-secondary {
+  background-color: #e8e6f0 !important;
+  color: #1a1a1a !important;
+  border-color: #c4bedd !important;
+}
+
+[data-theme="light"] .bg-surface-950 { background-color: #ededf5 !important; }
+[data-theme="light"] .bg-surface-900 { background-color: #f5f4f8 !important; }
+[data-theme="light"] .bg-surface-800 { background-color: #ffffff !important; }
+[data-theme="light"] .bg-surface-700 { background-color: #e8e6f0 !important; }
+[data-theme="light"] .bg-surface-600 { background-color: #d8d5e8 !important; }
+[data-theme="light"] .bg-surface-900\/30,
+[data-theme="light"] .bg-surface-900\/40,
+[data-theme="light"] .bg-surface-900\/50,
+[data-theme="light"] .bg-surface-900\/60 { background-color: rgba(245,244,248,0.7) !important; }
+[data-theme="light"] .bg-surface-800\/30,
+[data-theme="light"] .bg-surface-800\/50,
+[data-theme="light"] .bg-surface-800\/60,
+[data-theme="light"] .bg-surface-800\/80 { background-color: rgba(255,255,255,0.85) !important; }
+[data-theme="light"] .bg-surface-950\/80 { background-color: rgba(237,237,245,0.9) !important; }
+
+[data-theme="light"] .text-surface-50  { color: #111827 !important; }
+[data-theme="light"] .text-surface-100 { color: #1f2937 !important; }
+[data-theme="light"] .text-surface-200 { color: #374151 !important; }
+[data-theme="light"] .text-surface-300 { color: #4b5563 !important; }
+[data-theme="light"] .text-surface-400 { color: #6b7280 !important; }
+[data-theme="light"] .text-surface-500 { color: #9ca3af !important; }
+[data-theme="light"] .text-surface-600 { color: #a0aec0 !important; }
+
+[data-theme="light"] .border-surface-600 { border-color: #c4bedd !important; }
+[data-theme="light"] .border-surface-700 { border-color: #d8d5e8 !important; }
+[data-theme="light"] .border-surface-800 { border-color: #e8e6f0 !important; }
+[data-theme="light"] .border-surface-700\/50,
+[data-theme="light"] .border-surface-700\/40 { border-color: rgba(216,213,232,0.6) !important; }
+[data-theme="light"] .border-surface-800\/50,
+[data-theme="light"] .border-surface-800\/40 { border-color: rgba(232,230,240,0.7) !important; }
+
+[data-theme="light"] .divide-surface-800\/50 > * + * { border-color: rgba(232,230,240,0.6) !important; }
+[data-theme="light"] .divide-surface-800\/30 > * + * { border-color: rgba(232,230,240,0.4) !important; }
+
+[data-theme="light"] .badge-gray {
+  background-color: rgba(216,213,232,0.5) !important;
+  color: #4b5563 !important;
+  border-color: rgba(157,78,221,0.15) !important;
+}
+
+[data-theme="light"] .hover\:bg-surface-700:hover { background-color: #dbd8ee !important; }
+[data-theme="light"] .hover\:bg-surface-800\/30:hover { background-color: rgba(232,230,240,0.4) !important; }
+[data-theme="light"] .hover\:bg-surface-800\/20:hover { background-color: rgba(232,230,240,0.3) !important; }

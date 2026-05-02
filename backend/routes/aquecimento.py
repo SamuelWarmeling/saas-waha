@@ -138,13 +138,14 @@ def human_delay(min_ms: int, max_ms: int, text: str = "") -> float:
     return (base + typing_ms) / 1000.0
 
 
-# Warm-up schedule baseado no baileys-antiban (progressao 1.8x por dia)
-_WARMUP_SCHEDULE = {1: 20, 2: 36, 3: 65, 4: 117, 5: 210, 6: 378, 7: 500}
+# Warm-up schedule exato do baileys-antiban (progressao ~1.8x por dia)
+_WARMUP_SCHEDULE = {1: 20, 2: 36, 3: 65, 4: 117, 5: 210, 6: 378, 7: 680}
+_WARMUP_INACTIVITY_HOURS = 72  # resetar warm-up se chip ficar inativo por 72h
 
 
 def get_meta_dia(dia: int) -> int:
-    """Retorna a meta de mensagens para o dia do aquecimento (schedule otimizado)."""
-    return _WARMUP_SCHEDULE.get(dia, 500)  # dia 8+: sem limite fixo (usa 500)
+    """Retorna a meta de mensagens para o dia do aquecimento."""
+    return _WARMUP_SCHEDULE.get(dia, 680)  # dia 8+: sem limite fixo (usa cap de 680)
 
 
 def get_meta_adaptacao(dia: int) -> int:
@@ -832,6 +833,34 @@ async def processar_aquecimento():
         for aq in ativos:
             try:
                 hoje_br: date = now_br.date()
+
+                # ── Verificar inatividade de 72h → resetar warm-up ────────────
+                if aq.ultimo_envio and aq.status == models.AquecimentoStatus.ativo:
+                    ultimo = aq.ultimo_envio
+                    if ultimo.tzinfo is None:
+                        ultimo = ultimo.replace(tzinfo=timezone.utc)
+                    horas_inativo = (now - ultimo).total_seconds() / 3600
+                    if horas_inativo > _WARMUP_INACTIVITY_HOURS:
+                        logger.warning(
+                            f"[AQUECIMENTO] #{aq.id} inativo por {horas_inativo:.0f}h "
+                            f"(> {_WARMUP_INACTIVITY_HOURS}h) — reiniciando warm-up do dia 1"
+                        )
+                        aq.dia_atual = 1
+                        aq.msgs_hoje = 0
+                        aq.msgs_sem_pausa = 0
+                        aq.meta_hoje = get_meta_dia(1)
+                        aq.inicio_dia_atual = now
+                        aq.proximo_envio = now + timedelta(minutes=10)
+                        db.add(models.AtividadeLog(
+                            user_id=aq.user_id,
+                            tipo="aquecimento_reset_inatividade",
+                            descricao=(
+                                f"Chip '{aq.session.name if aq.session else '?'}' "
+                                f"ficou inativo {horas_inativo:.0f}h — warm-up reiniciado do dia 1"
+                            ),
+                        ))
+                        db.commit()
+                        continue
 
                 # ── Snapshot inicial do estado para debug ─────────────────────
                 sess_preview = aq.session

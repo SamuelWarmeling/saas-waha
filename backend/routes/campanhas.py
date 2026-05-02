@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
 from pydantic import BaseModel, field_validator
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import httpx
 import asyncio
 import random
@@ -21,8 +21,17 @@ import auth
 import ban_wave_detector
 import health_monitor
 import content_variator
+import rate_limiter
 from database import get_db, SessionLocal
 from config import settings, PLANS
+
+BRAZIL_TZ = timezone(timedelta(hours=-3))
+_ACTIVE_HOURS = (7, 21)       # 07:00–20:59 hora de Brasília
+_PEAK_HOURS   = (9, 18)       # horário comercial: delay × 0.8
+_LUNCH_HOUR   = 12            # almoço: delay × 1.5
+_WEEKEND_FACTOR = 2.0         # fim de semana: delay × 2
+_NEW_CHAT_DELAY = 3.0         # segundos de delay extra para primeiro contato
+_BURST_MSGS     = 3           # primeiras N msgs de cada sessão: delay dividido por 3
 
 router = APIRouter(prefix="/api/campanhas", tags=["Campanhas"])
 
@@ -603,6 +612,10 @@ async def send_campaign(campaign_id: int, user_id: int):
         # ── Rastreamento de block rate por chip ──────────────────────────────
         # chip_waha_id -> (enviados, falhas)
         _chip_stats: dict[str, list[int]] = {}
+        # chip_waha_id -> msgs enviadas nesta execucao (burst allowance)
+        _burst_sent: dict[str, int] = {}
+        # phones ja contatados nesta execucao por chip (new-chat delay)
+        _contacted: dict[str, set] = {}
 
         def _check_block_rate(chip_waha_id: str) -> str:
             """Verifica block rate do chip. Retorna 'ok' | 'alert' | 'pause'."""
@@ -670,6 +683,39 @@ async def send_campaign(campaign_id: int, user_id: int):
                             break
                         used_session = min(chips_com_capacidade, key=lambda s: s.system_msgs_hoje)
 
+                # Chip pausado manualmente
+                db.refresh(used_session)
+                if getattr(used_session, "pausado_manualmente", False):
+                    print(
+                        f"[CAMPANHA-{campaign_id}] Chip {used_session.session_id} "
+                        f"pausado manualmente — pulando"
+                    )
+                    # Tenta próximo chip se disponível, senão pausa campanha
+                    alt_chips = [
+                        s for s in sessoes_candidatas
+                        if s.id != used_session.id
+                        and not getattr(s, "pausado_manualmente", False)
+                    ]
+                    if alt_chips:
+                        used_session = alt_chips[contact_index % len(alt_chips)]
+                    else:
+                        campaign.status = models.CampaignStatus.paused
+                        db.commit()
+                        break
+
+                # Smart Scheduler: verifica horário ativo (7h–21h BR)
+                now_br = datetime.now(BRAZIL_TZ)
+                hora_br  = now_br.hour
+                weekday  = now_br.weekday()  # 0=seg … 6=dom
+                if hora_br < _ACTIVE_HOURS[0] or hora_br >= _ACTIVE_HOURS[1]:
+                    print(
+                        f"[CAMPANHA-{campaign_id}] Fora do horário ativo "
+                        f"({hora_br}h BR, permitido {_ACTIVE_HOURS[0]}h–{_ACTIVE_HOURS[1]}h) — pausando"
+                    )
+                    campaign.status = models.CampaignStatus.paused
+                    db.commit()
+                    break
+
                 # Health monitor: verifica risco do chip
                 hm_action = health_monitor.get_action(used_session.session_id)
                 if hm_action == "stop":
@@ -681,6 +727,26 @@ async def send_campaign(campaign_id: int, user_id: int):
                     campaign.status = models.CampaignStatus.paused
                     db.commit()
                     break
+
+                # Rate limiter: verifica limite por minuto/hora/dia
+                rl_ok, rl_wait = rate_limiter.can_send(used_session.session_id)
+                if not rl_ok:
+                    if rl_wait > 90:
+                        # Limite diário ou horário esgotado — pausa
+                        print(
+                            f"[CAMPANHA-{campaign_id}] Rate limit chip {used_session.session_id}: "
+                            f"aguardaria {rl_wait:.0f}s — pausando campanha"
+                        )
+                        campaign.status = models.CampaignStatus.paused
+                        db.commit()
+                        break
+                    else:
+                        # Limite por minuto — aguarda (≤ 90s)
+                        print(
+                            f"[CAMPANHA-{campaign_id}] Rate limit chip {used_session.session_id}: "
+                            f"aguardando {rl_wait:.1f}s"
+                        )
+                        await asyncio.sleep(rl_wait)
 
                 # Block rate: verifica antes de enviar
                 br_status = _check_block_rate(used_session.session_id)
@@ -727,14 +793,41 @@ async def send_campaign(campaign_id: int, user_id: int):
                     f"-> {phone} ({contact_index + 1}/{total})"
                 )
 
-                # Calcula delay com jitter gaussiano + risco do chip
+                # Calcula delay com jitter gaussiano + risco do chip + smart scheduler
                 delay_min_ms = user_delay_min * 1000
                 delay_max_ms = user_delay_max * 1000
                 hm_multiplier = health_monitor.get_delay_multiplier(used_session.session_id)
                 if hm_multiplier > 1.0:
                     delay_min_ms = int(delay_min_ms * hm_multiplier)
                     delay_max_ms = int(delay_max_ms * hm_multiplier)
+
+                # Smart scheduler factors
+                sched_factor = 1.0
+                if weekday >= 5:  # fim de semana
+                    sched_factor *= _WEEKEND_FACTOR
+                if hora_br == _LUNCH_HOUR:  # almoço
+                    sched_factor *= 1.5
+                if _PEAK_HOURS[0] <= hora_br < _PEAK_HOURS[1]:  # horário comercial
+                    sched_factor *= 0.8
+                if sched_factor != 1.0:
+                    delay_min_ms = int(delay_min_ms * sched_factor)
+                    delay_max_ms = int(delay_max_ms * sched_factor)
+
                 base_delay = human_delay(delay_min_ms, delay_max_ms, msg.text or "")
+
+                # Burst allowance: primeiras 3 msgs de cada chip = delay / 3
+                chip_burst_count = _burst_sent.get(used_session.session_id, 0)
+                if chip_burst_count < _BURST_MSGS:
+                    base_delay = max(0.5, base_delay / 3.0)
+
+                # New-chat delay: primeiro contato com este número nesta execucao
+                chip_key = used_session.session_id
+                if chip_key not in _contacted:
+                    _contacted[chip_key] = set()
+                is_new_chat = contact.phone not in _contacted[chip_key]
+                if is_new_chat:
+                    base_delay += _NEW_CHAT_DELAY
+                    _contacted[chip_key].add(contact.phone)
 
                 try:
                     status_code, resp_text = await _send_waha_message(
@@ -750,6 +843,9 @@ async def send_campaign(campaign_id: int, user_id: int):
                         cc.status = models.ContactStatus.sent
                         campaign.success_count += 1
                         msgs_nesta_sessao += 1
+                        rate_limiter.record_send(used_session.session_id)
+                        _burst_sent[used_session.session_id] = _burst_sent.get(used_session.session_id, 0) + 1
+                        used_session.ultima_atividade = datetime.now(timezone.utc)
                         print(f"[CAMPANHA-{campaign_id}] OK {phone} via {used_session.session_id}")
                         try:
                             resp_json = json.loads(resp_text)

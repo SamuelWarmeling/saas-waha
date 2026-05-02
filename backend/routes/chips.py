@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 import auth
@@ -8,6 +8,7 @@ import models
 import circuit_breaker as cb
 import health_monitor as hm
 import ban_wave_detector as bwd
+import rate_limiter as rl
 from database import get_db
 from fuzzy_chip import calcular_saude_chip, calcular_risco_ban, _FUZZY_CONFIG
 
@@ -162,6 +163,7 @@ def health_dashboard(
             "phone_number": s.phone_number,
             "status": s.status,
             "health_score": health_score,
+            "health_level": hm.get_level(s.session_id),
             "action": action,
             "circuit_aberto": paused_info is not None,
             "circuit_min_restantes": paused_info.get("minutos_restantes") if paused_info else None,
@@ -171,6 +173,7 @@ def health_dashboard(
             "max_daily_messages": s.max_daily_messages,
             "ultimo_envio": last_cc.sent_at if last_cc else None,
             "is_aquecido": s.is_aquecido,
+            "pausado_manualmente": getattr(s, "pausado_manualmente", False),
         })
 
     avg_score = round(total_score / len(sessoes), 1) if sessoes else 0.0
@@ -182,5 +185,149 @@ def health_dashboard(
             "score_medio": avg_score,
             "ban_wave": bw,
             "protecoes_ativas": 6,
+        },
+    }
+
+
+def _get_session_owned(session_db_id: int, user_id: int, db: Session) -> models.WhatsAppSession:
+    sess = db.query(models.WhatsAppSession).filter(
+        models.WhatsAppSession.id == session_db_id,
+        models.WhatsAppSession.user_id == user_id,
+        models.WhatsAppSession.is_active == True,
+    ).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    return sess
+
+
+@router.post("/{session_db_id}/pausar")
+def pausar_chip(
+    session_db_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Pausa manualmente o chip — bloqueia envios de campanhas."""
+    sess = _get_session_owned(session_db_id, current_user.id, db)
+    sess.pausado_manualmente = True
+    db.add(models.AtividadeLog(
+        user_id=current_user.id,
+        tipo="chip_pausado",
+        descricao=f"Chip '{sess.name}' pausado manualmente pelo usuario",
+    ))
+    db.commit()
+    return {"ok": True, "pausado_manualmente": True, "session_id": sess.session_id}
+
+
+@router.post("/{session_db_id}/retomar")
+def retomar_chip(
+    session_db_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Retoma o chip pausado manualmente."""
+    sess = _get_session_owned(session_db_id, current_user.id, db)
+    sess.pausado_manualmente = False
+    db.add(models.AtividadeLog(
+        user_id=current_user.id,
+        tipo="chip_retomado",
+        descricao=f"Chip '{sess.name}' retomado manualmente pelo usuario",
+    ))
+    db.commit()
+    return {"ok": True, "pausado_manualmente": False, "session_id": sess.session_id}
+
+
+@router.post("/{session_db_id}/reset")
+def reset_chip(
+    session_db_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Reset completo: zera health score, circuit breaker, pausa manual e contador diario."""
+    sess = _get_session_owned(session_db_id, current_user.id, db)
+    hm.reset_score(sess.session_id)
+    # Reset circuit breaker removendo do dict in-memory
+    cb._circuit_open_until.pop(sess.session_id, None)
+    cb._reconnect_history.pop(sess.session_id, None)
+    sess.pausado_manualmente = False
+    sess.messages_sent_today = 0
+    db.add(models.AtividadeLog(
+        user_id=current_user.id,
+        tipo="chip_reset",
+        descricao=f"Chip '{sess.name}' resetado: health score, circuit breaker e contador zerrados",
+    ))
+    db.commit()
+    return {
+        "ok": True,
+        "health_score": 0,
+        "health_level": "LOW",
+        "pausado_manualmente": False,
+        "messages_sent_today": 0,
+    }
+
+
+@router.get("/{session_db_id}/antiban-stats")
+def antiban_stats(
+    session_db_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Stats completos anti-ban de um chip: health, warmup, rate, circuit breaker."""
+    sess = _get_session_owned(session_db_id, current_user.id, db)
+    sid = sess.session_id
+
+    health_score = hm.get_score(sid)
+    health_level = hm.get_level(sid)
+    action = hm.get_action(sid)
+    recommendation_map = {
+        "normal":     "Operacao normal",
+        "slow_down":  "Reduzir velocidade 50%",
+        "alert":      "Reduzir velocidade 80% e monitorar",
+        "stop":       "PARAR IMEDIATAMENTE — risco de ban critico",
+    }
+
+    # Warmup
+    aq = db.query(models.AquecimentoConfig).filter(
+        models.AquecimentoConfig.session_id == session_db_id,
+        models.AquecimentoConfig.status.in_([
+            models.AquecimentoStatus.ativo,
+            models.AquecimentoStatus.manutencao,
+        ]),
+    ).first()
+    warmup = None
+    if aq:
+        percentual = round((aq.msgs_hoje / aq.meta_hoje * 100) if aq.meta_hoje > 0 else 0, 1)
+        warmup = {
+            "dia": aq.dia_atual,
+            "dias_total": aq.dias_total,
+            "msgs_hoje": aq.msgs_hoje,
+            "limite_hoje": aq.meta_hoje,
+            "percentual": percentual,
+            "status": aq.status.value,
+        }
+
+    rate = rl.get_stats(sid)
+
+    cb_aberto = cb.is_circuit_open(sid)
+    cb_until = cb.circuit_open_until(sid)
+    reconexoes = cb.get_reconnect_counts().get(sid, 0)
+
+    return {
+        "session_id": sid,
+        "pausado": getattr(sess, "pausado_manualmente", False),
+        "ultima_atividade": getattr(sess, "ultima_atividade", None),
+        "health": {
+            "score": health_score,
+            "level": health_level,
+            "action": action,
+            "recommendation": recommendation_map.get(action, ""),
+        },
+        "warmup": warmup,
+        "rate": rate,
+        "messages_sent_today": sess.messages_sent_today,
+        "max_daily_messages": sess.max_daily_messages,
+        "circuit_breaker": {
+            "aberto": cb_aberto,
+            "pausado_ate": cb_until.isoformat() if cb_until else None,
+            "reconexoes_hora": reconexoes,
         },
     }

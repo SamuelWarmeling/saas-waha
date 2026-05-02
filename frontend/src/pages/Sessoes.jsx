@@ -1,10 +1,30 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   MdAdd, MdRefresh, MdQrCode, MdDelete, MdCheckCircle, MdInfo, MdContentCopy,
-  MdPhoneAndroid, MdComputer,
+  MdPhoneAndroid, MdComputer, MdPause, MdPlayArrow, MdRestartAlt,
 } from 'react-icons/md'
 import toast from 'react-hot-toast'
 import api from '../api'
+
+// ── Health Level Badge (LOW/MEDIUM/HIGH/CRITICAL) ─────────────────────────────
+const HEALTH_LEVEL_CFG = {
+  LOW:      { color: '#22c55e', bg: 'rgba(34,197,94,0.1)',  border: 'rgba(34,197,94,0.25)',  label: 'LOW',      emoji: '🟢' },
+  MEDIUM:   { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)', label: 'MEDIUM',   emoji: '🟡' },
+  HIGH:     { color: '#f97316', bg: 'rgba(249,115,22,0.1)', border: 'rgba(249,115,22,0.25)', label: 'HIGH',     emoji: '🟠' },
+  CRITICAL: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.4)',   label: 'CRITICAL', emoji: '🔴' },
+}
+
+function HealthLevelBadge({ level }) {
+  const cfg = HEALTH_LEVEL_CFG[level] || HEALTH_LEVEL_CFG.LOW
+  return (
+    <span
+      className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-black ${level === 'CRITICAL' ? 'animate-pulse' : ''}`}
+      style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}
+    >
+      {cfg.emoji} {cfg.label}
+    </span>
+  )
+}
 
 // ── Gauge de Score Fuzzy ───────────────────────────────────────────────────────
 function ScoreGauge({ diag }) {
@@ -136,6 +156,9 @@ export default function Sessoes() {
   const [sessions, setSessions] = useState([])
   const [diagnosticos, setDiagnosticos] = useState({})
   const [riscos, setRiscos] = useState({})
+  const [healthData, setHealthData] = useState({})     // chips/health-dashboard por sess.id
+  const [aquecimentos, setAquecimentos] = useState({}) // aquecimento por session_id (DB)
+  const [chipLoading, setChipLoading] = useState({})
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [qrSession, setQrSession] = useState(null)
@@ -144,15 +167,27 @@ export default function Sessoes() {
 
   const load = useCallback(async () => {
     try {
-      const [sessRes, diagRes] = await Promise.allSettled([
+      const [sessRes, diagRes, healthRes, aqRes] = await Promise.allSettled([
         api.get('/sessoes'),
         api.get('/chips/diagnostico'),
+        api.get('/chips/health-dashboard'),
+        api.get('/aquecimento'),
       ])
       if (sessRes.status === 'fulfilled') setSessions(sessRes.value.data)
       if (diagRes.status === 'fulfilled') {
         const map = {}
         for (const d of diagRes.value.data) map[d.session_id] = d
         setDiagnosticos(map)
+      }
+      if (healthRes.status === 'fulfilled') {
+        const map = {}
+        for (const c of (healthRes.value.data.chips || [])) map[c.id] = c
+        setHealthData(map)
+      }
+      if (aqRes.status === 'fulfilled') {
+        const map = {}
+        for (const a of aqRes.value.data) map[a.session_id] = a
+        setAquecimentos(map)
       }
     } catch {
       toast.error('Erro ao carregar sessões')
@@ -279,6 +314,19 @@ export default function Sessoes() {
     }
   }
 
+  async function chipAction(sessId, endpoint, label) {
+    setChipLoading(p => ({ ...p, [`${sessId}_${endpoint}`]: true }))
+    try {
+      await api.post(`/chips/${sessId}/${endpoint}`)
+      toast.success(label)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || `Erro: ${label}`)
+    } finally {
+      setChipLoading(p => ({ ...p, [`${sessId}_${endpoint}`]: false }))
+    }
+  }
+
   async function definirTipoChip(sessId, tipo) {
     try {
       await api.patch(`/sessoes/${sessId}/tipo-chip`, { tipo_chip: tipo })
@@ -341,16 +389,29 @@ export default function Sessoes() {
               ? Math.round((sess.messages_sent_today / sess.max_daily_messages) * 100) : 0
             const phoneFormatted = formatPhone(sess.phone_number)
 
+            const hd = healthData[sess.id] || {}
+            const healthLevel = hd.health_level || 'LOW'
+            const aq = aquecimentos[sess.id]
+            const isCritical = healthLevel === 'CRITICAL' || (riscos[sess.id]?.risco > 80)
+            const isPausado = hd.pausado_manualmente
+
             return (
               <div
                 key={sess.id}
                 className="glass-card space-y-5 p-0 overflow-hidden flex flex-col transition-all hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)] group"
               >
-                {/* Banner ban iminente */}
-                {riscos[sess.id]?.risco > 80 && (
+                {/* Banner CRITICAL */}
+                {isCritical && (
                   <div className="px-4 py-2.5 text-center text-xs font-black uppercase tracking-widest animate-pulse"
                     style={{ background: 'rgba(220,38,38,0.18)', color: '#f87171', borderBottom: '1px solid rgba(220,38,38,0.3)' }}>
-                    🚨 BAN IMINENTE — Pare os disparos imediatamente!
+                    🚨 PARAR! — Risco crítico de ban — pare os disparos!
+                  </div>
+                )}
+                {/* Banner pausado manualmente */}
+                {isPausado && !isCritical && (
+                  <div className="px-4 py-2 text-center text-xs font-bold"
+                    style={{ background: 'rgba(245,158,11,0.12)', color: '#fbbf24', borderBottom: '1px solid rgba(245,158,11,0.3)' }}>
+                    ⏸️ Chip pausado manualmente
                   </div>
                 )}
 
@@ -420,15 +481,17 @@ export default function Sessoes() {
                           ⏳ Em adaptação
                         </span>
                       )}
-                      {/* Risco de ban badge */}
-                      {riscos[sess.id]?.risco > 60 && (
+                      {/* Health level badge */}
+                      {healthLevel !== 'LOW' && <HealthLevelBadge level={healthLevel} />}
+                      {/* Risco de ban badge (quando não critical já coberto pelo banner) */}
+                      {!isCritical && riscos[sess.id]?.risco > 60 && (
                         <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold animate-pulse"
                           style={{
-                            background: riscos[sess.id].risco > 80 ? 'rgba(220,38,38,0.18)' : 'rgba(239,68,68,0.12)',
-                            color: riscos[sess.id].risco > 80 ? '#f87171' : '#fca5a5',
-                            border: riscos[sess.id].risco > 80 ? '1px solid rgba(220,38,38,0.4)' : '1px solid rgba(239,68,68,0.3)',
+                            background: 'rgba(239,68,68,0.12)',
+                            color: '#fca5a5',
+                            border: '1px solid rgba(239,68,68,0.3)',
                           }}>
-                          ⚠️ {riscos[sess.id].risco > 80 ? 'BAN IMINENTE' : 'ATENÇÃO'}
+                          ⚠️ ATENÇÃO
                         </span>
                       )}
                       {/* Chip type badge — clicável para trocar */}
@@ -501,6 +564,43 @@ export default function Sessoes() {
                     </div>
                   </div>
 
+                  {/* Warm-up progress */}
+                  {aq && aq.status !== 'concluido' && aq.status !== 'cancelado' && (
+                    <div className="rounded-xl px-3 py-2.5 text-xs"
+                      style={{ background: 'rgba(124,58,237,0.07)', border: '1px solid rgba(124,58,237,0.2)' }}>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-purple-300 font-semibold">
+                          🔥 Aquecimento — Dia {aq.dia_atual} de {aq.dias_total}
+                        </span>
+                        <span className="text-surface-400 font-mono">
+                          {aq.msgs_hoje}/{aq.meta_hoje} msgs
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden">
+                        <div className="h-full rounded-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all duration-700"
+                          style={{ width: `${Math.min(100, aq.meta_hoje > 0 ? Math.round(aq.msgs_hoje / aq.meta_hoje * 100) : 0)}%` }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Health score numérico (quando relevante) */}
+                  {hd.health_score > 0 && (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-xl text-xs"
+                      style={{
+                        background: HEALTH_LEVEL_CFG[healthLevel]?.bg,
+                        border: `1px solid ${HEALTH_LEVEL_CFG[healthLevel]?.border}`,
+                      }}>
+                      <span style={{ color: HEALTH_LEVEL_CFG[healthLevel]?.color }} className="font-bold">
+                        {HEALTH_LEVEL_CFG[healthLevel]?.emoji} Health Score: {hd.health_score}/100
+                      </span>
+                      <span className="text-surface-500">
+                        {hd.health_level === 'MEDIUM' ? 'Reduzir 50%' :
+                         hd.health_level === 'HIGH' ? 'Reduzir 80%' :
+                         hd.health_level === 'CRITICAL' ? 'PARAR!' : ''}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Score Fuzzy */}
                   <ScoreGauge diag={diagnosticos[sess.id]} />
 
@@ -509,8 +609,8 @@ export default function Sessoes() {
 
                 </div>
 
-                {/* Ações */}
-                <div className="p-4 bg-surface-900/50 border-t border-surface-700/50 flex gap-3">
+                {/* Ações principais */}
+                <div className="px-4 pt-4 pb-2 bg-surface-900/50 border-t border-surface-700/50 flex gap-3">
                   {sess.status === 'disconnected' || sess.status === 'error' ? (
                     <button
                       onClick={() => connect(sess)}
@@ -540,6 +640,40 @@ export default function Sessoes() {
                     title="Excluir sessão"
                   >
                     <MdDelete size={18} />
+                  </button>
+                </div>
+
+                {/* Controles de emergência anti-ban */}
+                <div className="px-4 pb-4 bg-surface-900/50 flex gap-2">
+                  {isPausado ? (
+                    <button
+                      onClick={() => chipAction(sess.id, 'retomar', 'Chip retomado!')}
+                      disabled={chipLoading[`${sess.id}_retomar`]}
+                      title="Retomar envios"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all"
+                      style={{ background: 'rgba(34,197,94,0.12)', color: '#86efac', border: '1px solid rgba(34,197,94,0.3)' }}
+                    >
+                      <MdPlayArrow size={15} /> Retomar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => chipAction(sess.id, 'pausar', 'Chip pausado!')}
+                      disabled={chipLoading[`${sess.id}_pausar`]}
+                      title="Pausar envios manualmente"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all"
+                      style={{ background: 'rgba(245,158,11,0.1)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.3)' }}
+                    >
+                      <MdPause size={15} /> Pausar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => chipAction(sess.id, 'reset', 'Chip resetado!')}
+                    disabled={chipLoading[`${sess.id}_reset`]}
+                    title="Reset completo: zera health score, circuit breaker e contador"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all"
+                    style={{ background: 'rgba(107,114,128,0.1)', color: '#9ca3af', border: '1px solid rgba(107,114,128,0.3)' }}
+                  >
+                    <MdRestartAlt size={15} /> Reset
                   </button>
                 </div>
               </div>

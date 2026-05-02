@@ -581,6 +581,29 @@ def migrate_contact_scoring():
         logger.error(f"[MIGRATE] Erro em migrate_contact_scoring: {e}")
 
 
+def migrate_whatsapp_session_antiban():
+    """Adiciona pausado_manualmente e ultima_atividade em whatsapp_sessions."""
+    try:
+        with engine.connect() as conn:
+            for col, dtype, notnull_default in [
+                ("pausado_manualmente", "BOOLEAN", "NOT NULL DEFAULT false"),
+                ("ultima_atividade",    "TIMESTAMP WITH TIME ZONE", ""),
+            ]:
+                result = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = 'whatsapp_sessions' AND column_name = '{col}')"
+                ))
+                if not result.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em whatsapp_sessions...")
+                    conn.execute(text(
+                        f"ALTER TABLE whatsapp_sessions ADD COLUMN {col} {dtype} {notnull_default}"
+                    ))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em whatsapp_sessions.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_whatsapp_session_antiban: {e}")
+
+
 def migrate_ban_learning():
     """Cria tabelas ban_records e fuzzy_configs para aprendizado coletivo de bans."""
     try:
@@ -1066,6 +1089,7 @@ async def lifespan(app: FastAPI):
             migrate_system_chips()
             migrate_campaign_sessions_table()
             migrate_alertas()
+            migrate_whatsapp_session_antiban()
             migrate_contact_scoring()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)

@@ -103,6 +103,21 @@ def get_all_scores() -> dict[str, int]:
     return {k: v for k, v in _risk_scores.items() if v > 0}
 
 
+def get_level(session_waha_id: str) -> str:
+    """
+    Retorna o nível de risco em linguagem baileys-antiban:
+    'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+    """
+    score = get_score(session_waha_id)
+    if score >= 85:
+        return "CRITICAL"
+    elif score >= 60:
+        return "HIGH"
+    elif score >= 30:
+        return "MEDIUM"
+    return "LOW"
+
+
 def get_chips_em_risco() -> list[dict]:
     """Retorna lista de chips com score > 0, ordenado pelo score desc."""
     return sorted(

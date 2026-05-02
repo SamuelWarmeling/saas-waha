@@ -103,6 +103,8 @@ class WhatsAppSession(Base):
     em_adaptacao = Column(Boolean, default=False, server_default="false", nullable=False)
     reconexao_tentativas = Column(Integer, default=0, server_default="0", nullable=False)
     reconexao_ultima_em = Column(DateTime(timezone=True), nullable=True)
+    pausado_manualmente = Column(Boolean, default=False, server_default="false", nullable=False)
+    ultima_atividade = Column(DateTime(timezone=True), nullable=True)
     is_system = Column(Boolean, default=False, server_default="false", nullable=False)
     system_disponivel = Column(Boolean, default=True, server_default="true", nullable=False)
     system_max_msgs_dia = Column(Integer, default=200, server_default="200", nullable=False)

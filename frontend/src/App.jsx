@@ -13,6 +13,7 @@ import Grupos from './pages/Grupos'
 import Funil from './pages/Funil'
 import Aquecimento from './pages/Aquecimento'
 import Configuracoes from './pages/Configuracoes'
+import Extracao from './pages/Extracao'
 import Admin from './pages/Admin'
 import Layout from './components/Layout'
 
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/grupos" element={<Grupos />} />
         <Route path="/funil" element={<Funil />} />
         <Route path="/aquecimento" element={<Aquecimento />} />
+        <Route path="/extracao" element={<Extracao />} />
         <Route path="/configuracoes" element={<Configuracoes />} />
         <Route path="/admin" element={<Admin />} />
       </Route>

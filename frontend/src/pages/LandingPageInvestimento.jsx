@@ -107,7 +107,7 @@ function SectionTitle({ eyebrow, title, description }) {
   )
 }
 
-export default function LandingPage() {
+export default function LandingPageInvestimento() {
   const navigate = useNavigate()
   const [openFaq, setOpenFaq] = useState(0)
 

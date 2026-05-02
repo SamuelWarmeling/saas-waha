@@ -29,6 +29,22 @@ export default {
           DEFAULT:    "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
         },
+        destructive: {
+          DEFAULT:    "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        success: {
+          DEFAULT:    "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT:    "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+        card: {
+          DEFAULT:    "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
         surface: {
           50: '#f8fafc',
           100: '#f1f5f9',

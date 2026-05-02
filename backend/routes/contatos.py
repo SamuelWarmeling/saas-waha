@@ -119,14 +119,7 @@ def _pick_session_for_scoring(user_id: int, db) -> "models.WhatsAppSession | Non
 
 def _calcular_score_worker(user_id: int) -> None:
     """Background task: calcula grupo_score para cada contato ainda sem score."""
-    try:
-        import requests as _req
-    except ImportError:
-        try:
-            import httpx as _req_module  # noqa
-            _req = None
-        except ImportError:
-            _req = None
+    import httpx as _httpx
 
     db = SessionLocal()
     try:
@@ -173,7 +166,7 @@ def _calcular_score_worker(user_id: int) -> None:
                 try:
                     phone_id = f"{contact.phone}@c.us"
                     url = f"{waha_url}/api/{sess_id}/contacts/{phone_id}/common-groups"
-                    resp = _req.get(url, headers=headers, timeout=8)
+                    resp = _httpx.get(url, headers=headers, timeout=8)
 
                     if resp.status_code == 200:
                         data = resp.json()

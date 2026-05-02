@@ -558,6 +558,29 @@ def migrate_dispatch_slots():
         logger.error(f"[MIGRATE] Erro em migrate_dispatch_slots: {e}")
 
 
+def migrate_contact_scoring():
+    """Adiciona colunas de scoring via grupos em comum na tabela contacts."""
+    cols = [
+        ("whatsapp_common_groups", "INTEGER"),
+        ("group_score", "INTEGER"),
+        ("score_calculado_em", "TIMESTAMP WITH TIME ZONE"),
+    ]
+    try:
+        with engine.connect() as conn:
+            for col, dtype in cols:
+                r = conn.execute(text(
+                    f"SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    f"WHERE table_name = 'contacts' AND column_name = '{col}')"
+                ))
+                if not r.scalar():
+                    logger.info(f"[MIGRATE] Adicionando {col} em contacts...")
+                    conn.execute(text(f"ALTER TABLE contacts ADD COLUMN {col} {dtype}"))
+                    conn.commit()
+                    logger.info(f"[MIGRATE] Coluna {col} adicionada em contacts.")
+    except Exception as e:
+        logger.error(f"[MIGRATE] Erro em migrate_contact_scoring: {e}")
+
+
 def migrate_ban_learning():
     """Cria tabelas ban_records e fuzzy_configs para aprendizado coletivo de bans."""
     try:
@@ -1043,6 +1066,7 @@ async def lifespan(app: FastAPI):
             migrate_system_chips()
             migrate_campaign_sessions_table()
             migrate_alertas()
+            migrate_contact_scoring()
             logger.info("[STARTUP] Criando tabelas no banco se não existirem...")
             Base.metadata.create_all(bind=engine)
             logger.info("[STARTUP] Tabelas verificadas/criadas com sucesso.")

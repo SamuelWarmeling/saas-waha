@@ -3,6 +3,9 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+ENV CI=false
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 COPY package*.json ./
 RUN npm ci --prefer-offline
 

@@ -498,6 +498,36 @@ async def send_campaign(campaign_id: int, user_id: int):
 
         n_chips = len(sessoes_candidatas)
 
+        # ── Ban wave check antes de disparar ─────────────────────────────────
+        if ban_wave_detector.is_system_paused():
+            until = ban_wave_detector.paused_until()
+            print(
+                f"[CAMPANHA-{campaign_id}] Sistema pausado por ban wave ate "
+                f"{until.strftime('%H:%M UTC') if until else '?'} — abortando"
+            )
+            campaign.status = models.CampaignStatus.paused
+            db.commit()
+            return
+
+        # ── Contatos pendentes ───────────────────────────────────────────────
+        pending = (
+            db.query(models.CampaignContact)
+            .filter(
+                models.CampaignContact.campaign_id == campaign_id,
+                models.CampaignContact.status == models.ContactStatus.pending,
+            )
+            .order_by(models.CampaignContact.id)
+            .all()
+        )
+        total = len(pending)
+
+        if total == 0:
+            campaign.status = models.CampaignStatus.completed
+            campaign.completed_at = datetime.now(timezone.utc)
+            db.commit()
+            asyncio.create_task(_start_next_queued(user_id))
+            return
+
         # ── Hot leads: prioriza contatos que já responderam (funil quente/morno) ─
         contact_ids_list = [cc.contact_id for cc in pending]
         if contact_ids_list:
@@ -530,36 +560,6 @@ async def send_campaign(campaign_id: int, user_id: int):
                     print(f"[CAMPANHA-{campaign_id}] {hot_count} leads quentes priorizados na fila")
             except Exception as _e:
                 print(f"[CAMPANHA-{campaign_id}] Aviso: hot leads prioritization falhou: {_e}")
-
-        # ── Ban wave check antes de disparar ─────────────────────────────────
-        if ban_wave_detector.is_system_paused():
-            until = ban_wave_detector.paused_until()
-            print(
-                f"[CAMPANHA-{campaign_id}] Sistema pausado por ban wave ate "
-                f"{until.strftime('%H:%M UTC') if until else '?'} — abortando"
-            )
-            campaign.status = models.CampaignStatus.paused
-            db.commit()
-            return
-
-        # ── Contatos pendentes ───────────────────────────────────────────────
-        pending = (
-            db.query(models.CampaignContact)
-            .filter(
-                models.CampaignContact.campaign_id == campaign_id,
-                models.CampaignContact.status == models.ContactStatus.pending,
-            )
-            .order_by(models.CampaignContact.id)
-            .all()
-        )
-        total = len(pending)
-
-        if total == 0:
-            campaign.status = models.CampaignStatus.completed
-            campaign.completed_at = datetime.now(timezone.utc)
-            db.commit()
-            asyncio.create_task(_start_next_queued(user_id))
-            return
 
         # ── Pré-distribuição: cada contato recebe exatamente 1 chip ─────────
         session_map: dict[int, models.WhatsAppSession] = {s.id: s for s in sessoes_candidatas}

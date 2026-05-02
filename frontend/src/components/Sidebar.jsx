@@ -1,125 +1,158 @@
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Smartphone, Megaphone, Users, Search,
-  Flame, Target, Settings, ShieldCheck, LogOut, ChevronLeft, ChevronRight
-} from "lucide-react";
+  MdDashboard, MdCampaign, MdContacts, MdPhoneAndroid,
+  MdSettings, MdLogout, MdWhatsapp, MdAdminPanelSettings, MdGroup,
+  MdFilterAlt, MdLocalFireDepartment,
+} from 'react-icons/md'
 
-const navItems = [
-  { title: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-  { title: "Sessões", path: "/sessoes", icon: Smartphone },
-  { title: "Campanhas", path: "/campanhas", icon: Megaphone },
-  { title: "Contatos", path: "/contatos", icon: Users },
-  { title: "Extração", path: "/extracao", icon: Search },
-  { title: "Aquecimento", path: "/aquecimento", icon: Flame },
-  { title: "Funil", path: "/funil", icon: Target },
-  { title: "Configurações", path: "/configuracoes", icon: Settings },
-  { title: "Admin", path: "/admin", icon: ShieldCheck },
-];
+const links = [
+  { to: '/dashboard', icon: MdDashboard, label: 'Dashboard' },
+  { to: '/campanhas', icon: MdCampaign, label: 'Campanhas' },
+  { to: '/contatos', icon: MdContacts, label: 'Contatos' },
+  { to: '/sessoes', icon: MdPhoneAndroid, label: 'Sessões' },
+  { to: '/grupos', icon: MdGroup, label: 'Grupos' },
+  { to: '/funil', icon: MdFilterAlt, label: 'Funil 🎯' },
+  { to: '/aquecimento', icon: MdLocalFireDepartment, label: 'Aquecimento 🔥' },
+  { to: '/configuracoes', icon: MdSettings, label: 'Configurações' },
+]
 
-export default function Sidebar({ collapsed, setCollapsed }) {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  let userName = "Admin";
-  let userEmail = "";
+function getIsAdmin() {
   try {
-    const raw = localStorage.getItem("user");
-    if (raw) {
-      const u = JSON.parse(raw);
-      userName = u.name || u.email || "Admin";
-      userEmail = u.email || "";
-    }
-  } catch {}
+    const raw = localStorage.getItem('user')
+    return raw ? JSON.parse(raw).is_admin === true : false
+  } catch {
+    return false
+  }
+}
 
-  const initials = userName.charAt(0).toUpperCase();
+export default function Sidebar({ isOpen, onClose }) {
+  const navigate = useNavigate()
+  const isAdmin = getIsAdmin()
 
-  function handleLogout() {
-    localStorage.clear();
-    navigate("/login");
+  function logout() {
+    localStorage.clear()
+    navigate('/login')
   }
 
   return (
-    <motion.aside
-      animate={{ width: collapsed ? 72 : 260 }}
-      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-      className="fixed left-0 top-0 h-screen z-50 flex flex-col bg-sidebar/95 backdrop-blur-xl border-r border-sidebar-border overflow-hidden"
+    <aside
+      className={`
+        fixed md:static inset-y-0 left-0 z-50 md:z-10
+        w-60 flex-shrink-0 flex flex-col
+        transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}
+      style={{
+        background: '#1A1625',
+        borderRight: '1px solid rgba(157,78,221,0.2)',
+      }}
     >
       {/* Logo */}
-      <div className="h-16 flex items-center px-4 border-b border-sidebar-border shrink-0">
-        {!collapsed ? (
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-xl font-bold tracking-[-0.03em] text-foreground whitespace-nowrap"
+      <div
+        className="p-5 flex items-center gap-3"
+        style={{ borderBottom: '1px solid rgba(157,78,221,0.15)' }}
+      >
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-primary-400/20"
+          style={{ background: 'linear-gradient(135deg, #9D4EDD, #6A0DAD)' }}
+        >
+          <MdWhatsapp className="text-white text-2xl" />
+        </div>
+        <div>
+          <p
+            className="font-bold text-sm leading-none tracking-wide"
+            style={{
+              background: 'linear-gradient(90deg, #ffffff, #b07de6)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
           >
-            Waha<span className="text-primary">SaaS</span>
-          </motion.span>
-        ) : (
-          <span className="text-xl font-bold text-primary mx-auto">W</span>
-        )}
+            WahaSaaS
+          </p>
+          <p className="text-xs text-primary-400 mt-0.5 font-medium">Disparo em massa</p>
+        </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              title={collapsed ? item.title : undefined}
-              className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group ${
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {links.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                 isActive
-                  ? "text-primary-foreground"
-                  : "text-sidebar-foreground hover:text-foreground hover:bg-sidebar-accent"
-              }`}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="sidebar-active"
-                  className="absolute inset-0 rounded-xl bg-primary/20 border border-primary/30"
-                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                />
-              )}
-              <item.icon className={`relative z-10 h-5 w-5 shrink-0 ${isActive ? "text-primary" : ""}`} />
-              {!collapsed && (
-                <span className="relative z-10 truncate">{item.title}</span>
-              )}
-            </NavLink>
-          );
-        })}
+                  ? 'text-primary-400'
+                  : 'text-surface-400 hover:text-surface-100'
+              }`
+            }
+            style={({ isActive }) =>
+              isActive
+                ? {
+                    background: 'rgba(157,78,221,0.15)',
+                    borderLeft: '2px solid #9D4EDD',
+                    paddingLeft: '10px',
+                    boxShadow: '0 0 12px rgba(157,78,221,0.1)',
+                  }
+                : {
+                    borderLeft: '2px solid transparent',
+                  }
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Icon className={`text-xl transition-colors ${isActive ? 'text-primary-400' : 'text-surface-500'}`} />
+                {label}
+              </>
+            )}
+          </NavLink>
+        ))}
+        {isAdmin && (
+          <NavLink
+            to="/admin"
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 mt-2 ${
+                isActive ? 'text-primary-400' : 'text-surface-400 hover:text-surface-100'
+              }`
+            }
+            style={({ isActive }) =>
+              isActive
+                ? {
+                    background: 'rgba(157,78,221,0.15)',
+                    borderLeft: '2px solid #9D4EDD',
+                    paddingLeft: '10px',
+                    boxShadow: '0 0 12px rgba(157,78,221,0.1)',
+                  }
+                : {
+                    borderLeft: '2px solid transparent',
+                  }
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <MdAdminPanelSettings className={`text-xl ${isActive ? 'text-primary-400' : 'text-surface-500'}`} />
+                Admin
+              </>
+            )}
+          </NavLink>
+        )}
       </nav>
 
-      {/* Collapse toggle */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="mx-2 mb-2 flex items-center justify-center h-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
-      >
-        {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-      </button>
-
-      {/* User */}
-      <div className="border-t border-sidebar-border p-3 flex items-center gap-3 shrink-0">
-        <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-semibold shrink-0">
-          {initials}
-        </div>
-        {!collapsed && (
-          <>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{userName}</p>
-              <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              title="Sair"
-              className="text-muted-foreground hover:text-destructive transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </>
-        )}
+      {/* Logout */}
+      <div className="p-3 mt-auto" style={{ borderTop: '1px solid rgba(157,78,221,0.15)' }}>
+        <button
+          onClick={logout}
+          className="w-full flex items-center justify-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:bg-red-900/20 hover:text-red-400 transition-all duration-200"
+          style={{ border: '1px solid transparent' }}
+          onMouseEnter={e => { e.currentTarget.style.border = '1px solid rgba(239,68,68,0.25)' }}
+          onMouseLeave={e => { e.currentTarget.style.border = '1px solid transparent' }}
+        >
+          <MdLogout className="text-xl" />
+          Sair
+        </button>
       </div>
-    </motion.aside>
-  );
+    </aside>
+  )
 }

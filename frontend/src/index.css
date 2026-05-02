@@ -3,6 +3,19 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Valores HSL sem hsl() — necessário para os modificadores de opacidade do Tailwind (bg-primary/20) */
+    --background:        250 38%  6%;   /* #0B0914 */
+    --foreground:        210 40% 98%;   /* #f8fafc */
+    --border:            258 15% 18%;   /* roxo escuro */
+    --muted:             258 25% 11%;   /* #1A1625 */
+    --muted-foreground:  215 16% 47%;   /* #64748b */
+    --primary:           262 88% 66%;   /* #8B5CF6 */
+    --primary-foreground:  0  0% 100%;  /* #ffffff */
+  }
+}
+
+@layer base {
   body {
     background-color: #0B0914;
     @apply text-surface-50 font-sans antialiased min-h-screen;
@@ -28,6 +41,12 @@
 }
 
 @layer components {
+  /* Grid pattern usado no Layout.jsx como fundo da página */
+  .grid-pattern {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
   /* Glassmorphism Utilities */
   .glass-panel {
     @apply bg-surface-800/60 backdrop-blur-xl border border-primary-500/10 shadow-xl;

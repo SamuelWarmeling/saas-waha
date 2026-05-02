@@ -4,8 +4,17 @@ export default {
   theme: {
     extend: {
       colors: {
+        // CSS-variable tokens (necessários para Layout.jsx, Sidebar.jsx)
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        border:     "hsl(var(--border))",
+        muted: {
+          DEFAULT:    "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
         primary: {
-          50: '#f5f3ff',
+          // Escala numérica legacy — mantém primary-400, primary-500, etc.
+          50:  '#f5f3ff',
           100: '#ede9fe',
           200: '#ddd6fe',
           300: '#c4b5fd',
@@ -16,6 +25,9 @@ export default {
           800: '#5b21b6',
           900: '#4c1d95',
           950: '#2e1065',
+          // CSS-variable tokens — suportam bg-primary, bg-primary/20, text-primary-foreground
+          DEFAULT:    "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
         },
         surface: {
           50: '#f8fafc',

@@ -1,6 +1,7 @@
 """
 Rotas para gerenciar grupos e extrair membros
 """
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -12,7 +13,12 @@ import logging
 import models
 import auth
 from database import get_db
-from grupo_extraction import fetch_groups_from_waha, extract_selected_groups
+from grupo_extraction import (
+    fetch_groups_from_waha,
+    extract_selected_groups,
+    calcular_scores_pos_extracao,
+    _grupo_score_jobs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +173,24 @@ async def extract_selected(
             body.group_ids,
             db,
         )
+
+        # ── Scoring pós-extração em background ────────────────────────────────
+        phones = result.pop("extracted_phones", [])
+        scoring_started = False
+        if phones:
+            asyncio.create_task(
+                calcular_scores_pos_extracao(
+                    user_id=current_user.id,
+                    session_id_waha=session.session_id,
+                    phones=phones,
+                )
+            )
+            scoring_started = True
+            logger.info(
+                f"[GRUPOS] Scoring iniciado em background: {len(phones)} contatos "
+                f"| user={current_user.id}"
+            )
+
         parts = []
         if result["novos"] > 0:
             parts.append(f"+{result['novos']} novos")
@@ -175,13 +199,42 @@ async def extract_selected(
         if result["existentes"] > 0:
             parts.append(f"{result['existentes']} já existiam")
         delta_msg = " | ".join(parts) if parts else "Nenhuma alteração"
+
+        msg = f"✅ {result['novos'] + result['existentes']} contatos extraídos | {delta_msg}"
+        if scoring_started:
+            msg += f" | Calculando scores de {len(phones)} contatos..."
+
         return {
             "status": "ok",
-            "message": f"Grupo atualizado: {delta_msg}",
+            "message": msg,
+            "scoring_started": scoring_started,
+            "scoring_total": len(phones),
             **result,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na extração: {str(e)}")
+
+
+@router.get("/session/{session_id}/scoring-status")
+def scoring_status(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Retorna o progresso do scoring pós-extração em andamento.
+    Quando running=False e super_leads > 0: exibir notificação final.
+    """
+    job = _grupo_score_jobs.get(current_user.id)
+    if not job:
+        return {"running": False, "done": 0, "total": 0, "super_leads": 0, "errors": 0}
+    return {
+        "running": job.get("running", False),
+        "done": job.get("done", 0),
+        "total": job.get("total", 0),
+        "super_leads": job.get("super_leads", 0),
+        "errors": job.get("errors", 0),
+    }
 
 
 # ── Endpoints de grupos (DB) ──────────────────────────────────────────────────

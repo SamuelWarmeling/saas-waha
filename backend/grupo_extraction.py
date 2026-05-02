@@ -1,15 +1,21 @@
 """
 Funções para extração de grupos do WhatsApp via WAHA API
 """
+import asyncio
 import httpx
 import json
 import logging
+import random
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from config import settings
 import models
 
 logger = logging.getLogger(__name__)
+
+# ── Job tracker de scoring pós-extração ───────────────────────────────────────
+# user_id -> {running, done, total, super_leads, errors}
+_grupo_score_jobs: dict = {}
 
 
 async def waha_request(method: str, path: str, accept_json: bool = True, **kwargs):
@@ -105,6 +111,7 @@ async def extract_selected_groups(
     skipped_nonbr = 0
     skipped_invalid = 0
     skipped_small = 0
+    all_extracted_phones: set = set()  # acumula todos os phones válidos desta extração
 
     for group_id_waha in group_ids_waha:
         group_info = all_groups.get(group_id_waha)
@@ -209,6 +216,8 @@ async def extract_selected_groups(
             existing_by_phone[phone].status = "saiu"
 
         # ── PASSO 5: processar membros atuais (novos + existentes) ────────────
+        all_extracted_phones.update(current_valid.keys())
+
         group_member_count = 0
         for phone, info in current_valid.items():
             member_name = info.get("name", "")
@@ -307,4 +316,103 @@ async def extract_selected_groups(
         "skipped_nonbr": skipped_nonbr,
         "skipped_invalid": skipped_invalid,
         "skipped_small": skipped_small,
+        "extracted_phones": list(all_extracted_phones),  # para scoring pós-extração
     }
+
+
+# ── Scoring pós-extração ──────────────────────────────────────────────────────
+
+async def calcular_scores_pos_extracao(
+    user_id: int,
+    session_id_waha: str,
+    phones: list,
+) -> None:
+    """
+    Task assíncrona que roda APÓS a extração concluir.
+    Para cada phone, consulta o WAHA sobre grupos em comum e salva
+    Contact.group_score + Contact.whatsapp_common_groups.
+
+    Threshold "Super Lead": group_score >= 2.
+    """
+    from database import SessionLocal  # importação local para evitar circular
+
+    if not phones:
+        return
+
+    _grupo_score_jobs[user_id] = {
+        "running": True,
+        "done": 0,
+        "total": len(phones),
+        "super_leads": 0,
+        "errors": 0,
+    }
+
+    db = SessionLocal()
+    headers = {}
+    if settings.WAHA_API_KEY:
+        headers["X-Api-Key"] = settings.WAHA_API_KEY
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            for batch_start in range(0, len(phones), 10):
+                batch = phones[batch_start: batch_start + 10]
+
+                for phone in batch:
+                    try:
+                        url = (
+                            f"{settings.WAHA_API_URL}/api/{session_id_waha}"
+                            f"/contacts/{phone}@c.us/common-groups"
+                        )
+                        resp = await client.get(url, headers=headers)
+
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            if isinstance(data, list):
+                                count = len(data)
+                            elif isinstance(data, dict):
+                                count = data.get("count") or len(data.get("groups", []))
+                            else:
+                                count = 0
+                        else:
+                            # 404/405/501 = endpoint não suportado por esta versão do WAHA
+                            count = 0
+
+                        contact = db.query(models.Contact).filter(
+                            models.Contact.user_id == user_id,
+                            models.Contact.phone == phone,
+                        ).first()
+                        if contact:
+                            contact.whatsapp_common_groups = count
+                            contact.group_score = count
+                            contact.score_calculado_em = datetime.now(timezone.utc)
+
+                        if count >= 2:
+                            _grupo_score_jobs[user_id]["super_leads"] += 1
+
+                        logger.info(f"📊 {phone} → score {count} grupos em comum")
+                        _grupo_score_jobs[user_id]["done"] += 1
+
+                    except Exception as exc:
+                        _grupo_score_jobs[user_id]["errors"] += 1
+                        logger.warning(f"❌ Erro ao calcular score de {phone}: {exc}")
+
+                    # Delay gaussiano anti-ban (média 2s, σ 0.8s, mínimo 0.5s)
+                    await asyncio.sleep(max(0.5, random.gauss(2.0, 0.8)))
+
+                # Commit ao fim de cada batch
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
+    except Exception as exc:
+        logger.error(f"❌ Erro fatal no scoring pós-extração: {exc}")
+    finally:
+        if user_id in _grupo_score_jobs:
+            _grupo_score_jobs[user_id]["running"] = False
+            super_leads = _grupo_score_jobs[user_id]["super_leads"]
+            logger.info(
+                f"🎯 Scoring concluído para user={user_id}: "
+                f"{super_leads} Super Leads encontrados!"
+            )
+        db.close()

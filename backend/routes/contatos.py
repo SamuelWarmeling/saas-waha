@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
@@ -10,10 +10,14 @@ import io
 import csv
 import openpyxl
 from openpyxl import Workbook
+import time
+import random
+import math
 
 import models
 import auth
-from database import get_db
+from database import get_db, SessionLocal
+from config import settings
 
 router = APIRouter(prefix="/api/contatos", tags=["Contatos"])
 
@@ -81,6 +85,138 @@ def _contact_listas(contact_id: int, db: Session) -> List[dict]:
     return [{"id": r.id, "nome": r.nome, "cor": r.cor} for r in rows]
 
 
+# ── Score: grupos em comum WhatsApp ──────────────────────────────────────────
+
+# Rastreia jobs de scoring em memória: user_id -> estado
+_score_jobs: dict = {}
+
+
+def _pick_session_for_scoring(user_id: int, db) -> "models.WhatsAppSession | None":
+    """Retorna a sessão conectada com menor carga que NÃO está em campanha ativa."""
+    try:
+        active_sess_ids = (
+            db.query(models.CampaignSession.session_id)
+            .join(models.Campaign, models.Campaign.id == models.CampaignSession.campaign_id)
+            .filter(
+                models.Campaign.user_id == user_id,
+                models.Campaign.status == models.CampaignStatus.running,
+            )
+            .subquery()
+        )
+        return (
+            db.query(models.WhatsAppSession)
+            .filter(
+                models.WhatsAppSession.user_id == user_id,
+                models.WhatsAppSession.status == models.SessionStatus.connected,
+                ~models.WhatsAppSession.id.in_(active_sess_ids),
+            )
+            .order_by(models.WhatsAppSession.messages_sent_today.asc())
+            .first()
+        )
+    except Exception:
+        return None
+
+
+def _calcular_score_worker(user_id: int) -> None:
+    """Background task: calcula grupo_score para cada contato ainda sem score."""
+    try:
+        import requests as _req
+    except ImportError:
+        try:
+            import httpx as _req_module  # noqa
+            _req = None
+        except ImportError:
+            _req = None
+
+    db = SessionLocal()
+    try:
+        contacts = (
+            db.query(models.Contact)
+            .filter(
+                models.Contact.user_id == user_id,
+                models.Contact.group_score.is_(None),
+                models.Contact.is_blacklisted == False,
+                models.Contact.is_invalid == False,
+            )
+            .all()
+        )
+
+        _score_jobs[user_id] = {
+            "running": True,
+            "total": len(contacts),
+            "done": 0,
+            "errors": 0,
+            "error_msg": None,
+        }
+
+        if not contacts:
+            _score_jobs[user_id]["running"] = False
+            return
+
+        session = _pick_session_for_scoring(user_id, db)
+        if not session:
+            _score_jobs[user_id]["running"] = False
+            _score_jobs[user_id]["error_msg"] = "Nenhuma sessão conectada disponível"
+            return
+
+        headers = {}
+        if settings.WAHA_API_KEY:
+            headers["X-Api-Key"] = settings.WAHA_API_KEY
+
+        waha_url = settings.WAHA_API_URL.rstrip("/")
+        sess_id = session.session_id
+
+        for batch_start in range(0, len(contacts), 10):
+            batch = contacts[batch_start: batch_start + 10]
+
+            for contact in batch:
+                try:
+                    phone_id = f"{contact.phone}@c.us"
+                    url = f"{waha_url}/api/{sess_id}/contacts/{phone_id}/common-groups"
+                    resp = _req.get(url, headers=headers, timeout=8)
+
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if isinstance(data, list):
+                            count = len(data)
+                        elif isinstance(data, dict):
+                            count = data.get("count") or len(data.get("groups", []))
+                        else:
+                            count = 0
+                    elif resp.status_code in (404, 501, 405):
+                        # Endpoint não suportado pela versão do WAHA — registra 0
+                        count = 0
+                    else:
+                        count = 0
+
+                    contact.whatsapp_common_groups = count
+                    contact.group_score = count
+                    contact.score_calculado_em = datetime.now(timezone.utc)
+                    print(f"📊 Score calculado: {contact.phone} → {count} grupos em comum")
+                    _score_jobs[user_id]["done"] += 1
+
+                except Exception as exc:
+                    _score_jobs[user_id]["errors"] += 1
+                    print(f"❌ Erro ao calcular score de {contact.phone}: {exc}")
+
+                # Delay gaussiano anti-ban (média 3s, σ 1s, mínimo 1s)
+                delay = max(1.0, random.gauss(3.0, 1.0))
+                time.sleep(delay)
+
+            # Commit ao final de cada batch
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+
+    except Exception as exc:
+        print(f"❌ Erro fatal no worker de scores: {exc}")
+    finally:
+        if user_id in _score_jobs:
+            _score_jobs[user_id]["running"] = False
+        db.close()
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/stats")
@@ -104,6 +240,66 @@ def get_stats(
         "sem_nome": total - com_nome,
         "hoje": hoje,
         "blacklist": blacklist,
+    }
+
+
+@router.post("/calcular-scores")
+def iniciar_calculo_scores(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Inicia cálculo de score via grupos em comum do WAHA em background."""
+    job = _score_jobs.get(current_user.id, {})
+    if job.get("running"):
+        return {
+            "status": "already_running",
+            "total": job["total"],
+            "done": job["done"],
+            "estimativa": None,
+        }
+
+    total = (
+        db.query(models.Contact)
+        .filter(
+            models.Contact.user_id == current_user.id,
+            models.Contact.group_score.is_(None),
+            models.Contact.is_blacklisted == False,
+            models.Contact.is_invalid == False,
+        )
+        .count()
+    )
+
+    if total == 0:
+        return {"status": "no_contacts", "total": 0, "estimativa": "0 segundos"}
+
+    # Estimativa: ~3.5s por contato (gaussiana média 3s + overhead)
+    segundos = total * 3.5
+    if segundos < 60:
+        estimativa = f"{int(segundos)} segundos"
+    elif segundos < 3600:
+        estimativa = f"{int(segundos / 60)} minutos"
+    else:
+        estimativa = f"{segundos / 3600:.1f} horas"
+
+    background_tasks.add_task(_calcular_score_worker, current_user.id)
+    return {"status": "started", "total": total, "estimativa": estimativa}
+
+
+@router.get("/calcular-scores/status")
+def status_calculo_scores(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Retorna progresso do job de cálculo de scores em andamento."""
+    job = _score_jobs.get(current_user.id)
+    if not job:
+        return {"running": False, "done": 0, "total": 0, "errors": 0}
+    return {
+        "running": job.get("running", False),
+        "done": job.get("done", 0),
+        "total": job.get("total", 0),
+        "errors": job.get("errors", 0),
+        "error_msg": job.get("error_msg"),
     }
 
 

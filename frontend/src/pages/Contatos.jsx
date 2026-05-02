@@ -612,6 +612,11 @@ export default function Contatos() {
   const [detailContactId, setDetailContactId] = useState(null)
   const [backupInfo, setBackupInfo] = useState(null)
 
+  // Score calculation
+  const [scoreJob, setScoreJob] = useState(null)  // {running, done, total, errors}
+  const [scoreLoading, setScoreLoading] = useState(false)
+  const scorePollingRef = useRef(null)
+
   // ── Load ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -749,6 +754,45 @@ export default function Contatos() {
     } catch { toast.error('Erro ao deletar') }
   }
 
+  async function iniciarCalculoScores() {
+    setScoreLoading(true)
+    try {
+      const { data } = await api.post('/contatos/calcular-scores')
+      if (data.status === 'no_contacts') {
+        toast.success('Todos os contatos já têm score calculado!')
+        return
+      }
+      if (data.status === 'already_running') {
+        toast('Cálculo já em andamento...')
+      } else {
+        toast.success(`Calculando scores de ${data.total.toLocaleString('pt-BR')} contatos · Estimativa: ${data.estimativa}`)
+      }
+      setScoreJob({ running: true, done: 0, total: data.total, errors: 0 })
+      // Inicia polling
+      scorePollingRef.current = setInterval(async () => {
+        try {
+          const { data: status } = await api.get('/contatos/calcular-scores/status')
+          setScoreJob(status)
+          if (!status.running) {
+            clearInterval(scorePollingRef.current)
+            scorePollingRef.current = null
+            load(); loadStats()
+            toast.success(`✅ Scores calculados! ${status.done} contatos processados.`)
+          }
+        } catch {}
+      }, 3000)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao iniciar cálculo')
+    } finally {
+      setScoreLoading(false)
+    }
+  }
+
+  // Limpa polling ao desmontar
+  useEffect(() => () => {
+    if (scorePollingRef.current) clearInterval(scorePollingRef.current)
+  }, [])
+
   async function deleteLista(id) {
     if (!confirm('Deletar lista? Os contatos não serão removidos.')) return
     try {
@@ -789,11 +833,51 @@ export default function Contatos() {
               <MdDownload size={16}/> <span className="hidden sm:inline">📥 Backup</span>
             </a>
           )}
+          <button
+            onClick={iniciarCalculoScores}
+            disabled={scoreLoading || scoreJob?.running}
+            className="btn-secondary flex items-center gap-2 text-sm px-3 md:px-4"
+            title="Calcular score de engajamento via grupos em comum no WhatsApp"
+          >
+            {scoreJob?.running
+              ? <span className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 border-2 border-primary-400/30 border-t-primary-400 rounded-full animate-spin"/>
+                  <span className="hidden sm:inline">{scoreJob.done}/{scoreJob.total}</span>
+                </span>
+              : <><span>🎯</span> <span className="hidden sm:inline">Calcular Scores</span></>
+            }
+          </button>
           <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2 text-sm px-3 md:px-4">
             <MdAdd size={18}/> <span className="hidden sm:inline">Novo Contato</span>
           </button>
         </div>
       </div>
+
+      {/* Progress banner */}
+      {scoreJob?.running && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-primary-500/30 bg-primary-900/20">
+          <div className="w-4 h-4 border-2 border-primary-400/30 border-t-primary-400 rounded-full animate-spin flex-shrink-0"/>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-semibold text-primary-300">
+                Calculando scores via grupos em comum...
+              </span>
+              <span className="text-xs text-surface-400">
+                {scoreJob.done.toLocaleString('pt-BR')} / {scoreJob.total.toLocaleString('pt-BR')} contatos
+              </span>
+            </div>
+            <div className="w-full h-1.5 rounded-full bg-surface-800 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary-500 transition-all duration-500"
+                style={{ width: `${scoreJob.total > 0 ? Math.round((scoreJob.done / scoreJob.total) * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+          {scoreJob.errors > 0 && (
+            <span className="text-xs text-red-400 flex-shrink-0">{scoreJob.errors} erros</span>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -33,6 +33,7 @@ const EMPTY_CONTACT_SEL = {
   fonte: 'lista',
   grupo_ids: [],
   ddds: [],
+  min_score: 1,            // leads: score mínimo de grupos em comum
   limite_habilitado: false,
   limite: 100,
   aleatorio: false,
@@ -453,6 +454,7 @@ const FONTES_CONTATOS = [
   { id: 'lista',  labelMobile: '📋 Lista',  label: '📋 Todas as Listas' },
   { id: 'grupo',  labelMobile: '👥 Grupo',  label: '👥 Por Grupo' },
   { id: 'ddd',    labelMobile: '🔢 DDD',    label: '🔢 Por DDD' },
+  { id: 'leads',  labelMobile: '🎯 Leads',  label: '🎯 Super Leads' },
   { id: 'manual', labelMobile: '✏️ Manual', label: '✏️ Manual' },
 ]
 
@@ -576,6 +578,47 @@ function ContactSourceSelector({ value, onChange, grupos, ddsDisponiveis }) {
               </div>
             )
           }
+        </div>
+      )}
+
+      {/* Super Leads */}
+      {value.fonte === 'leads' && (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-yellow-500/25 bg-yellow-900/10 px-4 py-3">
+            <p className="text-sm font-semibold text-yellow-300 mb-1">🎯 Super Leads</p>
+            <p className="text-xs text-surface-400">
+              Dispara apenas para contatos com score de grupos em comum acima do mínimo selecionado.
+              Maior score = mais grupos em comum = mais engajado.
+            </p>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider block mb-2">
+              Score mínimo de grupos em comum
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { val: 1,  label: '1+',   emoji: '🎯', tip: 'Qualquer lead' },
+                { val: 2,  label: '2+',   emoji: '🔥', tip: 'Em 2+ grupos' },
+                { val: 3,  label: '3+',   emoji: '🔥', tip: 'Em 3+ grupos' },
+                { val: 5,  label: '5+',   emoji: '⭐', tip: 'Altamente engajado' },
+                { val: 6,  label: '6+',   emoji: '⭐', tip: 'Super lead' },
+                { val: 10, label: '10+',  emoji: '💎', tip: 'Elite' },
+              ].map(opt => {
+                const active = (value.min_score ?? 1) === opt.val
+                return (
+                  <button key={opt.val} type="button"
+                    onClick={() => up({ min_score: opt.val })}
+                    title={opt.tip}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all min-h-[44px]"
+                    style={active
+                      ? { background: 'rgba(234,179,8,0.25)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.5)' }
+                      : { background: 'rgba(30,28,40,0.6)', color: '#64748b', border: '1px solid rgba(100,116,139,0.3)' }}>
+                    {opt.emoji} {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -834,6 +877,7 @@ export default function Campanhas() {
           fonte: cs.fonte,
           grupo_ids: cs.grupo_ids,
           ddds: cs.ddds,
+          min_score: cs.fonte === 'leads' ? cs.min_score : null,
           limite: cs.limite_habilitado ? cs.limite : null,
           aleatorio: cs.aleatorio,
           contact_ids: cs.fonte === 'manual' ? cs.selected_contacts.map(c => c.id) : null,
@@ -985,6 +1029,7 @@ export default function Campanhas() {
         limite: cs.limite_habilitado ? cs.limite : null,
         aleatorio: cs.aleatorio,
         contact_ids: cs.fonte === 'manual' ? cs.selected_contacts.map(c => c.id) : null,
+        min_score: cs.fonte === 'leads' ? cs.min_score : null,
       })
       toast.success(scheduledAt ? 'Campanha agendada!' : 'Campanha criada!')
       closeModal()

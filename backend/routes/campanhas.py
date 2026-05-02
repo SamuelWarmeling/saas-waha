@@ -43,13 +43,14 @@ class MessageItem(BaseModel):
 
 
 class ContatosPreviewRequest(BaseModel):
-    fonte: str = "lista"          # lista | grupo | ddd | manual
+    fonte: str = "lista"          # lista | grupo | ddd | manual | leads
     grupo_ids: Optional[List[int]] = None
     ddds: Optional[List[str]] = None
     limite: Optional[int] = None
     aleatorio: bool = False
     contatos_manual: Optional[List[str]] = None   # legado: strings de telefone
     contact_ids: Optional[List[int]] = None        # manual picker: IDs de contatos
+    min_score: Optional[int] = None               # leads: score mínimo de grupos em comum
 
 
 class CampaignCreate(BaseModel):
@@ -58,10 +59,11 @@ class CampaignCreate(BaseModel):
     message_items: Optional[List[MessageItem]] = None  # novo: lista rica
     session_ids: Optional[List[int]] = []     # opcional — campanha pode ser rascunho sem chip
     # Seleção de contatos por fonte
-    fonte: str = "lista"          # lista | grupo | ddd | manual
+    fonte: str = "lista"          # lista | grupo | ddd | manual | leads
     contact_ids: Optional[List[int]] = None   # legado / lista com IDs específicos
     grupo_ids: Optional[List[int]] = None
     ddds: Optional[List[str]] = None
+    min_score: Optional[int] = None           # leads: score mínimo de grupos em comum
     limite: Optional[int] = None
     aleatorio: bool = False
     contatos_manual: Optional[List[str]] = None
@@ -158,11 +160,26 @@ def _resolver_contatos(
     aleatorio: bool = False,
     contact_ids: Optional[List[int]] = None,
     contatos_manual: Optional[List[str]] = None,
+    min_score: Optional[int] = None,
 ) -> List[models.Contact]:
     """Resolve lista de contatos de acordo com a fonte selecionada."""
     contacts: List[models.Contact] = []
 
-    if fonte == "manual":
+    if fonte == "leads":
+        score_minimo = min_score if min_score is not None else 1
+        contacts = (
+            db.query(models.Contact)
+            .filter(
+                models.Contact.user_id == user_id,
+                models.Contact.is_blacklisted == False,
+                models.Contact.group_score.isnot(None),
+                models.Contact.group_score >= score_minimo,
+            )
+            .order_by(models.Contact.group_score.desc())
+            .all()
+        )
+
+    elif fonte == "manual":
         if contact_ids:
             # Picker visual: contatos selecionados por ID
             contacts = (
@@ -903,6 +920,7 @@ def create_campaign(
         aleatorio=data.aleatorio,
         contact_ids=data.contact_ids,
         contatos_manual=data.contatos_manual,
+        min_score=data.min_score,
     )
     # Contatos 0 é permitido — campanha fica em rascunho até adicionar contatos depois
 
@@ -1192,6 +1210,7 @@ def contatos_preview(
         limite=data.limite,
         aleatorio=data.aleatorio,
         contact_ids=data.contact_ids,
+        min_score=data.min_score,
     )
     por_ddd: dict = {}
     for c in contacts:
@@ -1232,6 +1251,7 @@ def adicionar_contatos(
         limite=data.limite,
         aleatorio=data.aleatorio,
         contatos_manual=data.contatos_manual,
+        min_score=data.min_score,
     )
 
     db.query(models.CampaignContact).filter(

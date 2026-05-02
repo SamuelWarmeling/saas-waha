@@ -599,6 +599,7 @@ export default function Contatos() {
   const [filterStatus, setFilterStatus] = useState('') // '' | 'active' | 'blacklist'
   const [filterDataInicio, setFilterDataInicio] = useState('')
   const [filterDataFim, setFilterDataFim] = useState('')
+  const [filterMinScore, setFilterMinScore] = useState('')
   const [showFilters, setShowFilters] = useState(false)
 
   // Selection
@@ -649,6 +650,7 @@ export default function Contatos() {
       if (selectedLista === 'sem_lista') params.set('sem_lista', 'true')
       if (filterDataInicio) params.set('data_inicio', filterDataInicio + 'T00:00:00')
       if (filterDataFim) params.set('data_fim', filterDataFim + 'T23:59:59')
+      if (filterMinScore) params.set('min_score', filterMinScore)
 
       const { data } = await api.get(`/contatos?${params}`)
       setContacts(data.items ?? [])
@@ -658,21 +660,21 @@ export default function Contatos() {
     } finally {
       setLoading(false)
     }
-  }, [page, search, filterStatus, filterDDD, selectedLista, filterDataInicio, filterDataFim])
+  }, [page, search, filterStatus, filterDDD, selectedLista, filterDataInicio, filterDataFim, filterMinScore])
 
   useEffect(() => { load(); loadStats(); loadListas() }, [])
   useEffect(() => { load() }, [load])
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  const activeFiltersCount = [search, filterDDD, filterStatus, filterDataInicio, filterDataFim]
+  const activeFiltersCount = [search, filterDDD, filterStatus, filterDataInicio, filterDataFim, filterMinScore]
     .filter(Boolean).length
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   function resetFilters() {
     setSearch(''); setFilterDDD(''); setFilterStatus('')
-    setFilterDataInicio(''); setFilterDataFim(''); setPage(1)
+    setFilterDataInicio(''); setFilterDataFim(''); setFilterMinScore(''); setPage(1)
   }
 
   // ── Selection ─────────────────────────────────────────────────────────────
@@ -961,6 +963,18 @@ export default function Contatos() {
                 <option value="active">Ativos</option>
                 <option value="blacklist">Blacklist</option>
               </select>
+              {/* Score filter */}
+              <select value={filterMinScore} onChange={e => { setFilterMinScore(e.target.value); setPage(1) }}
+                className="input w-36 text-sm py-2">
+                <option value="">Todos os leads</option>
+                <option value="1">Score 1+</option>
+                <option value="2">Score 2+</option>
+                <option value="3">Score 3+</option>
+                <option value="5">Score 5+ ⭐</option>
+                <option value="6">Score 6+ 🎯</option>
+                <option value="10">Score 10+</option>
+              </select>
+
               {/* Advanced toggle */}
               <button onClick={() => setShowFilters(f => !f)}
                 className={`btn-secondary flex items-center gap-1.5 text-sm px-3 py-2 relative ${showFilters ? 'border-primary-500/50 text-primary-400' : ''}`}>
@@ -1109,14 +1123,31 @@ export default function Contatos() {
                             ) : <span className="text-surface-700">—</span>}
                           </td>
 
-                          {/* Lista */}
+                          {/* Lista + Score */}
                           <td className="px-3 py-3 hidden lg:table-cell">
-                            {/* We'll show tags if available */}
-                            {c.tags ? (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-surface-800 text-surface-400 border border-surface-700/50">
-                                {c.tags}
-                              </span>
-                            ) : <span className="text-surface-700 text-xs">—</span>}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {c.group_score > 0 && (
+                                <span
+                                  className="text-[11px] font-bold px-1.5 py-0.5 rounded-md"
+                                  style={{
+                                    background: c.group_score >= 6
+                                      ? 'rgba(234,179,8,0.18)' : c.group_score >= 3
+                                      ? 'rgba(249,115,22,0.15)' : 'rgba(157,78,221,0.15)',
+                                    color: c.group_score >= 6 ? '#fbbf24' : c.group_score >= 3 ? '#fb923c' : '#b07de6',
+                                    border: `1px solid ${c.group_score >= 6 ? 'rgba(234,179,8,0.4)' : c.group_score >= 3 ? 'rgba(249,115,22,0.3)' : 'rgba(157,78,221,0.3)'}`,
+                                  }}
+                                  title={`Score: ${c.group_score} grupos em comum`}
+                                >
+                                  {c.group_score >= 6 ? '⭐' : c.group_score >= 3 ? '🔥' : '🎯'} {c.group_score}
+                                </span>
+                              )}
+                              {c.tags && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-surface-800 text-surface-400 border border-surface-700/50">
+                                  {c.tags}
+                                </span>
+                              )}
+                              {!c.group_score && !c.tags && <span className="text-surface-700 text-xs">—</span>}
+                            </div>
                           </td>
 
                           {/* Status */}

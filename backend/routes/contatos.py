@@ -42,6 +42,7 @@ class ContactOut(BaseModel):
     name: Optional[str]
     is_blacklisted: bool
     tags: Optional[str]
+    group_score: Optional[int] = None
     created_at: Optional[datetime]
 
     class Config:
@@ -461,6 +462,7 @@ def list_contacts(
     sem_lista: Optional[bool] = None,
     data_inicio: Optional[str] = None,
     data_fim: Optional[str] = None,
+    min_score: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -502,8 +504,16 @@ def list_contacts(
             query = query.filter(models.Contact.created_at <= datetime.fromisoformat(data_fim))
         except ValueError:
             pass
+    if min_score is not None:
+        query = query.filter(
+            models.Contact.group_score.isnot(None),
+            models.Contact.group_score >= min_score,
+        )
 
-    query = query.order_by(models.Contact.created_at.desc())
+    query = query.order_by(
+        models.Contact.group_score.desc().nullslast(),
+        models.Contact.created_at.desc(),
+    )
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
 

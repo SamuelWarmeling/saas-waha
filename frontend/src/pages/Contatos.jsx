@@ -613,10 +613,8 @@ export default function Contatos() {
   const [detailContactId, setDetailContactId] = useState(null)
   const [backupInfo, setBackupInfo] = useState(null)
 
-  // Score calculation
-  const [scoreJob, setScoreJob] = useState(null)  // {running, done, total, errors}
-  const [scoreLoading, setScoreLoading] = useState(false)
-  const scorePollingRef = useRef(null)
+  // Score progress (background worker automático)
+  const [scoreProgress, setScoreProgress] = useState(null) // {total,calculados,pendentes,percentual,running,estimativa}
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
@@ -756,44 +754,31 @@ export default function Contatos() {
     } catch { toast.error('Erro ao deletar') }
   }
 
+  // Polling de progresso do worker automático de scores
+  useEffect(() => {
+    let cancelled = false
+    async function fetchProgress() {
+      try {
+        const { data } = await api.get('/contatos/score-progress')
+        if (!cancelled) setScoreProgress(data)
+      } catch {}
+    }
+    fetchProgress()
+    const id = setInterval(fetchProgress, 30_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [])
+
   async function iniciarCalculoScores() {
-    setScoreLoading(true)
+    // Mantido como trigger manual — backend já roda automaticamente
     try {
-      const { data } = await api.post('/contatos/calcular-scores')
-      if (data.status === 'no_contacts') {
-        toast.success('Todos os contatos já têm score calculado!')
-        return
-      }
-      if (data.status === 'already_running') {
-        toast('Cálculo já em andamento...')
-      } else {
-        toast.success(`Calculando scores de ${data.total.toLocaleString('pt-BR')} contatos · Estimativa: ${data.estimativa}`)
-      }
-      setScoreJob({ running: true, done: 0, total: data.total, errors: 0 })
-      // Inicia polling
-      scorePollingRef.current = setInterval(async () => {
-        try {
-          const { data: status } = await api.get('/contatos/calcular-scores/status')
-          setScoreJob(status)
-          if (!status.running) {
-            clearInterval(scorePollingRef.current)
-            scorePollingRef.current = null
-            load(); loadStats()
-            toast.success(`✅ Scores calculados! ${status.done} contatos processados.`)
-          }
-        } catch {}
-      }, 3000)
+      await api.post('/contatos/calcular-scores')
+      toast.success('Cálculo de scores em andamento — acompanhe o progresso abaixo')
+      const { data } = await api.get('/contatos/score-progress')
+      setScoreProgress(data)
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao iniciar cálculo')
-    } finally {
-      setScoreLoading(false)
     }
   }
-
-  // Limpa polling ao desmontar
-  useEffect(() => () => {
-    if (scorePollingRef.current) clearInterval(scorePollingRef.current)
-  }, [])
 
   async function deleteLista(id) {
     if (!confirm('Deletar lista? Os contatos não serão removidos.')) return
@@ -837,16 +822,16 @@ export default function Contatos() {
           )}
           <button
             onClick={iniciarCalculoScores}
-            disabled={scoreLoading || scoreJob?.running}
+            disabled={scoreProgress?.running}
             className="btn-secondary flex items-center gap-2 text-sm px-3 md:px-4"
-            title="Calcular score de engajamento via grupos em comum no WhatsApp"
+            title="Scores calculados automaticamente em background · clique para forçar"
           >
-            {scoreJob?.running
+            {scoreProgress?.running
               ? <span className="flex items-center gap-2">
                   <div className="w-3.5 h-3.5 border-2 border-primary-400/30 border-t-primary-400 rounded-full animate-spin"/>
-                  <span className="hidden sm:inline">{scoreJob.done}/{scoreJob.total}</span>
+                  <span className="hidden sm:inline">{scoreProgress.percentual}%</span>
                 </span>
-              : <><span>🎯</span> <span className="hidden sm:inline">Calcular Scores</span></>
+              : <><span>🎯</span> <span className="hidden sm:inline">Scores</span></>
             }
           </button>
           <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2 text-sm px-3 md:px-4">
@@ -855,29 +840,31 @@ export default function Contatos() {
         </div>
       </div>
 
-      {/* Progress banner */}
-      {scoreJob?.running && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-primary-500/30 bg-primary-900/20">
-          <div className="w-4 h-4 border-2 border-primary-400/30 border-t-primary-400 rounded-full animate-spin flex-shrink-0"/>
+      {/* Score progress banner — roda automaticamente no backend */}
+      {scoreProgress && scoreProgress.pendentes > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-primary-500/20 bg-primary-900/10">
+          {scoreProgress.running
+            ? <div className="w-3.5 h-3.5 border-2 border-primary-400/30 border-t-primary-400 rounded-full animate-spin flex-shrink-0"/>
+            : <span className="text-sm flex-shrink-0">📊</span>
+          }
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-semibold text-primary-300">
-                Calculando scores via grupos em comum...
+              <span className="text-xs font-semibold text-primary-300">
+                {scoreProgress.running ? 'Calculando scores' : 'Scores pendentes'}
+                {' '}— {scoreProgress.calculados.toLocaleString('pt-BR')}/{scoreProgress.total.toLocaleString('pt-BR')} ({scoreProgress.percentual}%)
+                <span className="text-surface-500 font-normal ml-1">— roda automaticamente</span>
               </span>
-              <span className="text-xs text-surface-400">
-                {scoreJob.done.toLocaleString('pt-BR')} / {scoreJob.total.toLocaleString('pt-BR')} contatos
-              </span>
+              {scoreProgress.estimativa && (
+                <span className="text-xs text-surface-500 ml-2 flex-shrink-0">{scoreProgress.estimativa}</span>
+              )}
             </div>
-            <div className="w-full h-1.5 rounded-full bg-surface-800 overflow-hidden">
+            <div className="w-full h-1 rounded-full bg-surface-800 overflow-hidden">
               <div
-                className="h-full rounded-full bg-primary-500 transition-all duration-500"
-                style={{ width: `${scoreJob.total > 0 ? Math.round((scoreJob.done / scoreJob.total) * 100) : 0}%` }}
+                className="h-full rounded-full bg-primary-600 transition-all duration-700"
+                style={{ width: `${scoreProgress.percentual}%` }}
               />
             </div>
           </div>
-          {scoreJob.errors > 0 && (
-            <span className="text-xs text-red-400 flex-shrink-0">{scoreJob.errors} erros</span>
-          )}
         </div>
       )}
 

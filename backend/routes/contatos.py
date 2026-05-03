@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import io
 import csv
@@ -284,7 +284,7 @@ def iniciar_calculo_scores(
 def status_calculo_scores(
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Retorna progresso do job de cálculo de scores em andamento."""
+    """Retorna progresso do job de cálculo de scores em andamento (compatibilidade)."""
     job = _score_jobs.get(current_user.id)
     if not job:
         return {"running": False, "done": 0, "total": 0, "errors": 0}
@@ -294,6 +294,51 @@ def status_calculo_scores(
         "total": job.get("total", 0),
         "errors": job.get("errors", 0),
         "error_msg": job.get("error_msg"),
+    }
+
+
+@router.get("/score-progress")
+def score_progress(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Progresso do cálculo automático de scores para o usuário atual."""
+    from workers.score_calculator import worker_running, current_user_id, RECALC_DAYS
+
+    recalc_cutoff = datetime.now(timezone.utc) - timedelta(days=RECALC_DAYS)
+    base = db.query(models.Contact).filter(
+        models.Contact.user_id == current_user.id,
+        models.Contact.is_blacklisted == False,
+        models.Contact.is_invalid == False,
+    )
+    total = base.count()
+    calculados = base.filter(
+        models.Contact.group_score.isnot(None),
+        models.Contact.score_calculado_em >= recalc_cutoff,
+    ).count()
+    pendentes = total - calculados
+    percentual = round(calculados / total * 100) if total > 0 else 100
+
+    # Estimativa de tempo restante (~2.5s/contato)
+    estimativa = None
+    if pendentes > 0:
+        seg = pendentes * 2.5
+        if seg < 60:
+            estimativa = f"~{int(seg)}s"
+        elif seg < 3600:
+            estimativa = f"~{int(seg / 60)} min"
+        else:
+            estimativa = f"~{seg / 3600:.1f}h"
+
+    running = bool(worker_running and pendentes > 0)
+
+    return {
+        "total": total,
+        "calculados": calculados,
+        "pendentes": pendentes,
+        "percentual": percentual,
+        "running": running,
+        "estimativa": estimativa,
     }
 
 

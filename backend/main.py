@@ -37,6 +37,7 @@ from workers.limpeza import limpeza_worker_task
 from workers.reenvio import reenvio_worker_task
 from workers.grupos_inativos import grupos_inativos_worker_task
 from workers.backup import backup_worker_task
+from workers.score_calculator import score_calculator_worker_task
 from config import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -1124,17 +1125,18 @@ async def lifespan(app: FastAPI):
     task_reenvio = asyncio.create_task(reenvio_worker_task())
     task_grupos_inativos = asyncio.create_task(grupos_inativos_worker_task())
     task_backup = asyncio.create_task(backup_worker_task())
+    task_score = asyncio.create_task(score_calculator_worker_task())
     yield
     for t in (
         task_auto, task_sched, task_funnel, task_aquec, task_status,
         task_reconexao, task_rotacao, task_limpeza,
-        task_reenvio, task_grupos_inativos, task_backup,
+        task_reenvio, task_grupos_inativos, task_backup, task_score,
     ):
         t.cancel()
     for t in (
         task_auto, task_sched, task_funnel, task_aquec, task_status,
         task_reconexao, task_rotacao, task_limpeza,
-        task_reenvio, task_grupos_inativos, task_backup,
+        task_reenvio, task_grupos_inativos, task_backup, task_score,
     ):
         try:
             await t
